@@ -1,4 +1,14 @@
-# syntax=docker/dockerfile:1
+# No `# syntax=` directive on purpose. It makes every build pull a
+# frontend image from Docker Hub before running a single step, and
+# that pull is a dependency that fails on its own: a deploy here died
+# with "frontend grpc server closed unexpectedly" right after the
+# frontend was resolved, before any build step ran — an infrastructure
+# error on a commit that did not touch this file.
+#
+# Everything below is plain builder syntax (FROM / WORKDIR / COPY /
+# RUN / ARG / ENV / USER / EXPOSE / CMD), so the frontend bundled with
+# BuildKit handles it and the build needs nothing from Docker Hub
+# beyond the two base images.
 
 # ---------------------------------------------------------------
 # Stage 1 — install dependencies (cached until package*.json change)
