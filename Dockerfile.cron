@@ -1,0 +1,16 @@
+# One-shot image for the cron drain (scripts/cron-drain.mjs).
+#
+# It carries nothing but the drain script: no npm install, no Next
+# build, no app. Railway starts it on the schedule, the script makes
+# the two HTTP calls and exits. The app is a separate service — this
+# one only talks to it.
+#
+# Point the cron service at this file (Settings → Build → Dockerfile
+# Path) so it does not rebuild the whole application on every deploy.
+FROM node:22-alpine
+
+WORKDIR /app
+COPY scripts/cron-drain.mjs ./cron-drain.mjs
+
+USER node
+CMD ["node", "cron-drain.mjs"]
