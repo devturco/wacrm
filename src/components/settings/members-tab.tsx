@@ -63,6 +63,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTranslations } from 'next-intl';
+import { formatDate } from '@/lib/i18n/format';
 import { RequireRole } from '@/components/auth/require-role';
 import { useAuth } from '@/hooks/use-auth';
 import { usePresence } from '@/hooks/use-presence';
@@ -106,9 +107,9 @@ const EDITABLE_ROLES: { value: AccountRole }[] = [
 // primary (admin) → muted (agent / viewer).
 
 function fmtDate(iso: string): string {
-  // Match the rest of the dashboard's locale-light formatting.
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  // Same shape as the rest of the dashboard — the format follows the
+  // app's locale, not the visitor's browser.
+  return formatDate(iso, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

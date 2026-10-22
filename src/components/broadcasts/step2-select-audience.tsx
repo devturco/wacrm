@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { countAudience } from '@/lib/broadcast-audience';
+import { formatNumber } from '@/lib/i18n/format';
 import { parseBroadcastCsv } from '@/lib/broadcast-csv';
 import { CustomField, Tag } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -472,7 +473,7 @@ export function Step2SelectAudience({
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-primary" />
             <span className="text-sm text-foreground">
-              {estimatedCount.toLocaleString()}
+              {formatNumber(estimatedCount)}
             </span>
             <span className="text-xs text-muted-foreground">{t('selectAudience.estimatedRecipients')}</span>
           </div>

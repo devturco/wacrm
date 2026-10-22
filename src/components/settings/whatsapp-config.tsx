@@ -17,6 +17,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useTranslations } from 'next-intl';
+import { formatDateTime } from '@/lib/i18n/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -687,7 +688,7 @@ export function WhatsAppConfig() {
                   dangerouslySetInnerHTML={{
                     __html: t('subscribedSince', {
                       date: config.registered_at
-                        ? new Date(config.registered_at).toLocaleString()
+                        ? formatDateTime(config.registered_at)
                         : t('unknownDate'),
                     }),
                   }}

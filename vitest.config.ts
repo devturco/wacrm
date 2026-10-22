@@ -1,9 +1,19 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,
-    alias: { "@app-messages": new URL("./messages/en.json", import.meta.url).pathname },
+    // fileURLToPath, not `new URL(...).pathname`: the latter is a URL
+    // path, not a filesystem path. On Windows it comes back as
+    // "/D:/07%20-%20PROJETOS/..." — leading slash and percent-encoded
+    // spaces — and Vite then cannot find the file, so every test that
+    // transitively imports @app-messages dies with ERR_MODULE_NOT_FOUND.
+    alias: {
+      "@app-messages": fileURLToPath(
+        new URL("./messages/en.json", import.meta.url),
+      ),
+    },
   },
   test: {
     environment: "node",
@@ -16,6 +26,12 @@ export default defineConfig({
       ENCRYPTION_KEY:
         "0000000000000000000000000000000000000000000000000000000000000000",
       META_APP_SECRET: "test-meta-app-secret",
+      // Pin the app locale so the formatting assertions don't depend on
+      // the machine's regional settings — a pt-BR Windows box and an
+      // en-US CI runner would otherwise disagree on what "1,234" is.
+      // Pinning it here also documents the intent: the app's locale
+      // decides the format, never the runtime's.
+      NEXT_PUBLIC_APP_LOCALE: "en",
     },
     clearMocks: true,
   },

@@ -41,6 +41,7 @@ import {
   type ApiScope,
 } from '@/lib/api-keys/scopes';
 import { useTranslations } from 'next-intl';
+import { formatDate } from '@/lib/i18n/format';
 import { SettingsPanelHead } from './settings-panel-head';
 
 interface ApiKey {
@@ -55,7 +56,7 @@ interface ApiKey {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return formatDate(iso, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

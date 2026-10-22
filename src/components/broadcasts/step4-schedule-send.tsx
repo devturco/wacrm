@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { countAudience, type AudienceConfig } from '@/lib/broadcast-audience';
+import { formatNumber } from '@/lib/i18n/format';
 import { createClient } from '@/lib/supabase/client';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -110,7 +111,7 @@ export function Step4ScheduleSend({
               ) : (
                 <>
                   <Users className="h-3.5 w-3.5 text-primary" />
-                  <p className="font-medium text-foreground">{estimatedReach.toLocaleString()}</p>
+                  <p className="font-medium text-foreground">{formatNumber(estimatedReach)}</p>
                 </>
               )}
             </div>

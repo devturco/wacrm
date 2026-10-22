@@ -17,6 +17,7 @@ import { Radio, Plus, Loader2 } from 'lucide-react';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
+import { formatDate } from '@/lib/i18n/format';
 import { useTranslations } from 'next-intl';
 
 /**
@@ -278,7 +279,7 @@ export default function BroadcastsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {new Date(broadcast.created_at).toLocaleDateString()}
+                      {formatDate(broadcast.created_at)}
                     </TableCell>
                   </TableRow>
                 );

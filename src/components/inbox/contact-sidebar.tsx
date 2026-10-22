@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/i18n/format";
 import type { Contact, Deal, ContactNote, Tag } from "@/types";
 import {
   Phone,
@@ -237,7 +238,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                     <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                       <span>
                         {deal.currency ?? "$"}
-                        {deal.value.toLocaleString()}
+                        {formatNumber(deal.value)}
                       </span>
                       {deal.stage && (
                         <span

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CURRENCIES,
   DEFAULT_CURRENCY,
+  formatCompactNumber,
   formatCurrency,
   formatCurrencyShort,
 } from "./currency";
@@ -45,6 +46,14 @@ describe("formatCurrency", () => {
       expect(() => formatCurrency(1000, c.code)).not.toThrow();
     }
   });
+
+  it("follows the app locale, not the runtime's", () => {
+    // The whole point of pinning the locale: the same value has to
+    // render the same way for every visitor, whatever their browser is
+    // set to. 'en' groups with a comma, 'pt' with a dot.
+    expect(formatCurrency(1234, "USD", "en")).toContain("1,234");
+    expect(formatCurrency(1234, "USD", "pt")).toContain("1.234");
+  });
 });
 
 describe("formatCurrencyShort", () => {
@@ -61,5 +70,18 @@ describe("formatCurrencyShort", () => {
 
   it("falls back to the code prefix for unknown currencies (no throw)", () => {
     expect(formatCurrencyShort(1_000, "ZZZ")).toBe("ZZZ 1.0k");
+  });
+});
+
+describe("formatCompactNumber", () => {
+  it("abbreviates with the app locale's decimal separator", () => {
+    expect(formatCompactNumber(2_500_000, "en")).toBe("2.5M");
+    expect(formatCompactNumber(2_500_000, "pt")).toBe("2,5M");
+    expect(formatCompactNumber(3_400, "pt")).toBe("3,4k");
+  });
+
+  it("drops the decimals below a thousand", () => {
+    expect(formatCompactNumber(900, "en")).toBe("900");
+    expect(formatCompactNumber(900, "pt")).toBe("900");
   });
 });

@@ -1,4 +1,5 @@
 import type { AutomationTriggerType } from '@/types'
+import { formatDate } from '@/lib/i18n/format'
 
 export interface TriggerMeta {
   /** Tailwind classes for the Badge pill on the list row. */
@@ -70,5 +71,5 @@ export function formatRelative(
   if (diffSec < 3600) return t('minutesAgo', { n: Math.floor(diffSec / 60) })
   if (diffSec < 86400) return t('hoursAgo', { n: Math.floor(diffSec / 3600) })
   if (diffSec < 2_592_000) return t('daysAgo', { n: Math.floor(diffSec / 86400) })
-  return new Date(iso).toLocaleDateString()
+  return formatDate(iso)
 }

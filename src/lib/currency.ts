@@ -11,6 +11,7 @@
  */
 
 import { getT } from "@/lib/i18n/translate";
+import { APP_LOCALE } from "@/lib/i18n/locale";
 
 /** App-wide fallback when no account/deal currency is available. */
 export const DEFAULT_CURRENCY = "USD";
@@ -61,15 +62,21 @@ export const CURRENCIES: CurrencyOption[] = [
  * rows, imports, or hand-edited data can hold malformed values like
  * "United States". We never let that crash a render — on a bad code
  * we fall back to "CODE 1,234".
+ *
+ * The format follows the app's locale (NEXT_PUBLIC_APP_LOCALE), not the
+ * runtime's: the runtime would render "1.234" on a pt-BR browser and
+ * "1,234" on an en-US one, while the message catalogue stays in a
+ * single language. `locale` is a parameter so the tests can pin it.
  */
 export function formatCurrency(
   value: number,
   currency: string = DEFAULT_CURRENCY,
+  locale: string = APP_LOCALE,
 ): string {
   const code = (currency || DEFAULT_CURRENCY).trim();
   const amount = Number(value) || 0;
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: code,
       minimumFractionDigits: 0,
@@ -78,7 +85,7 @@ export function formatCurrency(
   } catch {
     // Invalid ISO code — show the raw code + grouped number so the
     // value is still legible instead of throwing.
-    return `${code} ${new Intl.NumberFormat(undefined, {
+    return `${code} ${new Intl.NumberFormat(locale, {
       maximumFractionDigits: 0,
     }).format(amount)}`;
   }
@@ -92,20 +99,36 @@ export function formatCurrency(
 export function formatCurrencyShort(
   value: number,
   currency: string = DEFAULT_CURRENCY,
+  locale: string = APP_LOCALE,
 ): string {
   const code = currency || DEFAULT_CURRENCY;
   const symbol = CURRENCIES.find((c) => c.code === code)?.symbol ?? `${code} `;
-  return `${symbol}${formatCompactNumber(value)}`;
+  return `${symbol}${formatCompactNumber(value, locale)}`;
 }
 
 /**
  * Compact number for tight spaces (chart tiles, legends): 1_234 → "1.2k",
  * 1_200_000 → "1.2M", 900 → "900". The unit-less core shared with
  * {@link formatCurrencyShort}.
+ *
+ * The digits go through Intl so the decimal separator follows the app
+ * locale ("2,5M" in pt, "2.5M" in en) — `toFixed` always produced an
+ * English-style dot. The k/M suffix stays as it is: those are the
+ * abbreviations the app already used everywhere.
  */
-export function formatCompactNumber(value: number): string {
+export function formatCompactNumber(
+  value: number,
+  locale: string = APP_LOCALE,
+): string {
   const v = Number(value || 0);
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
-  return v.toFixed(0);
+  if (v >= 1_000_000) return `${compact(v / 1_000_000, locale, 1)}M`;
+  if (v >= 1_000) return `${compact(v / 1_000, locale, 1)}k`;
+  return compact(v, locale, 0);
+}
+
+function compact(value: number, locale: string, digits: number): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
 }

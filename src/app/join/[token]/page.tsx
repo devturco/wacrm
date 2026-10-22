@@ -53,6 +53,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { createClient } from '@/lib/supabase/client';
+import { formatDate } from '@/lib/i18n/format';
 
 interface PeekOk {
   ok: true;
@@ -294,7 +295,7 @@ export default function JoinPage() {
       <CardDescription className="text-muted-foreground">
         {t.rich('joinAs', {
           role: tRoles(peek.role),
-          date: new Date(peek.expires_at).toLocaleDateString(undefined, {
+          date: formatDate(peek.expires_at, {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
