@@ -7,13 +7,23 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* --font-stack-sans is declared in :root below. The `inline`
+     keyword keeps Tailwind from emitting these theme variables to
+     :root, where they would collide with the font's own variables on
+     the same element. */
+  --font-sans: var(--font-stack-sans);
+  --font-heading: var(--font-stack-sans);
+  /* Was `var(--font-geist-mono)` — a variable nothing in the project
+     ever declared. The declaration was invalid at computed-value
+     time, so every `font-mono` in the app inherited the sans stack
+     and rendered as Inter. */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -88,6 +98,55 @@
  * project/Color Themes.html — change one, change the other.
  * ============================================================ */
 
+/* ---- TYPOGRAPHY ---- */
+
+/* The project font stack.
+ *
+ * It lives here rather than in the `next/font` call because Turbopack
+ * names the family after the font file (`inter`) and uses that name
+ * in the class and the CSS variable it generates, while the @font-face
+ * it emits is named "Inter Variable" (see `src/app/layout.tsx`). The
+ * two would not match and the webfont would never be used. Declaring
+ * the stack here keeps one source of truth for it.
+ *
+ * `Inter Variable` is the name of the variable build of Inter, served
+ * from `src/app/fonts/InterVariable.woff2`. */
+:root {
+  --font-stack-sans: "Inter Variable", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ---- BRAND ---- */
+
+/* The brand lockup, swapped by colour mode. The background is used
+   instead of an <img> so only the file that applies to the current
+   mode is fetched — a single <img> per variant would download both.
+   `aspect-ratio` keeps the box proportional without knowing the
+   rendered width, and the intrinsic ratio of the source is 2162x442.
+   `max-width` is only a fallback for callers that pass no size.
+ *
+   Declared in `@layer components` so it lands in the components layer,
+   before utilities: written at the top level it would be emitted into
+   the utilities layer *after* every `max-w-[…]`, and with equal
+   specificity that default would silently beat each caller's size
+   override. */
+@layer components {
+  .brand-logo {
+    display: block;
+    width: 100%;
+    max-width: 180px;
+    aspect-ratio: 2162 / 442;
+    background-image: url("/brand/logo-color.png");
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: contain;
+  }
+
+  html[data-mode="dark"] .brand-logo {
+    background-image: url("/brand/logo-white.png");
+  }
+}
+
 /* ---- MODE: neutral surfaces ---- */
 
 :root,
@@ -118,6 +177,7 @@ html[data-mode="dark"] {
   --sidebar-accent: oklch(0.22 0.01 260);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.28 0.01 260);
+  --sidebar-muted-foreground: oklch(0.65 0.01 260);
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;
@@ -151,6 +211,11 @@ html[data-mode="light"] {
   --sidebar-accent: oklch(0.96 0.004 260);
   --sidebar-accent-foreground: oklch(0.25 0.01 260);
   --sidebar-border: oklch(0.922 0.004 260);
+  /* The sidebar's secondary text (inactive nav labels, the account
+     strip, the user's email). In light mode the shared
+     --muted-foreground reads as washed-out gray against the near-white
+     sidebar; this is the darker blue-gray the design calls for. */
+  --sidebar-muted-foreground: oklch(0.25 0.02 256);
   --status-good: #0b7f0b;
   --status-warning: #946100;
   --status-serious: #c2532a;

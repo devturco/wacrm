@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
@@ -62,7 +63,7 @@ const ROLE_CHIP: Record<
     labelKey: "roleViewer",
     // Muted slate: read-only role; visually quieter than agent.
     className:
-      "border-border bg-card text-muted-foreground",
+      "border-border bg-card text-sidebar-muted-foreground",
   },
 };
 import {
@@ -187,19 +188,14 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquare className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-semibold text-foreground">
-              {t("title")}
-            </span>
+          <Link href="/dashboard" className="flex min-w-0 flex-1 items-center">
+            <BrandLogo className="max-w-[140px]" />
           </Link>
           <button
             type="button"
             onClick={onClose}
             aria-label={t("closeMenu")}
-            className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
           >
             <X className="h-5 w-5" />
           </button>
@@ -232,7 +228,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        : "text-sidebar-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
@@ -281,7 +277,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        : "text-sidebar-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
@@ -302,7 +298,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               below; for renamed or shared accounts it tells the user
               which account they're acting in. */}
           {showAccountStrip && account?.name ? (
-            <div className="mb-2 flex items-center gap-2 px-3 text-xs text-muted-foreground">
+            <div className="mb-2 flex items-center gap-2 px-3 text-xs text-sidebar-muted-foreground">
               <UsersRound className="size-3.5 shrink-0" />
               {/* `title=` exposes the full name on hover when it
                   gets truncated (long account names + narrow
@@ -349,7 +345,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 <p className="truncate text-sm font-medium text-foreground">
                   {profile?.full_name ?? t("defaultUser")}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-xs text-sidebar-muted-foreground">
                   {profile?.email ?? ""}
                 </p>
               </div>

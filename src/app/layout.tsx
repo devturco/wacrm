@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages, getTranslations } from 'next-intl/server';
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
@@ -15,9 +15,49 @@ import {
   THEME_IDS,
 } from "@/lib/themes";
 
-const inter = Inter({
-  variable: "--font-sans",
-  subsets: ["latin"],
+// Inter Variable, self-hosted.
+//
+// The variable build of Inter calls itself "Inter Variable" — that is
+// the family name the project wants in the computed `font-family`.
+// `next/font/local` would otherwise name the family after the file
+// (`inter`), so the `font-family` descriptor is overridden
+// explicitly.
+//
+// The stack itself is NOT taken from next/font: Turbopack builds the
+// class and the CSS variable from its own derived family name, which
+// would not match the @font-face above and would leave the webfont
+// unused. `src/app/globals.css` owns the stack instead, and it is
+// the only place it is written down.
+//
+// The file is the `latin` subset — the same one `next/font/google`
+// served under `subsets: ["latin"]` — so the payload does not grow.
+// See `src/app/fonts/README.md` for the source and the licence.
+const inter = localFont({
+  src: "./fonts/InterVariable.woff2",
+  display: "swap",
+  weight: "100 900",
+  style: "normal",
+  // Declared so the font is marked as used by the layout, which is
+  // what makes Next emit the preload link. The variable's own value
+  // is Turbopack's internal family name ("inter") and nothing reads
+  // it — do not use it to build a font stack.
+  variable: "--font-inter",
+  // The metric-matched Arial fallback would add a family of its own
+  // to the class rule. Nothing uses that class, so it stays off.
+  adjustFontFallback: false,
+  declarations: [
+    { prop: "font-family", value: "'Inter Variable'" },
+    // The file only covers the latin range. Without this, Inter
+    // would be selected for every script and the characters it does
+    // not carry (Korean, Cyrillic) would have to fall through
+    // glyph-by-glyph instead of the browser skipping the font
+    // outright.
+    {
+      prop: "unicode-range",
+      value:
+        "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    },
+  ],
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,9 +77,10 @@ const metadata: Metadata = {
     index: false,
     follow: false,
   },
-  icons: {
-    icon: [{ url: "/icon" }],
-  },
+  // No `icons` entry: the favicon comes from the `app/icon.png` and
+  // `app/apple-icon.png` file conventions. Pointing at "/icon" by hand
+  // would 404 — there is no `/icon` route, the file is compiled into a
+  // hashed URL at build time.
   formatDetection: {
     email: false,
     address: false,
