@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { CheckCircle } from "lucide-react";
 
 // `useSearchParams` opts the component out of static prerendering
 // unless it sits under a Suspense boundary. We split the form into
@@ -51,7 +52,40 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [justConfirmed, setJustConfirmed] = useState(false);
   const supabase = createClient();
+
+  // Confirmation just came back from the email link. When the redirect
+  // honours the app's `emailRedirectTo`, the user never lands here —
+  // /auth/callback exchanges the code for a session and forwards
+  // straight to /dashboard. They only end up on this screen when the
+  // redirect fell back to the Site URL, and then GoTrue hands the
+  // session back in the URL *fragment* (#access_token=…), which the
+  // server never sees: `/` redirects to /dashboard, the middleware
+  // bounces that to /login, and the fragment rides along untouched.
+  //
+  // The fragment is the only trace left, so it is all we have to go on.
+  // Read it once on mount, then strip it — an access token sitting in
+  // the browser history (and in the URL bar, and in anything that
+  // screenshots the page) is worth not keeping around.
+  useEffect(() => {
+    if (!window.location.hash.includes("access_token=")) return;
+    // Reading the URL fragment on mount is a legitimate effect: the
+    // fragment is browser-only, so there is nothing to read during the
+    // render that produces the prerendered HTML. Same pattern as the
+    // deep-link resolver in inbox/page.tsx.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setJustConfirmed(true);
+    // Keep the query string: it carries `?invite=` and `?error=`, both
+    // read above. A bare `?` (what a fragment-only landing leaves
+    // behind) is dropped rather than preserved as noise.
+    const { pathname, search } = window.location;
+    window.history.replaceState(
+      null,
+      "",
+      search === "?" ? pathname : pathname + search,
+    );
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +138,19 @@ function LoginPageInner() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            {justConfirmed && !error && !linkErrorMessage && (
+              <div className="flex gap-3 rounded-lg border border-status-good/30 bg-status-good/10 px-4 py-3">
+                <CheckCircle className="mt-0.5 size-4 shrink-0 text-status-good" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-status-good">
+                    {t("emailConfirmedTitle")}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t("emailConfirmedBody")}
+                  </p>
+                </div>
+              </div>
+            )}
             {linkErrorMessage && !error && (
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
                 {linkErrorMessage}

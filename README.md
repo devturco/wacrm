@@ -166,6 +166,10 @@ Key pages:
 - [Auth emails](./docs/auth-emails.md) — what Supabase must allow so
   confirmation and password-reset links come back to *your* domain
   instead of `localhost:3000`, and how `/auth/callback` handles them
+- [Email templates](./docs/auth-email-templates.md) — the branded HTML
+  for the confirmation and password-reset emails in
+  `supabase/auth-templates/`, plus wiring a sending domain through
+  Resend (SMTP) instead of the Supabase default
 
 ## Stack
 

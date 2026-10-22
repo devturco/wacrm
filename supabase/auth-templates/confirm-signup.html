@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<!--
+  Supabase Auth — template "Confirm signup" (verificação de e-mail).
+  Cole em: Dashboard → Authentication → Emails → Templates → Confirm signup.
+
+  Como usar este arquivo
+  ---------------------
+  1. Copie TUDO entre <html> e </html> e cole no editor do dashboard.
+  2. Não edite as chaves de template (duplas chaves) — são substituídas
+     pelo GoTrue na hora do envio.
+
+  Variáveis usadas
+  ----------------
+    {{ .Data.full_name }}  nome informado no cadastro (pode vir vazio — daí o fallback "Olá!")
+    {{ .ConfirmationURL }}  o link de confirmação, com o token
+    {{ .SiteURL }}          o Site URL configurado em Authentication → URL Configuration
+
+  O botão usa {{ .ConfirmationURL }} — NÃO {{ .RedirectTo }}.
+
+  {{ .RedirectTo }} é só o destino que o app mandou no emailRedirectTo
+  (ex.: https://app.crmbr.com/auth/callback?next=%2Fdashboard). Ele NÃO
+  vem com token nenhum: clicar nele leva a /auth/callback sem `code`
+  nem `token_hash`, o parseEmailLink devolve null e o usuário cai no
+  /login com "não foi possível entrar com esse link".
+
+  {{ .ConfirmationURL }} é o link do GoTrue
+  (/auth/confirm?token=...&type=signup&redirect_to=...), que carrega o
+  token e depois salta para aquele mesmo destino — e como o destino
+  preserva o `next` dinâmico do app (/dashboard normalmente,
+  /join/<token> quando a pessoa entrou por convite), o fluxo do convite
+  continua funcionando. Ver docs/auth-email-templates.md.
+
+  O logo é servido pelo próprio app (/brand/*.png) e a origem vem de
+  {{ .SiteURL }}, então ele acompanha o deploy sem URL fixa no template.
+-->
+
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Confirme seu e-mail — crmbr</title>
+    <style>
+      /* Estilos da marca + modo escuro. Alguns clientes (Gmail, Outlook)
+         ignoram este bloco, então tudo que é essencial também está inline
+         nos atributos style. */
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #fbfcfd;
+      }
+      .wrap {
+        background-color: #fbfcfd;
+      }
+      .card {
+        background-color: #ffffff;
+        border: 1px solid #e4e5e8;
+      }
+      .logo-dark {
+        display: none !important;
+      }
+      @media (prefers-color-scheme: dark) {
+        body,
+        .wrap {
+          background-color: #05070b !important;
+        }
+        .card {
+          background-color: #0f1216 !important;
+          border-color: #26292e !important;
+        }
+        .h1 {
+          color: #fafafa !important;
+        }
+        .body-text,
+        .note {
+          color: #8c8f95 !important;
+        }
+        .divider {
+          border-color: #26292e !important;
+        }
+        .btn {
+          background-color: #8a5af4 !important;
+        }
+        .btn-text {
+          color: #0f1216 !important;
+        }
+        .logo-light {
+          display: none !important;
+        }
+        .logo-dark {
+          display: block !important;
+        }
+      }
+    </style>
+  </head>
+
+  <body style="margin: 0; padding: 0; background-color: #fbfcfd">
+    <!-- Pré-header: a primeira linha que aparece na caixa de entrada,
+         depois do "De". Escondido no corpo. -->
+    <div
+      style="
+        display: none;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        color: transparent;
+        height: 0;
+        width: 0;
+      "
+    >
+      Confirme seu e-mail para ativar sua conta no crmbr — leva menos de um minuto.
+    </div>
+
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      class="wrap"
+      style="background-color: #fbfcfd; width: 100%"
+    >
+      <tr>
+        <td align="center" style="padding: 40px 16px">
+          <table
+            role="presentation"
+            width="100%"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            class="card"
+            style="
+              max-width: 520px;
+              width: 100%;
+              background-color: #ffffff;
+              border: 1px solid #e4e5e8;
+              border-radius: 12px;
+            "
+          >
+            <!-- Logo: duas variantes, uma por modo de cor, igual ao
+                 que o app faz com data-mode. -->
+            <tr>
+              <td align="center" style="padding: 36px 40px 8px">
+                <img
+                  src="{{ .SiteURL }}/brand/logo-color.png"
+                  width="150"
+                  alt="crmbr"
+                  class="logo-light"
+                  style="
+                    display: block;
+                    width: 150px;
+                    max-width: 60%;
+                    height: auto;
+                    border: 0;
+                    outline: none;
+                    text-decoration: none;
+                  "
+                />
+                <img
+                  src="{{ .SiteURL }}/brand/logo-white.png"
+                  width="150"
+                  alt="crmbr"
+                  class="logo-dark"
+                  style="
+                    display: none;
+                    width: 150px;
+                    max-width: 60%;
+                    height: auto;
+                    border: 0;
+                    outline: none;
+                    text-decoration: none;
+                  "
+                />
+              </td>
+            </tr>
+
+            <!-- Título -->
+            <tr>
+              <td align="center" style="padding: 16px 40px 0">
+                <h1
+                  class="h1"
+                  style="
+                    margin: 0;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                      Roboto, Helvetica, Arial, sans-serif;
+                    font-size: 22px;
+                    line-height: 30px;
+                    font-weight: 600;
+                    color: #16181d;
+                  "
+                >
+                  Confirme seu e-mail
+                </h1>
+              </td>
+            </tr>
+
+            <!-- Corpo -->
+            <tr>
+              <td
+                align="center"
+                class="body-text"
+                style="
+                  padding: 12px 40px 0;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                    Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 15px;
+                  line-height: 24px;
+                  color: #646972;
+                "
+              >
+                <p style="margin: 0 0 16px">
+                  Olá{{ if .Data.full_name }}, {{ .Data.full_name }}{{ else
+                  }}{{ end }}! Confirme o endereço abaixo para ativar sua
+                  conta no crmbr.
+                </p>
+                <p style="margin: 0">
+                  <strong style="color: #16181d">{{ .Email }}</strong>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Botão -->
+            <tr>
+              <td align="center" style="padding: 28px 40px 0">
+                <table
+                  role="presentation"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                >
+                  <tr>
+                    <td
+                      align="center"
+                      bgcolor="#7834e8"
+                      class="btn"
+                      style="border-radius: 8px"
+                    >
+                      <a
+                        href="{{ .ConfirmationURL }}"
+                        target="_blank"
+                        class="btn-text"
+                        style="
+                          display: inline-block;
+                          padding: 12px 28px;
+                          font-family: -apple-system, BlinkMacSystemFont,
+                            'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                          font-size: 15px;
+                          line-height: 20px;
+                          font-weight: 600;
+                          color: #fafafa;
+                          text-decoration: none;
+                          border-radius: 8px;
+                        "
+                      >
+                        Confirmar e-mail
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Plano B: o botão é o caminho principal, mas o Outlook bloqueia
+                 botões construídos com tabela. A URL crua NÃO é mostrada
+                 de propósito — com o token ela passa das 200 caracteres
+                 e os clientes cortam no meio, deixando um link que não
+                 funciona se copiado. Um link com rótulo não tem esse
+                 problema e continua clicável. -->
+            <tr>
+              <td
+                align="center"
+                class="note"
+                style="
+                  padding: 20px 40px 0;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                    Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 13px;
+                  line-height: 20px;
+                  color: #646972;
+                "
+              >
+                O botão não abriu?
+                <a
+                  href="{{ .ConfirmationURL }}"
+                  target="_blank"
+                  style="color: #7834e8; text-decoration: underline"
+                >
+                  Abrir o link de confirmação
+                </a>
+              </td>
+            </tr>
+
+            <!-- Aviso -->
+            <tr>
+              <td
+                align="center"
+                class="note"
+                style="
+                  padding: 24px 40px 0;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                    Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 13px;
+                  line-height: 20px;
+                  color: #646972;
+                "
+              >
+                <p style="margin: 0">
+                  Você não criou uma conta no crmbr? Ignore este email — nada
+                  acontece.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Rodapé -->
+            <tr>
+              <td style="padding: 32px 40px 36px">
+                <div
+                  class="divider"
+                  style="
+                    height: 1px;
+                    background-color: #e4e5e8;
+                    font-size: 1px;
+                    line-height: 1px;
+                  "
+                >
+                  &nbsp;
+                </div>
+                <p
+                  class="note"
+                  style="
+                    margin: 20px 0 0;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                      Roboto, Helvetica, Arial, sans-serif;
+                    font-size: 12px;
+                    line-height: 18px;
+                    color: #646972;
+                    text-align: center;
+                  "
+                >
+                  © crmbr — CRM para WhatsApp
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
