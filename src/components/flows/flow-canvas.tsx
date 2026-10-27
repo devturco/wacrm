@@ -620,7 +620,7 @@ function NodeEditSheet({
   if (!node) {
     return (
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-md" />
+        <SheetContent side="right" className="w-full sm:max-w-md!" />
       </Sheet>
     );
   }
@@ -630,7 +630,7 @@ function NodeEditSheet({
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="right"
-        className="border-border bg-popover flex w-full flex-col gap-0 border-l p-0 sm:max-w-md"
+        className="border-border bg-popover flex w-full flex-col gap-0 border-l p-0 sm:max-w-md!"
       >
         <SheetHeader className="border-border flex-row items-center gap-3 space-y-0 border-b px-5 py-4">
           <NodeIconChip type={node.node_type} size={36} iconSize={18} />

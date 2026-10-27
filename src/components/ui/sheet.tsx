@@ -43,6 +43,17 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
   )
 }
 
+/**
+ * The sliding panel.
+ *
+ * The per-side `sm:max-w-sm` below is only the DEFAULT width — it is
+ * not overridable by a plain `sm:max-w-*`: Tailwind v4 emits the
+ * container scale in descending size order (so the *smallest*
+ * `max-w-*` rule wins the cascade) and the side variants carry an
+ * attribute selector that beats a bare `sm:max-w-*` anyway. A caller
+ * that needs a different width has to say so with the important
+ * modifier — `sm:max-w-xl!` — the way contact-detail-view.tsx does.
+ */
 function SheetContent({
   className,
   children,

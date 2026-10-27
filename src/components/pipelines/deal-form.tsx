@@ -249,7 +249,7 @@ export function DealForm({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="bg-popover border-border text-popover-foreground sm:max-w-lg w-full p-0"
+        className="bg-popover border-border text-popover-foreground sm:max-w-lg! w-full p-0"
       >
         <div className="flex h-full flex-col">
           <SheetHeader className="border-b border-border/50 p-4">

@@ -394,7 +394,7 @@ export function ContactDetailView({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="bg-popover border-border text-popover-foreground sm:max-w-lg w-full p-0"
+        className="bg-popover border-border text-popover-foreground sm:max-w-xl! w-full p-0"
       >
         {loading || !contact ? (
           <div className="flex items-center justify-center h-full">
@@ -464,34 +464,47 @@ export function ContactDetailView({
 
             {/* Tabs */}
             <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
-              <TabsList className="bg-muted/50 border-b border-border mx-4 mt-3">
+              {/* Five labels of very different lengths in one row: the
+                  triggers size to their own text (sharing the row
+                  evenly squeezed the long ones and clipped the last),
+                  and the row scrolls when the panel is still too
+                  narrow instead of cutting a tab in half.
+
+                  `overflow-y-hidden` is not redundant with the
+                  `overflow-x-auto` above it: CSS computes a `visible`
+                  axis to `auto` as soon as the other axis scrolls, and
+                  the tab indicator's `after` pseudo-element hangs 5px
+                  below the trigger — 1px past the list's bottom even
+                  while invisible. That 1px is enough to paint a
+                  vertical scrollbar with its arrow buttons on Windows. */}
+              <TabsList className="bg-muted/50 border-b border-border mx-4 mt-3 max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <TabsTrigger
                   value="details"
-                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.details')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="tags"
-                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.tags')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="notes"
-                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.notes')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="custom"
-                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.custom')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="deals"
-                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.deals')}
                 </TabsTrigger>
