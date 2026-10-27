@@ -2426,6 +2426,18 @@
     "MXN": "멕시코 페소",
     "COP": "콜롬비아 페소"
   },
+  "Presence": {
+    "online": "온라인 — 지금 활동 중",
+    "away": "자리 비움 — 유휴 상태",
+    "offline": "오프라인 — {when}",
+    "when": {
+      "justNow": "방금 활동함",
+      "aWhileAgo": "한참 전",
+      "minutesAgo": "{count}분 전",
+      "hoursAgo": "{count}시간 전",
+      "daysAgo": "{count}일 전"
+    }
+  },
   "TemplateStatus": {
     "DRAFT": "초안",
     "PENDING": "대기 중",

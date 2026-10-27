@@ -189,6 +189,7 @@ export function MessageThread({
   const t = useTranslations("Inbox.messageThread");
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
+  const tPresence = useTranslations("Presence");
 
   const { user } = useAuth();
   const { getPresence, getRow, now } = usePresence();
@@ -1149,7 +1150,8 @@ export function MessageThread({
                         label={presenceLabel(
                           presence,
                           getRow(p.user_id)?.last_seen_at ?? null,
-                          now
+                          now,
+                          tPresence
                         )}
                         className="mr-2"
                       />

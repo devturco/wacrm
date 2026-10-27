@@ -2426,6 +2426,18 @@
     "MXN": "Peso mexicano",
     "COP": "Peso colombiano"
   },
+  "Presence": {
+    "online": "Online — ativo agora",
+    "away": "Ausente — inativo",
+    "offline": "Offline — visto pela última vez {when}",
+    "when": {
+      "justNow": "agora mesmo",
+      "aWhileAgo": "um tempo atrás",
+      "minutesAgo": "{count, plural, =1 {há 1 minuto} other {há # minutos}}",
+      "hoursAgo": "{count, plural, =1 {há 1 hora} other {há # horas}}",
+      "daysAgo": "{count, plural, =1 {há 1 dia} other {há # dias}}"
+    }
+  },
   "TemplateStatus": {
     "DRAFT": "Rascunho",
     "PENDING": "Pendente",

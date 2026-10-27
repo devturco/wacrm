@@ -128,6 +128,7 @@ function fmtExpiresIn(iso: string, t: (key: string, values?: Record<string, stri
 export function MembersTab() {
   const t = useTranslations('Settings.members');
   const tRoles = useTranslations('Settings.roles');
+  const tPresence = useTranslations('Presence');
   const { user, canManageMembers } = useAuth();
   const { getPresence, getRow, now } = usePresence();
 
@@ -338,6 +339,7 @@ export function MembersTab() {
                 presence,
                 presenceRow?.last_seen_at ?? null,
                 now,
+                tPresence,
               );
 
               return (
