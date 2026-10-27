@@ -46,9 +46,32 @@ export interface ParseContactCsvResult {
   hasCompanyColumn: boolean;
 }
 
+/**
+ * A line whose first non-blank character is `#` is a comment: the
+ * importer ignores it, wherever it sits (above the header, between
+ * data rows, at the end of the file). That is what lets the
+ * downloadable template explain itself without the explanations being
+ * mistaken for contacts — a comment line used to reach the dedupe
+ * step as a contact with an unusable phone number.
+ */
+function isCommentLine(line: string): boolean {
+  return line.trimStart().startsWith('#');
+}
+
 export function parseContactCsv(text: string): ParseContactCsvResult {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) {
+  // Strip a leading UTF-8 BOM. `File.text()` already removes it, but a
+  // file that round-tripped through a script may still carry one, and
+  // it would glue itself to the first header name — "\uFEFFname" is not
+  // "name", so the column would silently disappear.
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+
+  // Blank and comment lines carry no data: the header is the first
+  // remaining line and the rows are the rest.
+  const dataLines = lines.filter(
+    (line) => line.trim() !== '' && !isCommentLine(line)
+  );
+
+  if (dataLines.length < 2) {
     return {
       rows: [],
       hasPhoneColumn: false,
@@ -57,7 +80,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     };
   }
 
-  const headers = lines[0]
+  const headers = dataLines[0]
     .split(',')
     .map((h) => h.trim().toLowerCase().replace(/["']/g, ''));
 
@@ -74,15 +97,19 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const nameIdx = headers.indexOf('name');
   const emailIdx = headers.indexOf('email');
   const companyIdx = headers.indexOf('company');
-  const tagsIdx = headers.indexOf('tags');
+  // `tag` (singular) is accepted as an alias of `tags`. A header that
+  // misses the plural imports the whole base with no tags at all, and
+  // nothing in the preview warns about it — the column is simply not
+  // there. When both spellings are present, `tags` wins.
+  const tagsIdx =
+    headers.indexOf('tags') !== -1
+      ? headers.indexOf('tags')
+      : headers.indexOf('tag');
 
   const rows: ParsedContactRow[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const values = parseCsvLine(line);
+  for (const line of dataLines.slice(1)) {
+    const values = parseCsvLine(line.trim());
     // A row with no usable phone is pushed through rather than dropped
     // here — dedupeByPhone (shared with the webhook/manual-form paths)
     // already treats an empty normalized key as invalid, and counting

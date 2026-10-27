@@ -88,4 +88,66 @@ describe('parseContactCsv', () => {
       ],
     });
   });
+
+  it('accepts `tag` as an alias of the `tags` column', () => {
+    const csv = `name,phone,tag
+Alice,+15551234567,VIP`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasTagsColumn).toBe(true);
+    expect(result.rows[0].tagNames).toEqual(['VIP']);
+  });
+
+  it('prefers `tags` over `tag` when both are present', () => {
+    const csv = `phone,tags,tag
++15551234567,VIP,Ignored`;
+
+    const result = parseContactCsv(csv);
+    expect(result.rows[0].tagNames).toEqual(['VIP']);
+  });
+
+  it('ignores comment lines above the header and between the rows', () => {
+    const csv = `# Contacts import template
+# phone is required
+phone,name,tags
++15551234567,Alice,VIP
+# a comment in the middle
++15559876543,Bob,Customer
+# a trailing comment`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasPhoneColumn).toBe(true);
+    expect(result.hasTagsColumn).toBe(true);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0]).toEqual({
+      phone: '+15551234567',
+      name: 'Alice',
+      email: undefined,
+      company: undefined,
+      tagNames: ['VIP'],
+    });
+    expect(result.rows[1].tagNames).toEqual(['Customer']);
+  });
+
+  it('strips a leading UTF-8 BOM so the first header is still found', () => {
+    const bom = String.fromCharCode(0xfeff);
+    const csv = `${bom}phone,name
++15551234567,Alice`;
+
+    const result = parseContactCsv(csv);
+    expect(result.hasPhoneColumn).toBe(true);
+    expect(result.rows[0].name).toBe('Alice');
+  });
+
+  it('reports no phone column when the file holds only comments', () => {
+    const csv = `# just a note
+# and another one`;
+
+    expect(parseContactCsv(csv)).toEqual({
+      hasPhoneColumn: false,
+      hasTagsColumn: false,
+      hasCompanyColumn: false,
+      rows: [],
+    });
+  });
 });

@@ -12,6 +12,7 @@ import {
   parseContactCsv,
   type ParsedContactRow,
 } from '@/lib/contacts/parse-contact-csv';
+import { buildContactCsvTemplate } from '@/lib/contacts/contact-csv-template';
 import {
   assignImportedContactTags,
   resolveImportTagIds,
@@ -36,6 +37,7 @@ import {
   XCircle,
   AlertTriangle,
   Tag,
+  Download,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -48,6 +50,29 @@ function truncateFilename(name: string, max = 48): string {
   const base = name.slice(0, name.length - ext.length);
   const keep = max - ext.length - 1;
   return `${base.slice(0, Math.max(keep, 12))}…${ext}`;
+}
+
+/**
+ * Save a generated CSV to the user's machine.
+ *
+ * The UTF-8 BOM is deliberate: without it, Excel reads the file as the
+ * system codepage and every accented name arrives as mojibake. The
+ * importer strips the BOM back off when it reads the file.
+ */
+function downloadCsvFile(filename: string, content: string) {
+  const blob = new Blob([String.fromCharCode(0xfeff) + content], {
+    type: 'text/csv;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking in the same tick can cancel the download in Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function PreviewCell({
@@ -205,6 +230,27 @@ export function ImportModal({
     } else {
       setTagColorByKey(new Map());
     }
+  }
+
+  /**
+   * Hand the user a ready-made template: every supported column, the
+   * rules the parser actually follows, and two example rows to delete.
+   */
+  function handleDownloadTemplate() {
+    const template = buildContactCsvTemplate({
+      notes: t('templateNotes').split('\n'),
+      exampleRows: [
+        [
+          '+5511999990000',
+          t('templateExampleName'),
+          t('templateExampleEmail'),
+          t('templateExampleCompany'),
+          `"${t('templateExampleTags')}"`,
+        ].join(','),
+        '+5511888880000',
+      ],
+    });
+    downloadCsvFile(t('templateFilename'), template);
   }
 
   async function handleImport() {
@@ -666,26 +712,48 @@ export function ImportModal({
           )}
         </div>
 
-        <DialogFooter className="mt-0 shrink-0 gap-2 border-t border-border/80 bg-background/50 px-6 py-4 sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-            className="border-border text-muted-foreground hover:bg-muted"
-          >
-            {result ? t('close') : t('cancel')}
-          </Button>
-          {!result && (
+        {/* The shared DialogFooter is built to bleed past a dialog
+            that has its own p-4 padding (-mx-4 -mb-4). This dialog is
+            p-0, so those negative margins pushed the footer outside
+            the panel: the buttons ended up glued to the bottom edge
+            and clipped on the right. `mx-0 mb-0` puts it back inside
+            and the taller padding gives the row some air. */}
+        <DialogFooter className="mx-0 mb-0 shrink-0 gap-2 border-t border-border/80 bg-background/50 px-6 py-5 sm:justify-between">
+          {!result ? (
             <Button
               type="button"
-              disabled={parsedRows.length === 0 || importing}
-              onClick={handleImport}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              variant="ghost"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              className="text-muted-foreground hover:text-foreground"
             >
-              {importing && <Loader2 className="size-4 animate-spin" />}
-              {parsedRows.length > 0 ? t('importBtn', { count: parsedRows.length }) : t('importBtn', { count: 0 })}
+              <Download />
+              {t('downloadTemplate')}
             </Button>
+          ) : (
+            <span />
           )}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              className="border-border text-muted-foreground hover:bg-muted"
+            >
+              {result ? t('close') : t('cancel')}
+            </Button>
+            {!result && (
+              <Button
+                type="button"
+                disabled={parsedRows.length === 0 || importing}
+                onClick={handleImport}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {importing && <Loader2 className="size-4 animate-spin" />}
+                {parsedRows.length > 0 ? t('importBtn', { count: parsedRows.length }) : t('importBtn', { count: 0 })}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
