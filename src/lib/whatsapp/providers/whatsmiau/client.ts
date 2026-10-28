@@ -15,13 +15,27 @@ import type { WhatsmiauConnection } from '../types';
 export class WhatsmiauApiError extends Error {
   /** The status the app should answer with (upstream status mapped). */
   readonly status: number;
+  /**
+   * The status the provider actually returned — 0 when the request
+   * never reached it. `status` is the mapped one (a 423 becomes a 409,
+   * a 500 becomes a 502); this keeps the provider's own number, which
+   * is what the diagnostics report as `provider_status`.
+   */
+  readonly upstreamStatus: number;
   readonly code: string;
   readonly raw?: unknown;
 
-  constructor(status: number, code: string, message: string, raw?: unknown) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    raw?: unknown,
+    upstreamStatus: number = status,
+  ) {
     super(message);
     this.name = 'WhatsmiauApiError';
     this.status = status;
+    this.upstreamStatus = upstreamStatus;
     this.code = code;
     this.raw = raw;
   }
@@ -133,12 +147,14 @@ export async function whatsmiauRequest<T = unknown>(
     const described = describeFailure(parsed);
     // The error carries the status the APP answers with, not the raw
     // upstream one (a 423 becomes a 409, a 500 becomes a 502). The
-    // upstream payload is kept in `raw` for the logs.
+    // provider's own status stays available as `upstreamStatus`, and
+    // the upstream payload is kept in `raw` for the logs.
     throw new WhatsmiauApiError(
       httpStatus,
       code === 'whatsmiau_error' ? described.code : code,
       described.message,
       parsed,
+      response.status,
     );
   }
 

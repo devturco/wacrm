@@ -104,6 +104,7 @@ describe('whatsmiau client — errors', () => {
     await whatsmiauRequest(conn, { path: '/x' }).catch((e: WhatsmiauApiError) => {
       expect(e.code).toBe('whatsmiau_suspended');
       expect(e.status).toBe(409);
+      expect(e.upstreamStatus).toBe(423);
       expect(e.message).toContain('billing_past_due');
     });
   });
@@ -113,6 +114,7 @@ describe('whatsmiau client — errors', () => {
     await whatsmiauRequest(conn, { path: '/x' }).catch((e: WhatsmiauApiError) => {
       expect(e.code).toBe('whatsmiau_error');
       expect(e.status).toBe(502);
+      expect(e.upstreamStatus).toBe(500);
       expect(e.raw).toEqual({ message: 'boom' });
     });
   });
