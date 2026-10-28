@@ -1,5 +1,10 @@
 # Whatsmiau Cloud — Referência técnica consolidada
 
+> Este arquivo é a referência técnica do provider. O protocolo de manutenção
+> (merge com o upstream, arquivos compartilhados, o que fazer quando o upstream
+> mexer em templates ou no webhook do Meta) está em
+> [`docs/integracao/whatsmiau-upstream.md`](integracao/whatsmiau-upstream.md).
+
 > **Data de consulta:** 27/10/2026  
 > **Documentação consultada:** https://whatsmiau.dev/docs/getting-started  
 > **API REST:** `https://api.whatsmiau.dev/v2`  
