@@ -14,47 +14,22 @@ import { randomBytes } from 'node:crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { decrypt, encrypt } from '@/lib/whatsapp/encryption';
+import {
+  DEFAULT_INSTANCE_SETTINGS,
+  type WhatsmiauInstanceSettings,
+  type WhatsmiauStatus,
+  type WhatsmiauWebhookConfig,
+} from '@/lib/whatsapp/providers/whatsmiau/settings';
 
-export type WhatsmiauStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
-
-export interface WhatsmiauWebhookConfig {
-  enabled: boolean;
-  url: string;
-  headers: Record<string, string>;
-  events: string[];
-  base64: boolean;
-}
-
-export interface WhatsmiauInstanceSettings {
-  alwaysOnline: boolean;
-  readMessages: boolean;
-  rejectCall: boolean;
-  msgCall: string;
-  groupsIgnore: boolean;
-  saveMedia: boolean;
-  webhook: WhatsmiauWebhookConfig;
-}
-
-export const DEFAULT_INSTANCE_SETTINGS: WhatsmiauInstanceSettings = {
-  alwaysOnline: false,
-  readMessages: false,
-  rejectCall: true,
-  msgCall: '',
-  groupsIgnore: true,
-  saveMedia: true,
-  webhook: {
-    enabled: true,
-    url: '',
-    headers: {},
-    events: [
-      'messages.upsert',
-      'messages.edited',
-      'messages.update',
-      'messages.delete',
-      'connection.update',
-    ],
-    base64: false,
-  },
+// The types and the defaults live in a dependency-free module so the
+// settings screen (a client component) can import them without
+// dragging `node:crypto` into the browser bundle. Re-exported here so
+// every server-side import keeps working unchanged.
+export {
+  DEFAULT_INSTANCE_SETTINGS,
+  type WhatsmiauInstanceSettings,
+  type WhatsmiauStatus,
+  type WhatsmiauWebhookConfig,
 };
 
 export interface WhatsmiauConfigRow {

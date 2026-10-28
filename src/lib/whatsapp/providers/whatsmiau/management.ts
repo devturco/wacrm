@@ -17,16 +17,12 @@ import {
   type WhatsmiauWebhookConfig,
 } from '@/lib/whatsapp/whatsmiau-config';
 import { WhatsmiauApiError } from './client';
+import { LOCKED_WEBHOOK_HEADER, MASKED_API_KEY } from './settings';
 
-/** The API key never leaves the server in cleartext. */
-export const MASKED_API_KEY = '••••••••••••••••';
-
-/**
- * The webhook header WE own. The account's `webhook_secret` travels
- * in it, and the webhook route compares the incoming header against
- * that secret — so it can never be a user-defined header.
- */
-export const LOCKED_WEBHOOK_HEADER = 'Authorization';
+// The mask and the locked header live in the dependency-free settings
+// module — the browser has to render both, and it cannot import this
+// (server-only) module.
+export { LOCKED_WEBHOOK_HEADER, MASKED_API_KEY };
 
 /**
  * Drop the locked header from a user-supplied map. The browser never
