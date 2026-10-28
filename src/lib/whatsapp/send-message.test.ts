@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
@@ -149,6 +149,77 @@ describe('sendMessageToConversation — param validation (pre-DB)', () => {
   });
 });
 
+describe('sendMessageToConversation — provider dispatch', () => {
+  // Reset per test: the second case asserts nothing was written, so it
+  // must not see the first case's insert.
+  let captured: CapturedWrites;
+
+  beforeEach(() => {
+    captured = {};
+    providerMocks.resolveProviderConnection.mockReset();
+    providerMocks.resolveProviderConnection.mockResolvedValue({
+      provider: 'meta',
+      phoneNumberId: 'pn-1',
+      accessToken: 'tok-1',
+    });
+    providerMocks.assertProviderSupportsMessageType.mockReset();
+  });
+
+  it('sends through the dispatcher with the resolved connection', async () => {
+    await sendMessageToConversation(
+      sendPathDb([], captured),
+      'acct-1',
+      { conversationId: 'cv-1', messageType: 'text', contentText: 'hi' }
+    );
+
+    expect(providerMocks.resolveProviderConnection).toHaveBeenCalled();
+    expect(providerMocks.sendTextMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'meta' }),
+      expect.objectContaining({ to: expect.any(String), text: 'hi' })
+    );
+  });
+
+  it('rejects a template before any write when the provider cannot carry it', async () => {
+    providerMocks.assertProviderSupportsMessageType.mockImplementation(() => {
+      throw new Error('template_unsupported');
+    });
+
+    await expect(
+      sendMessageToConversation(
+        sendPathDb([], captured),
+        'acct-1',
+        {
+          conversationId: 'cv-1',
+          messageType: 'template',
+          templateName: 'hello',
+        }
+      )
+    ).rejects.toThrow('template_unsupported');
+
+    expect(captured.message).toBeUndefined();
+  });
+
+  it('never calls the Meta path when the CRMBR provider is active', async () => {
+    providerMocks.resolveProviderConnection.mockResolvedValue({
+      provider: 'whatsmiau',
+      instanceName: 'Atendimento01',
+      apiKey: 'key-1',
+      baseUrl: 'https://api.whatsmiau.dev/v2',
+    });
+
+    await sendMessageToConversation(
+      sendPathDb([], captured),
+      'acct-1',
+      { conversationId: 'cv-1', messageType: 'text', contentText: 'hi' }
+    );
+
+    expect(providerMocks.sendTextMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'whatsmiau' }),
+      expect.anything()
+    );
+  });
+});
+
 describe('SendMessageError', () => {
   it('carries a machine code and an HTTP status', () => {
     const e = new SendMessageError('meta_error', 'boom', 502);
@@ -162,25 +233,44 @@ describe('SendMessageError', () => {
 // Full send path — what actually lands in `messages` (issue #483).
 // ============================================================
 
-const sendTemplateMessage = vi.fn(async () => ({ messageId: 'wamid.1' }));
-
-// Stub only the senders — the module also exports INTERACTIVE_LIMITS,
-// which `interactive.ts` needs for the payload validation covered above.
-vi.mock('@/lib/whatsapp/meta-api', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
+// The dispatcher is the only send path now: the core resolves the
+// active provider's connection and hands it over. Mocking the whole
+// provider module keeps these tests off the network — `meta-api` is
+// still loaded for real because `interactive.ts` needs its
+// `INTERACTIVE_LIMITS`.
+const providerMocks = vi.hoisted(() => ({
+  resolveProviderConnection: vi.fn(),
+  assertProviderSupportsMessageType: vi.fn(),
   sendTextMessage: vi.fn(async () => ({ messageId: 'wamid.text' })),
-  sendTemplateMessage: (...args: unknown[]) =>
-    (sendTemplateMessage as unknown as (...a: unknown[]) => unknown)(...args),
+  sendTemplateMessage: vi.fn(async () => ({ messageId: 'wamid.tpl' })),
   sendMediaMessage: vi.fn(async () => ({ messageId: 'wamid.media' })),
   sendInteractiveButtons: vi.fn(async () => ({ messageId: 'wamid.btn' })),
   sendInteractiveList: vi.fn(async () => ({ messageId: 'wamid.list' })),
+  sendReactionMessage: vi.fn(async () => ({ messageId: 'wamid.react' })),
+  sendTypingIndicator: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/lib/whatsapp/encryption', () => ({
-  decrypt: (v: string) => v,
-  encrypt: (v: string) => v,
-  isLegacyFormat: () => false,
+vi.mock('@/lib/whatsapp/providers', () => ({
+  resolveProviderConnection: providerMocks.resolveProviderConnection,
+  assertProviderSupportsMessageType: providerMocks.assertProviderSupportsMessageType,
+  sendTextMessage: providerMocks.sendTextMessage,
+  sendTemplateMessage: providerMocks.sendTemplateMessage,
+  sendMediaMessage: providerMocks.sendMediaMessage,
+  sendInteractiveButtons: providerMocks.sendInteractiveButtons,
+  sendInteractiveList: providerMocks.sendInteractiveList,
+  sendReactionMessage: providerMocks.sendReactionMessage,
+  sendTypingIndicator: providerMocks.sendTypingIndicator,
 }));
+
+// Every test that reaches the send path needs a connection. The Meta
+// one is the default; the provider-dispatch block overrides it.
+beforeEach(() => {
+  providerMocks.resolveProviderConnection.mockResolvedValue({
+    provider: 'meta',
+    phoneNumberId: 'pn-1',
+    accessToken: 'tok-1',
+  });
+});
 
 vi.mock('@/lib/flows/admin-client', () => ({
   // Only used for the best-effort "pause active flow run" write.
@@ -284,7 +374,7 @@ describe('sendMessageToConversation — template persistence (#483)', () => {
       }
     );
 
-    expect(result.whatsappMessageId).toBe('wamid.1');
+    expect(result.whatsappMessageId).toBe('wamid.tpl');
     // Was NULL before the fix — the Inbox rendered an empty bubble.
     expect(captured.message?.content_text).toBe(
       'Your order A123 ships on Friday'
@@ -345,7 +435,7 @@ describe('sendMessageToConversation — template persistence (#483)', () => {
   });
 
   it("sends the local row's language when the caller names none", async () => {
-    sendTemplateMessage.mockClear();
+    providerMocks.sendTemplateMessage.mockClear();
     const captured: CapturedWrites = {};
     await sendMessageToConversation(sendPathDb([TEMPLATE_ROW], captured), 'acct-1', {
       conversationId: 'cv-1',
@@ -356,8 +446,10 @@ describe('sendMessageToConversation — template persistence (#483)', () => {
     // Previously pinned to 'en_US', which matched no row and made Meta
     // reject the send as a missing translation.
     expect(
-      (sendTemplateMessage.mock.calls[0] as unknown as [{ language: string }])[0]
-        .language
+      (providerMocks.sendTemplateMessage.mock.calls[0] as unknown as [
+        unknown,
+        { language: string }
+      ])[1].language
     ).toBe('en');
   });
 
@@ -429,8 +521,7 @@ const BSUID = 'US.13491208655302741918';
 describe('sendMessageToConversation — BSUID recipients (#519)', () => {
   it('sends to the BSUID when the contact has no phone number', async () => {
     const captured: CapturedWrites = {};
-    const { sendTextMessage } = await import('@/lib/whatsapp/meta-api');
-    vi.mocked(sendTextMessage).mockClear();
+    providerMocks.sendTextMessage.mockClear();
 
     await sendMessageToConversation(
       sendPathDb([], captured, { id: 'ct-1', phone: '', wa_user_id: BSUID }),
@@ -438,15 +529,15 @@ describe('sendMessageToConversation — BSUID recipients (#519)', () => {
       { conversationId: 'cv-1', messageType: 'text', contentText: 'hi' }
     );
 
-    expect(vi.mocked(sendTextMessage)).toHaveBeenCalledWith(
+    expect(providerMocks.sendTextMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'meta' }),
       expect.objectContaining({ to: BSUID })
     );
   });
 
   it('still prefers the phone number when the contact has both', async () => {
     const captured: CapturedWrites = {};
-    const { sendTextMessage } = await import('@/lib/whatsapp/meta-api');
-    vi.mocked(sendTextMessage).mockClear();
+    providerMocks.sendTextMessage.mockClear();
 
     await sendMessageToConversation(
       sendPathDb([], captured, {
@@ -460,15 +551,15 @@ describe('sendMessageToConversation — BSUID recipients (#519)', () => {
 
     // Only the phone path supports the trunk-prefix variant retry, so
     // it wins whenever we have a usable number.
-    expect(vi.mocked(sendTextMessage)).toHaveBeenCalledWith(
+    expect(providerMocks.sendTextMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'meta' }),
       expect.objectContaining({ to: '15551234567' })
     );
   });
 
   it('falls back to the BSUID when the stored phone is unusable', async () => {
     const captured: CapturedWrites = {};
-    const { sendTextMessage } = await import('@/lib/whatsapp/meta-api');
-    vi.mocked(sendTextMessage).mockClear();
+    providerMocks.sendTextMessage.mockClear();
 
     await sendMessageToConversation(
       sendPathDb([], captured, {
@@ -480,7 +571,8 @@ describe('sendMessageToConversation — BSUID recipients (#519)', () => {
       { conversationId: 'cv-1', messageType: 'text', contentText: 'hi' }
     );
 
-    expect(vi.mocked(sendTextMessage)).toHaveBeenCalledWith(
+    expect(providerMocks.sendTextMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'meta' }),
       expect.objectContaining({ to: BSUID })
     );
   });

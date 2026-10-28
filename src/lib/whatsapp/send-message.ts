@@ -27,14 +27,19 @@ import {
   sendMediaMessage,
   sendInteractiveButtons,
   sendInteractiveList,
-  type MediaKind,
-} from '@/lib/whatsapp/meta-api';
+  resolveProviderConnection,
+  assertProviderSupportsMessageType,
+} from '@/lib/whatsapp/providers';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types';
+import type { MediaKind } from '@/lib/whatsapp/meta-api';
 import {
   validateInteractivePayload,
   interactivePayloadPreviewText,
   type InteractiveMessagePayload,
 } from '@/lib/whatsapp/interactive';
-import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
+// Credential decryption moved to providers/connection.ts — the core
+// no longer touches the stored ciphertext directly.
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import {
   phoneVariants,
@@ -258,37 +263,25 @@ export async function sendMessageToConversation(
   const hasValidPhone = resolvedTarget.isPhone;
   const sanitizedPhone = hasValidPhone ? sendTarget : '';
 
-  // WhatsApp config, account-scoped.
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
+  // Which provider is this account sending through? Credentials for
+  // both providers are resolved in one place (providers/connection.ts).
+  //
+  // The provider layer speaks `ProviderError`; the core's contract is
+  // `SendMessageError`, so translate at the boundary — a not-configured
+  // account and a disconnected CRMBR instance must both surface as a
+  // 400 with the provider's own message, never as a generic 500.
+  let conn: ProviderConnection;
+  try {
+    conn = await resolveProviderConnection(db, accountId);
 
-  if (configError || !config) {
-    throw new SendMessageError(
-      'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
-      400
-    );
-  }
-
-  const accessToken = decrypt(config.access_token);
-
-  // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
-  if (isLegacyFormat(config.access_token)) {
-    void db
-      .from('whatsapp_config')
-      .update({ access_token: encrypt(accessToken) })
-      .eq('id', config.id)
-      .then(({ error }: { error: { message: string } | null }) => {
-        if (error) {
-          console.warn(
-            '[send-message] access_token GCM upgrade failed:',
-            error.message
-          );
-        }
-      });
+    // Refuse a message type the active provider can't carry BEFORE any
+    // write, so a rejected send leaves no orphan contact/conversation.
+    assertProviderSupportsMessageType(conn, messageType);
+  } catch (err) {
+    if (err instanceof ProviderError) {
+      throw new SendMessageError(err.code, err.message, err.status);
+    }
+    throw err;
   }
 
   // Resolve the reply target to its Meta message_id. The parent must
@@ -345,9 +338,7 @@ export async function sendMessageToConversation(
 
   const attempt = async (phone: string): Promise<string> => {
     if (messageType === 'template') {
-      const result = await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await sendTemplateMessage(conn, {
         to: phone,
         templateName: templateName!,
         language: sendLanguage,
@@ -359,9 +350,7 @@ export async function sendMessageToConversation(
       return result.messageId;
     }
     if (isMediaKind) {
-      const result = await sendMediaMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await sendMediaMessage(conn, {
         to: phone,
         kind: messageType as MediaKind,
         link: mediaUrl!,
@@ -374,9 +363,7 @@ export async function sendMessageToConversation(
     if (messageType === 'interactive') {
       const p = interactivePayload!;
       if (p.kind === 'buttons') {
-        const result = await sendInteractiveButtons({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
+        const result = await sendInteractiveButtons(conn, {
           to: phone,
           bodyText: p.body,
           headerText: p.header || undefined,
@@ -386,9 +373,7 @@ export async function sendMessageToConversation(
         });
         return result.messageId;
       }
-      const result = await sendInteractiveList({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await sendInteractiveList(conn, {
         to: phone,
         bodyText: p.body,
         buttonLabel: p.button_label,
@@ -399,9 +384,7 @@ export async function sendMessageToConversation(
       });
       return result.messageId;
     }
-    const result = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const result = await sendTextMessage(conn, {
       to: phone,
       text: contentText!,
       contextMessageId,
@@ -440,10 +423,16 @@ export async function sendMessageToConversation(
 
     if (lastError) throw lastError;
   } catch (err) {
+    // A provider-layer error already carries a machine code and an
+    // HTTP status — surface it as-is instead of flattening it into a
+    // generic failure.
+    if (err instanceof ProviderError) {
+      throw new SendMessageError(err.code, err.message, err.status);
+    }
     const message =
-      err instanceof Error ? err.message : 'Unknown Meta API error';
-    console.error('[send-message] Meta send failed for all variants:', message);
-    throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
+      err instanceof Error ? err.message : 'Unknown WhatsApp API error';
+    console.error('[send-message] send failed for all variants:', message);
+    throw new SendMessageError('meta_error', `WhatsApp API error: ${message}`, 502);
   }
 
   if (hasValidPhone && workingPhone !== sanitizedPhone) {
