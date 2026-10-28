@@ -133,6 +133,7 @@ a tabela `whatsapp_config` · `src/components/settings/whatsapp-config.tsx` ·
   - `interface WhatsmiauConfigRow { id; account_id; instance_name; api_key_encrypted; base_url; webhook_secret; status; phone_number; wuid; is_active; instance_settings; connected_at; created_at; updated_at }`
   - `loadWhatsmiauConfig(db, accountId): Promise<WhatsmiauConfigRow | null>`
   - `loadWhatsmiauConfigByInstanceName(db, instanceName): Promise<WhatsmiauConfigRow | null>`
+  - `loadWhatsmiauConfigByWebhookSecret(db, secret): Promise<WhatsmiauConfigRow | null>`
   - `upsertWhatsmiauConfig(db, accountId, patch): Promise<WhatsmiauConfigRow>`
   - `decryptWhatsmiauApiKey(row: WhatsmiauConfigRow): string`
   - `generateWebhookSecret(): string`
@@ -467,8 +468,14 @@ export async function loadWhatsmiauConfig(
 }
 
 /**
- * Resolve the account that owns a WhatsMiau instance name. Used by the
- * inbound webhook, which only knows the instance name.
+ * Resolve the account that owns a WhatsMiau instance name.
+ *
+ * NOTE: the instance name is NOT unique across accounts — two
+ * companies may name their instance the same way — so this lookup is
+ * only unambiguous while at most one row matches. The inbound webhook
+ * routes by the webhook secret instead (see
+ * `loadWhatsmiauConfigByWebhookSecret`); this helper stays for
+ * lookups that are already account-scoped.
  */
 export async function loadWhatsmiauConfigByInstanceName(
   db: SupabaseClient,
@@ -479,6 +486,35 @@ export async function loadWhatsmiauConfigByInstanceName(
     .from('whatsmiau_config')
     .select('*')
     .eq('instance_name', instanceName)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    ...(data as WhatsmiauConfigRow),
+    instance_settings: mergeInstanceSettings(
+      data.instance_settings,
+      (data.instance_settings ?? {}) as Partial<WhatsmiauInstanceSettings>,
+    ),
+  };
+}
+
+/**
+ * Resolve the account that owns a webhook secret.
+ *
+ * The secret is 32 random bytes, generated once per account row, and
+ * it is what the provider sends back as `Authorization: Bearer
+ * <secret>`. That makes it the ONLY routing key that identifies an
+ * account unambiguously: the instance name is chosen by the customer
+ * and two accounts may well pick the same one.
+ */
+export async function loadWhatsmiauConfigByWebhookSecret(
+  db: SupabaseClient,
+  secret: string,
+): Promise<WhatsmiauConfigRow | null> {
+  if (!secret) return null;
+  const { data, error } = await db
+    .from('whatsmiau_config')
+    .select('*')
+    .eq('webhook_secret', secret)
     .maybeSingle();
   if (error || !data) return null;
   return {
@@ -1164,7 +1200,7 @@ EOF
 **Interfaces:**
 - Consumes: `WhatsmiauConnection` de `@/lib/whatsapp/providers/types`.
 - Produces:
-  - `class WhatsmiauApiError extends Error { readonly status: number; readonly code: string; readonly raw?: unknown }`
+  - `class WhatsmiauApiError extends Error { readonly status: number; readonly upstreamStatus: number; readonly code: string; readonly raw?: unknown }`
   - `interface WhatsmiauRequestOptions { method?: 'GET'|'POST'|'PUT'|'DELETE'; path: string; body?: unknown }`
   - `whatsmiauRequest<T = unknown>(conn: WhatsmiauConnection, options: WhatsmiauRequestOptions): Promise<T>`
   - `mapWhatsmiauStatus(status: number): { code: string; httpStatus: number }`
@@ -1340,14 +1376,29 @@ Crie `src/lib/whatsapp/providers/whatsmiau/client.ts`:
 import type { WhatsmiauConnection } from '../types';
 
 export class WhatsmiauApiError extends Error {
+  /** The status the app answers with (the upstream status, mapped). */
   readonly status: number;
+  /**
+   * The status the provider actually returned — 0 when the request
+   * never reached it. `status` is the mapped one (a 423 becomes a
+   * 409, a 500 becomes a 502); this keeps the provider's own number,
+   * which is what the diagnostics report as `provider_status`.
+   */
+  readonly upstreamStatus: number;
   readonly code: string;
   readonly raw?: unknown;
 
-  constructor(status: number, code: string, message: string, raw?: unknown) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    raw?: unknown,
+    upstreamStatus: number = status,
+  ) {
     super(message);
     this.name = 'WhatsmiauApiError';
     this.status = status;
+    this.upstreamStatus = upstreamStatus;
     this.code = code;
     this.raw = raw;
   }
@@ -1458,10 +1509,11 @@ export async function whatsmiauRequest<T = unknown>(
     const { code, httpStatus } = mapWhatsmiauStatus(response.status);
     const described = describeFailure(parsed);
     throw new WhatsmiauApiError(
-      response.status,
+      httpStatus,
       code === 'whatsmiau_error' ? described.code : code,
       described.message,
       parsed,
+      response.status,
     );
   }
 
@@ -6315,7 +6367,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes (Task 11): `handleWhatsmiauInboundMessage`, `handleWhatsmiauStatusUpdate`, `handleWhatsmiauConnectionUpdate`, `handleWhatsmiauEditedMessage`, `handleWhatsmiauDeletedMessage`, `resolveWhatsmiauOwnerUserId`, `WhatsmiauInboundContext` — de `@/lib/whatsapp/providers/whatsmiau/inbound`.
 - Consumes (Task 10): `parseWhatsmiauWebhook`, `isSupportedWebhookEvent`, `WhatsmiauWebhookEnvelope` — de `@/lib/whatsapp/providers/whatsmiau/webhook`; `normalizeInboundMessage`, `normalizeStatusUpdate`, `normalizeConnectionUpdate`, `normalizeEditedMessage`, `normalizeDeletedMessage` — de `@/lib/whatsapp/providers/whatsmiau/normalize`.
-- Consumes (Task 1): `loadWhatsmiauConfigByInstanceName`, `WhatsmiauConfigRow` — de `@/lib/whatsapp/whatsmiau-config`.
+- Consumes (Task 1): `loadWhatsmiauConfigByWebhookSecret`, `WhatsmiauConfigRow` — de `@/lib/whatsapp/whatsmiau-config`.
 - Consumes (existentes): `readCappedBody`, `MAX_WEBHOOK_BODY_BYTES` (`@/lib/whatsapp/webhook-body`); `supabaseAdmin` (`@/lib/flows/admin-client`).
 - Produces: `POST /api/whatsmiau/webhook` (eventos) e `GET /api/whatsmiau/webhook` (health).
 
@@ -6356,7 +6408,9 @@ vi.mock('@/lib/flows/admin-client', () => ({
 }));
 
 vi.mock('@/lib/whatsapp/whatsmiau-config', () => ({
-  loadWhatsmiauConfigByInstanceName: vi.fn(async () => h.config),
+  loadWhatsmiauConfigByWebhookSecret: vi.fn(async (secret: string) =>
+    h.config?.webhook_secret === secret ? h.config : null,
+  ),
 }));
 
 vi.mock('@/lib/whatsapp/providers/whatsmiau/inbound', () => ({
@@ -6451,7 +6505,8 @@ describe('POST /api/whatsmiau/webhook', () => {
   });
 
   it('answers 404 for an instance we do not know', async () => {
-    h.config = null;
+    // The secret is valid, but the envelope names another instance.
+    h.config = { ...config(), instance_name: 'OutraInstancia' };
     const res = await POST(request(textEvent(), { authorization: `Bearer ${SECRET}` }));
     expect(res.status).toBe(404);
   });
@@ -6565,9 +6620,13 @@ Crie `src/app/api/whatsmiau/webhook/route.ts`:
 // `Authorization: Bearer <secret>`, and the secret is the one stored
 // on the account's `whatsmiau_config` row.
 //
-// Account routing: the envelope carries the instance name, and the
-// instance belongs to exactly one account. An instance we do not know
-// is a 404.
+// Account routing: the webhook secret is the routing key. It is 32
+// random bytes, generated once per account row, and the provider
+// sends it back on every call — so it identifies the account exactly.
+// The instance name in the envelope is only a cross-check: the
+// customer picks that name, and two accounts may well pick the same
+// one, which would make a name-only lookup ambiguous.
+// An instance we do not know is a 404.
 // ============================================================
 
 import { timingSafeEqual } from 'node:crypto';
@@ -6581,7 +6640,7 @@ import {
   readCappedBody,
 } from '@/lib/whatsapp/webhook-body';
 import {
-  loadWhatsmiauConfigByInstanceName,
+  loadWhatsmiauConfigByWebhookSecret,
   type WhatsmiauConfigRow,
 } from '@/lib/whatsapp/whatsmiau-config';
 import {
@@ -6653,16 +6712,27 @@ export async function POST(request: Request) {
 
   const db = supabaseAdmin();
 
-  // The account behind the instance. An instance we do not know is a
-  // 404: the operator needs to know the instance is not wired here.
-  const config = await loadWhatsmiauConfigByInstanceName(db, envelope.instance);
-  if (!config) {
-    return NextResponse.json({ error: 'unknown_instance' }, { status: 404 });
+  // The account behind the instance. The webhook secret is the
+  // routing key: it is unique per account, so it identifies the owner
+  // even when two accounts named their instance the same way.
+  const presented = request.headers.get('authorization') ?? '';
+  const secret = presented.startsWith('Bearer ')
+    ? presented.slice('Bearer '.length).trim()
+    : '';
+  if (!secret) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const presented = request.headers.get('authorization') ?? '';
-  if (!safeEqual(presented, `Bearer ${config.webhook_secret}`)) {
+  const config = await loadWhatsmiauConfigByWebhookSecret(db, secret);
+  if (!config || !safeEqual(config.webhook_secret, secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  // The envelope must belong to the instance the secret is bound to.
+  // An instance we do not know is a 404: the operator needs to know
+  // the instance is not wired here.
+  if (config.instance_name !== envelope.instance) {
+    return NextResponse.json({ error: 'unknown_instance' }, { status: 404 });
   }
 
   if (!isSupportedWebhookEvent(envelope.event)) {
@@ -6910,7 +6980,7 @@ export function providerErrorResponse(error: unknown): NextResponse {
               ? 400
               : 502;
     return NextResponse.json(
-      { error: error.message, code: error.code, provider_status: error.status },
+      { error: error.message, code: error.code, provider_status: error.upstreamStatus },
       { status },
     );
   }

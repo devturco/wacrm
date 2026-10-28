@@ -198,7 +198,7 @@ CREATE TABLE IF NOT EXISTS whatsmiau_config (
   wuid              TEXT,
   is_active         BOOLEAN NOT NULL DEFAULT false,
   instance_settings JSONB NOT NULL DEFAULT
-    '{"alwaysOnline":false,"readMessages":false,"rejectCall":true,"msgCall":"","groupsIgnore":true,"saveMedia":true,"webhook":{"enabled":true,"base64":false,"events":["messages.upsert","messages.update","messages.edited","messages.delete","connection.update"]}}'::jsonb,
+    '{"alwaysOnline":false,"readMessages":false,"rejectCall":true,"msgCall":"","groupsIgnore":true,"saveMedia":true,"webhook":{"enabled":true,"url":"","headers":{},"events":["messages.upsert","messages.edited","messages.update","messages.delete","connection.update"],"base64":false}}'::jsonb,
   connected_at      TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -221,7 +221,7 @@ CREATE POLICY whatsmiau_config_delete ON whatsmiau_config
 
 - **Tabela separada, não coluna em `whatsapp_config`.** `whatsapp_config` é lida com `.single()`/`.maybeSingle()` por conta em vários lugares; duas linhas lá quebrariam o app inteiro — inclusive o caminho Meta. A tabela nova é 1:1 com a conta e o Meta continua intocado.
 - **`instance_settings` em JSONB** com os **mesmos nomes de campo da API** (`alwaysOnline`, `readMessages`, `rejectCall`, `msgCall`, `groupsIgnore`, `saveMedia`, `webhook`). "Aplicar na instância" é literalmente `PUT /instance/update/:name` com esse JSON — sem tabela de tradução. Um tipo TS (`WhatsmiauInstanceSettings`) valida o shape.
-- **`api_key_encrypted`** usa o `encryption.ts` que o app já usa (AES-GCM), inclusive o self-heal de formato legado.
+- **`api_key_encrypted`** usa o `encryption.ts` que o app já usa (AES-GCM). A tabela é nova, então todo ciphertext gravado nela já nasce em GCM — não há formato legado a self-heal (o self-heal do `encryption.ts` foi copiado do caminho Meta, onde a tabela é antiga).
 - **`webhook_secret`** em texto plano, com o mesmo papel do `verify_token` do Meta (verificador, não credencial de conta). É gerado pelo servidor (32 bytes hex) e exibido com botão de copiar/regenerar.
 - **`is_active`** é a chave da troca (D3). Uma conta tem no máximo uma linha; o provider ativo é `whatsmiau` se `is_active`, senão `meta`.
 
@@ -287,7 +287,10 @@ A WhatsMiau reenvia webhook em falha. `data.key.id` é a chave: conferimos `mess
 
 ### 7.6 Roteamento da conta
 
-O envelope traz `instance` (instanceName) → a rota resolve `whatsmiau_config.instance_name → account_id`. Instância desconhecida → 404.
+O roteamento usa o **`webhook_secret`** da conta, não o nome da instância. O segredo é gerado uma vez por linha (32 bytes aleatórios) e é o que o provedor devolve em `Authorization: Bearer <secret>` — é o único identificador que aponta para exatamente uma conta. O `instance` do envelope serve apenas de conferência: o nome é escolhido pelo cliente e duas empresas podem dar o mesmo nome à sua instância, o que tornaria ambígua uma busca só pelo nome.
+
+- Sem header `Authorization`, ou com segredo que não pertence a nenhuma conta → **401**.
+- Segredo válido, mas o envelope nomeia outra instância → **404** (instância desconhecida).
 
 ## 8. Instância e configurações (tela `/settings/whatsapp/crmbr`)
 
