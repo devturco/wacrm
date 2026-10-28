@@ -5,8 +5,14 @@ Este documento explica como manter a **API CRMBR (não oficial)** coexistindo co
 mantenedor upstream (`ArnasDon/wacrm`) sem que o trabalho novo entre em conflito.
 
 > O número de Whatsapp do provedor, a chave da API e a URL do webhook **nunca**
-> entram neste repositório. A chave da CRMBR é criptografada com `ENCRYPTION_KEY` e
-> fica na tabela `whatsmiau_config`, por conta.
+> entram neste repositório. A chave da CRMBR é **da plataforma** e vive na
+> variável de ambiente do servidor (`WHATSMIAU_API_KEY`) — nunca no banco, nunca
+> no navegador. O assinante não tem chave: ele dá um nome para a conexão e nós
+> provisionamos a instância na nossa conta do provedor.
+>
+> O endereço público do webhook vem de `NEXT_PUBLIC_SITE_URL` — o provedor
+> recusa `localhost` e redes privadas (guard anti-SSRF), então em desenvolvimento
+> local é preciso apontar essa variável para um túnel público.
 
 ---
 
@@ -41,6 +47,8 @@ git config rerere.autoupdate true
 |---|---|
 | `src/lib/whatsapp/providers/**` | **nosso** — o upstream nunca vai mexer |
 | `src/lib/whatsapp/whatsmiau-config.ts` | **nosso** |
+| `src/lib/whatsapp/providers/whatsmiau/naming.ts` | **nosso** |
+| `src/lib/whatsapp/providers/whatsmiau/platform-credential.ts` | **nosso** |
 | `src/app/api/whatsmiau/**` | **nosso** |
 | `src/components/settings/whatsmiau-*.tsx` | **nosso** |
 | `src/components/settings/settings-shell.tsx` | **nosso** |

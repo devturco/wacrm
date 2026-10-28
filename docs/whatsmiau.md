@@ -53,6 +53,93 @@ curl -X GET 'https://api.whatsmiau.dev/v2/instance/fetchInstances' \
 | `delay` | Em rotas de envio que o oferecem, representa milissegundos, com limite de **110.000 ms**. |
 | Credenciais | Nunca armazenar chaves em código frontend ou em repositórios públicos. |
 
+### Como o wacrm usa esta API (credencial da plataforma)
+
+O wacrm **não entrega a chave ao assinante**. A chave é da **plataforma** e mora
+apenas na variável de ambiente do servidor:
+
+```bash
+WHATSMIAU_API_KEY=...            # obrigatório
+WHATSMIAU_BASE_URL=...           # opcional — padrão https://api.whatsmiau.dev/v2
+```
+
+Sem `WHATSMIAU_API_KEY`, a tela "API CRMBR" avisa que o recurso não está
+disponível neste servidor. A chave nunca vai para o banco, nunca vai para o
+navegador e nunca é digitada por ninguém.
+
+Isso traz uma consequência prática: **a conta do provedor é compartilhada por todos
+os assinantes**. Duas empresas podem, portanto, pedir o mesmo nome de instância —
+e a colisão significaria uma empresa assumindo o número de WhatsApp da outra. Por
+isso o wacrm nunca usa o nome que o cliente digitou como nome da instância no
+provedor. Ele cria o nome assim:
+
+```
+<empresa>_<instância>          # ex.: studio_bella_atendimento
+```
+
+O nome da empresa vem de `accounts.name`; o nome da instância é o que o cliente
+digitou, slugado (`atendimento principal` → `atendimento_principal`). Se o nome
+completo já existir, um sufixo numérico é acrescentado (`_2`, `_3`…). A tabela
+`whatsmiau_config` garante a unicidade com uma constraint sobre
+`provider_instance_name`.
+
+Do lado do cliente há **dois nomes**, e eles nunca se cruzam:
+
+| Nome | Onde vive | Quem enxerga |
+|---|---|---|
+| `instance_name` | `whatsmiau_config.instance_name` | o cliente (é o nome que ele deu) |
+| `provider_instance_name` | `whatsmiau_config.provider_instance_name` | só o servidor — é o nome no provedor |
+
+O envelope do webhook traz o nome **do provedor** (`provider_instance_name`), e é
+com ele que a rota cruza o evento com a linha da conta. O `Authorization: Bearer
+<webhook_secret>` é o que identifica a conta de verdade: o segredo é gerado por
+instância e exclusivo dela.
+
+### O endereço público do webhook
+
+O provedor entrega os eventos **no endereço que nós informamos** — então ele
+precisa conseguir chegar lá. A documentação é explícita: *"Destino HTTPS público,
+sem localhost e redes privadas (SSRF)"*. Um `http://localhost:3000` é recusado
+com `invalid webhook URL: host must not point to internal network`.
+
+Por isso o wacrm **não usa cegamente o endereço do request**. A regra é:
+
+1. **se a requisição chegou por um endereço público, ele vence** — em produção
+   esse endereço é o domínio do app, e ele está certo por construção. Um
+   `NEXT_PUBLIC_SITE_URL` velho no ambiente não consegue apontar o webhook para
+   o host errado.
+2. **caso contrário, o app usa `NEXT_PUBLIC_SITE_URL`** — é o que acontece em
+   desenvolvimento local (`localhost`) e atrás de proxy que não repassa o host
+   público.
+
+```
+${origem pública}/api/whatsmiau/webhook
+```
+
+| Ambiente | O que fazer |
+|---|---|
+| Produção | nada — o origin da requisição já é o domínio. `NEXT_PUBLIC_SITE_URL` é opcional (e, se existir, só entra quando a requisição não vem por endereço público). |
+| Desenvolvimento local | suba um túnel público (`ngrok http 3000` ou `cloudflared tunnel --url http://localhost:3000`) e aponte `NEXT_PUBLIC_SITE_URL` para a URL do túnel. |
+
+Se nenhum dos dois for um endereço público, a criação da conexão é recusada
+**antes** de qualquer chamada ao provedor, com a mensagem *"the CRMBR API could
+not deliver events to this app: its public address is not reachable from the
+internet"*. O detalhe (o endereço usado e o que fazer) fica no log do servidor,
+não no navegador.
+
+O mesmo endereço é devolvido por `GET /api/whatsmiau/config` (`webhook_url`),
+para que a tela mostre exatamente a string que o servidor envia ao provedor — o
+`window.location.origin` do navegador mentiria em desenvolvimento.
+
+> O túnel muda de URL a cada reinício. Depois de reiniciá-lo, re-salve as
+> configurações da conexão (o botão de salvar reenvia o endereço ao provedor).
+
+Para inspecionar o que existe na conta do provedor (sem expor a chave):
+
+```bash
+node scripts/check-provider-instances.mjs
+```
+
 
 ## 2. Instâncias
 
