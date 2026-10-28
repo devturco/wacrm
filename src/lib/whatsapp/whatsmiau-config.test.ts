@@ -8,6 +8,7 @@ import {
   generateWebhookSecret,
   loadWhatsmiauConfig,
   loadWhatsmiauConfigByInstanceName,
+  loadWhatsmiauConfigByWebhookSecret,
   mergeInstanceSettings,
   upsertWhatsmiauConfig,
 } from './whatsmiau-config';
@@ -16,13 +17,15 @@ import {
  * Minimal fake of the supabase-js query builder for the three shapes
  * this module uses: `.select().eq().maybeSingle()` on the read path
  * and `.update()/insert().select().single()` on the write path.
- * `calls` records which write method was used.
+ * `calls` records which write method was used; `tables` records the
+ * table each query went to, so a typo'd table name cannot pass.
  */
 function fakeDb(row: Record<string, unknown> | null, insertResult?: Record<string, unknown>) {
   const state = {
     selected: row,
     inserted: insertResult ?? row,
     calls: [] as string[],
+    tables: [] as string[],
     payloads: [] as Record<string, unknown>[],
   };
   const chain = {
@@ -42,7 +45,12 @@ function fakeDb(row: Record<string, unknown> | null, insertResult?: Record<strin
     },
   };
   return {
-    db: { from: () => chain } as unknown as SupabaseClient,
+    db: {
+      from: (table: string) => {
+        state.tables.push(table);
+        return chain;
+      },
+    } as unknown as SupabaseClient,
     state,
   };
 }
@@ -82,6 +90,26 @@ describe('whatsmiau config — defaults', () => {
     expect(merged.webhook.url).toBe('https://a.example/hook');
     expect(merged.webhook.enabled).toBe(false);
   });
+
+  it('never shares a mutable member with the module-level default', () => {
+    const first = mergeInstanceSettings(null, {});
+    const second = mergeInstanceSettings(null, {});
+
+    expect(first.webhook.events).not.toBe(DEFAULT_INSTANCE_SETTINGS.webhook.events);
+    expect(first.webhook.headers).not.toBe(DEFAULT_INSTANCE_SETTINGS.webhook.headers);
+    expect(second.webhook.events).not.toBe(first.webhook.events);
+    expect(second.webhook.headers).not.toBe(first.webhook.headers);
+
+    // Mutating one account's settings must not leak into the default
+    // nor into another account's settings.
+    first.webhook.events.push('messages.upsert.LEAKED');
+    first.webhook.headers.Authorization = 'leaked';
+
+    expect(DEFAULT_INSTANCE_SETTINGS.webhook.events).not.toContain('messages.upsert.LEAKED');
+    expect(DEFAULT_INSTANCE_SETTINGS.webhook.headers).toEqual({});
+    expect(second.webhook.events).not.toContain('messages.upsert.LEAKED');
+    expect(second.webhook.headers).toEqual({});
+  });
 });
 
 describe('whatsmiau config — read', () => {
@@ -106,6 +134,25 @@ describe('whatsmiau config — read', () => {
     const { db } = fakeDb(ROW);
     await expect(loadWhatsmiauConfigByInstanceName(db, '')).resolves.toBeNull();
   });
+
+  it('resolves a row by webhook secret', async () => {
+    const { db } = fakeDb(ROW);
+    const row = await loadWhatsmiauConfigByWebhookSecret(db, 'secret-1');
+    expect(row?.account_id).toBe('acc-1');
+  });
+
+  it('returns null for an empty webhook secret', async () => {
+    const { db } = fakeDb(ROW);
+    await expect(loadWhatsmiauConfigByWebhookSecret(db, '')).resolves.toBeNull();
+  });
+
+  it('queries the whatsmiau_config table', async () => {
+    const { db, state } = fakeDb(ROW);
+    await loadWhatsmiauConfig(db, 'acc-1');
+    await loadWhatsmiauConfigByInstanceName(db, 'Atendimento01');
+    await loadWhatsmiauConfigByWebhookSecret(db, 'secret-1');
+    expect(state.tables).toEqual(['whatsmiau_config', 'whatsmiau_config', 'whatsmiau_config']);
+  });
 });
 
 describe('whatsmiau config — write', () => {
@@ -126,6 +173,22 @@ describe('whatsmiau config — write', () => {
     expect(state.calls).toContain('update');
     expect(state.calls).not.toContain('insert');
     expect(row.status).toBe('connected');
+  });
+
+  it('refuses to create a row without an api key', async () => {
+    const { db, state } = fakeDb(null, ROW);
+    await expect(
+      upsertWhatsmiauConfig(db, 'acc-1', { instance_name: 'Atendimento01' }),
+    ).rejects.toThrow(/api key/i);
+    expect(state.calls).not.toContain('insert');
+  });
+
+  it('refuses to create a row without an instance name', async () => {
+    const { db, state } = fakeDb(null, ROW);
+    await expect(
+      upsertWhatsmiauConfig(db, 'acc-1', { api_key_encrypted: 'enc' }),
+    ).rejects.toThrow(/instance name/i);
+    expect(state.calls).not.toContain('insert');
   });
 
   it('generates a webhook secret when the caller does not bring one', async () => {
@@ -151,7 +214,7 @@ describe('whatsmiau config — secrets', () => {
     expect(decryptWhatsmiauApiKey(row)).toBe('super-secret');
   });
 
-  it('never returns the raw ciphertext when the value is not encrypted', () => {
+  it('throws when the stored value is not an encrypted payload', () => {
     const row = { api_key_encrypted: 'not-encrypted' } as never;
     expect(() => decryptWhatsmiauApiKey(row)).toThrow();
   });

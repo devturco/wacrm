@@ -10,8 +10,10 @@
 // there would break the whole app.
 // ============================================================
 
+import { randomBytes } from 'node:crypto';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
+import { decrypt, encrypt } from '@/lib/whatsapp/encryption';
 
 export type WhatsmiauStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -90,6 +92,12 @@ export interface WhatsmiauConfigPatch {
  * patch does not mention. A partial webhook patch keeps the current
  * webhook's url/headers/events — the WhatsMiau `PUT /instance/update`
  * route merges server-side, but our stored row must stay complete.
+ *
+ * The mutable members (`webhook.events`, `webhook.headers`) are
+ * COPIED, never shared with `DEFAULT_INSTANCE_SETTINGS`: the default
+ * is a module-level singleton, and a consumer that mutated a merged
+ * result in place would otherwise corrupt it for every other account
+ * in the process.
  */
 export function mergeInstanceSettings(
   current: Partial<WhatsmiauInstanceSettings> | null | undefined,
@@ -108,7 +116,21 @@ export function mergeInstanceSettings(
     ...base.webhook,
     ...(patch.webhook ?? {}),
   };
+  next.webhook.events = [...next.webhook.events];
+  next.webhook.headers = { ...next.webhook.headers };
   return next;
+}
+
+/**
+ * Normalise a raw row into a `WhatsmiauConfigRow`: the stored JSONB
+ * may be missing keys the current shape has, so the defaults fill
+ * them in.
+ */
+function toConfigRow(raw: WhatsmiauConfigRow): WhatsmiauConfigRow {
+  return {
+    ...raw,
+    instance_settings: mergeInstanceSettings(raw.instance_settings, {}),
+  };
 }
 
 /**
@@ -125,18 +147,18 @@ export async function loadWhatsmiauConfig(
     .eq('account_id', accountId)
     .maybeSingle();
   if (error || !data) return null;
-  return {
-    ...(data as WhatsmiauConfigRow),
-    instance_settings: mergeInstanceSettings(
-      data.instance_settings,
-      (data.instance_settings ?? {}) as Partial<WhatsmiauInstanceSettings>,
-    ),
-  };
+  return toConfigRow(data as WhatsmiauConfigRow);
 }
 
 /**
- * Resolve the account that owns a WhatsMiau instance name. Used by the
- * inbound webhook, which only knows the instance name.
+ * Resolve the account that owns a WhatsMiau instance name.
+ *
+ * NOTE: the instance name is NOT unique across accounts — two
+ * companies may name their instance the same way — so this lookup is
+ * only unambiguous while at most one row matches. The inbound webhook
+ * routes by the webhook secret instead (see
+ * `loadWhatsmiauConfigByWebhookSecret`); this helper stays for
+ * lookups that are already account-scoped.
  */
 export async function loadWhatsmiauConfigByInstanceName(
   db: SupabaseClient,
@@ -149,13 +171,30 @@ export async function loadWhatsmiauConfigByInstanceName(
     .eq('instance_name', instanceName)
     .maybeSingle();
   if (error || !data) return null;
-  return {
-    ...(data as WhatsmiauConfigRow),
-    instance_settings: mergeInstanceSettings(
-      data.instance_settings,
-      (data.instance_settings ?? {}) as Partial<WhatsmiauInstanceSettings>,
-    ),
-  };
+  return toConfigRow(data as WhatsmiauConfigRow);
+}
+
+/**
+ * Resolve the account that owns a webhook secret.
+ *
+ * The secret is 32 random bytes, generated once per account row, and
+ * it is what the provider sends back as `Authorization: Bearer
+ * <secret>`. That makes it the ONLY routing key that identifies an
+ * account unambiguously: the instance name is chosen by the customer
+ * and two accounts may well pick the same one.
+ */
+export async function loadWhatsmiauConfigByWebhookSecret(
+  db: SupabaseClient,
+  secret: string,
+): Promise<WhatsmiauConfigRow | null> {
+  if (!secret) return null;
+  const { data, error } = await db
+    .from('whatsmiau_config')
+    .select('*')
+    .eq('webhook_secret', secret)
+    .maybeSingle();
+  if (error || !data) return null;
+  return toConfigRow(data as WhatsmiauConfigRow);
 }
 
 /**
@@ -208,23 +247,25 @@ export async function upsertWhatsmiauConfig(
     if (error || !data) {
       throw new Error(`Failed to save the WhatsMiau configuration: ${error?.message ?? 'unknown error'}`);
     }
-    return {
-      ...(data as WhatsmiauConfigRow),
-      instance_settings: mergeInstanceSettings(
-        data.instance_settings,
-        (data.instance_settings ?? {}) as Partial<WhatsmiauInstanceSettings>,
-      ),
-    };
+    return toConfigRow(data as WhatsmiauConfigRow);
   }
 
   // No row yet — this is a first save, so every NOT NULL column has to
-  // be present. The settings route always supplies the api key and the
-  // instance name; the webhook secret is generated here when the caller
-  // did not bring one.
+  // be present. Writing an empty string instead would satisfy the
+  // constraint while producing a row whose api key can never be
+  // decrypted — the failure would only surface at send time, far from
+  // the cause. Refuse instead.
+  if (!patch.api_key_encrypted) {
+    throw new Error('WhatsMiau api key is required to create the configuration');
+  }
+  if (!patch.instance_name) {
+    throw new Error('WhatsMiau instance name is required to create the configuration');
+  }
+
   const insertPayload: Record<string, unknown> = {
     ...payload,
-    instance_name: patch.instance_name ?? '',
-    api_key_encrypted: patch.api_key_encrypted ?? '',
+    instance_name: patch.instance_name,
+    api_key_encrypted: patch.api_key_encrypted,
     webhook_secret: patch.webhook_secret ?? generateWebhookSecret(),
     instance_settings:
       payload.instance_settings ??
@@ -239,31 +280,19 @@ export async function upsertWhatsmiauConfig(
   if (error || !data) {
     throw new Error(`Failed to save the WhatsMiau configuration: ${error?.message ?? 'unknown error'}`);
   }
-  return {
-    ...(data as WhatsmiauConfigRow),
-    instance_settings: mergeInstanceSettings(
-      data.instance_settings,
-      (data.instance_settings ?? {}) as Partial<WhatsmiauInstanceSettings>,
-    ),
-  };
+  return toConfigRow(data as WhatsmiauConfigRow);
 }
 
 /**
  * Decrypt the stored api key.
  *
- * A legacy CBC ciphertext still decrypts (the encryption module reads
- * both formats), but it is unauthenticated — so a legacy row is
- * reported to the caller instead of being silently trusted. The next
- * save re-encrypts it in GCM format.
+ * The column holds AES-GCM ciphertext produced by `encryption.ts`.
+ * The table is new, so every row was written in GCM format — there is
+ * no legacy CBC row to migrate. `decrypt()` reads both formats anyway,
+ * so a hand-edited row still fails loudly instead of silently.
  */
 export function decryptWhatsmiauApiKey(row: WhatsmiauConfigRow): string {
-  const apiKey = decrypt(row.api_key_encrypted);
-  if (isLegacyFormat(row.api_key_encrypted)) {
-    console.warn(
-      '[whatsmiau-config] legacy ciphertext detected — re-encrypt on next save',
-    );
-  }
-  return apiKey;
+  return decrypt(row.api_key_encrypted);
 }
 
 /** Encrypt a plaintext api key for storage. */
@@ -273,9 +302,5 @@ export function encryptWhatsmiauApiKey(apiKey: string): string {
 
 /** 32 random bytes, hex — the webhook shared secret. */
 export function generateWebhookSecret(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  return randomBytes(32).toString('hex');
 }
