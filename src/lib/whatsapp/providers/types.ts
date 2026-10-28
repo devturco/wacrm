@@ -29,9 +29,15 @@ export interface MetaConnection {
 
 export interface WhatsmiauConnection {
   provider: 'whatsmiau';
-  /** The public instance name, used as `:instance` in the URL. */
+  /**
+   * The instance name ON THE PROVIDER — the one that goes into the
+   * URL path. It is NOT the name the customer chose: the provider's
+   * account is shared by every subscriber, so the name there carries
+   * the company prefix (`<company>_<instance>`). See
+   * `whatsmiau/naming.ts`.
+   */
   instanceName: string;
-  /** Decrypted WhatsMiau api key. */
+  /** The platform's provider api key (from the server's environment). */
   apiKey: string;
   /** API root, e.g. https://api.whatsmiau.dev/v2 */
   baseUrl: string;

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface FakeConfig {
+  id: string;
   account_id: string;
   instance_name: string;
+  provider_instance_name: string;
   webhook_secret: string;
   instance_settings: {
     alwaysOnline: boolean;
@@ -80,10 +82,17 @@ import { POST, GET } from './route';
 
 const SECRET = 'a'.repeat(64);
 
+/** The name the CUSTOMER gave their connection. */
+const CUSTOMER_NAME = 'Atendimento 01';
+/** The name the instance carries ON THE PROVIDER — the namespaced one. */
+const PROVIDER_NAME = 'studio_bella_atendimento_01';
+
 function config(): FakeConfig {
   return {
+    id: 'wm-1',
     account_id: 'acc-1',
-    instance_name: 'Atendimento01',
+    instance_name: CUSTOMER_NAME,
+    provider_instance_name: PROVIDER_NAME,
     webhook_secret: SECRET,
     instance_settings: {
       alwaysOnline: false,
@@ -108,7 +117,7 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 function textEvent() {
   return {
     event: 'messages.upsert',
-    instance: 'Atendimento01',
+    instance: PROVIDER_NAME,
     data: {
       key: { remoteJid: '5511999988888@s.whatsapp.net', id: 'MSG_001', fromMe: false },
       pushName: 'Cliente',
@@ -149,8 +158,20 @@ describe('POST /api/whatsmiau/webhook', () => {
 
   it('answers 404 for an instance we do not know', async () => {
     // The secret is valid, but the envelope names another instance.
-    h.config = { ...config(), instance_name: 'OutraInstancia' };
+    h.config = { ...config(), provider_instance_name: 'outra_empresa_atendimento' };
     const res = await POST(request(textEvent(), { authorization: `Bearer ${SECRET}` }));
+    expect(res.status).toBe(404);
+  });
+
+  it('answers 404 when the envelope carries the customer-side name', async () => {
+    // The provider addresses the instance by the NAMESPACED name — the
+    // customer-side name never identifies it on the provider.
+    const res = await POST(
+      request(
+        { ...textEvent(), instance: CUSTOMER_NAME },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -178,7 +199,7 @@ describe('POST /api/whatsmiau/webhook', () => {
       request(
         {
           event: 'messages.update',
-          instance: 'Atendimento01',
+          instance: PROVIDER_NAME,
           data: { messageId: 'MSG_001', status: 'DELIVERY_ACK' },
         },
         { authorization: `Bearer ${SECRET}` },
@@ -191,7 +212,7 @@ describe('POST /api/whatsmiau/webhook', () => {
       request(
         {
           event: 'messages.update',
-          instance: 'Atendimento01',
+          instance: PROVIDER_NAME,
           data: { messageId: 'MSG_002', status: 'READ' },
         },
         { authorization: `Bearer ${SECRET}` },
@@ -206,7 +227,7 @@ describe('POST /api/whatsmiau/webhook', () => {
       request(
         {
           event: 'connection.update',
-          instance: 'Atendimento01',
+          instance: PROVIDER_NAME,
           data: { state: 'open', wuid: '5511999988888@s.whatsapp.net', statusReason: 200 },
         },
         { authorization: `Bearer ${SECRET}` },
@@ -220,7 +241,7 @@ describe('POST /api/whatsmiau/webhook', () => {
   it('ignores an event we do not model', async () => {
     const res = await POST(
       request(
-        { event: 'contacts.upsert', instance: 'Atendimento01', data: [] },
+        { event: 'contacts.upsert', instance: PROVIDER_NAME, data: [] },
         { authorization: `Bearer ${SECRET}` },
       ),
     );

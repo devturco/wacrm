@@ -1,14 +1,20 @@
 // ============================================================
-// One instance: its state, its settings, its life.
+// One connection: its state, its settings, its life.
 //
-// Every route here resolves the instance against the ACCOUNT's own
-// row. A name that belongs to another company resolves to nothing and
-// the route answers 404 — it never reveals that the instance exists.
+// The `:name` in the URL is the name THE CUSTOMER gave their
+// connection ("Atendimento"). It is resolved against the ACCOUNT's own
+// rows: a name that belongs to another company resolves to nothing and
+// the route answers 404 — it never reveals that the connection exists.
+//
+// The provider is addressed by the row's `provider_instance_name` —
+// the namespaced one. The two names never cross over on the way to
+// the browser.
 // ============================================================
 
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
 import { whatsmiauConnectionFromConfig } from '@/lib/whatsapp/providers/connection';
 import {
   deleteInstance,
@@ -18,14 +24,16 @@ import {
 } from '@/lib/whatsapp/providers/whatsmiau/instances';
 import {
   buildWebhookConfig,
+  crmbrErrorResponse,
   providerErrorResponse,
   resolveOwnedInstance,
   webhookUrlFor,
   withoutLockedHeaders,
 } from '@/lib/whatsapp/providers/whatsmiau/management';
 import {
+  deleteWhatsmiauConfig,
   mergeInstanceSettings,
-  upsertWhatsmiauConfig,
+  updateWhatsmiauConfigById,
   type WhatsmiauInstanceSettings,
 } from '@/lib/whatsapp/whatsmiau-config';
 
@@ -38,14 +46,20 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const row = await resolveOwnedInstance(supabase, accountId, name);
     if (!row) {
-      return NextResponse.json({ error: 'Instance not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Connection not found.' }, { status: 404 });
     }
 
-    const state = await getConnectionState(whatsmiauConnectionFromConfig(row), name);
+    const state = await getConnectionState(
+      whatsmiauConnectionFromConfig(row),
+      row.provider_instance_name,
+    );
     return NextResponse.json(state, { status: 200 });
   } catch (error) {
     if (error instanceof Error && error.name === 'WhatsmiauApiError') {
       return providerErrorResponse(error);
+    }
+    if (error instanceof ProviderError) {
+      return crmbrErrorResponse(error);
     }
     return toErrorResponse(error);
   }
@@ -58,7 +72,7 @@ export async function PUT(request: Request, context: RouteContext) {
 
     const row = await resolveOwnedInstance(supabase, accountId, name);
     if (!row) {
-      return NextResponse.json({ error: 'Instance not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Connection not found.' }, { status: 404 });
     }
 
     const body = await request.json();
@@ -83,16 +97,13 @@ export async function PUT(request: Request, context: RouteContext) {
       ...merged,
       webhook: { ...merged.webhook, url: webhookUrl },
     };
-    const webhook = buildWebhookConfig(
-      { ...row, instance_settings: storedSettings },
-      webhookUrl,
-    );
+    const webhook = buildWebhookConfig(storedSettings, row.webhook_secret, webhookUrl);
 
     const conn = whatsmiauConnectionFromConfig(row);
-    await updateInstance(conn, name, { ...storedSettings, webhook });
-    await setWebhook(conn, name, webhook);
+    await updateInstance(conn, row.provider_instance_name, { ...storedSettings, webhook });
+    await setWebhook(conn, row.provider_instance_name, webhook);
 
-    await upsertWhatsmiauConfig(supabase, accountId, {
+    await updateWhatsmiauConfigById(supabase, row.id, {
       instance_settings: storedSettings,
     });
 
@@ -100,6 +111,9 @@ export async function PUT(request: Request, context: RouteContext) {
   } catch (error) {
     if (error instanceof Error && error.name === 'WhatsmiauApiError') {
       return providerErrorResponse(error);
+    }
+    if (error instanceof ProviderError) {
+      return crmbrErrorResponse(error);
     }
     console.error('[whatsmiau/instance] could not update the instance:', error);
     return toErrorResponse(error);
@@ -113,22 +127,22 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     const row = await resolveOwnedInstance(supabase, accountId, name);
     if (!row) {
-      return NextResponse.json({ error: 'Instance not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Connection not found.' }, { status: 404 });
     }
 
-    await deleteInstance(whatsmiauConnectionFromConfig(row), name);
+    await deleteInstance(whatsmiauConnectionFromConfig(row), row.provider_instance_name);
 
-    await upsertWhatsmiauConfig(supabase, accountId, {
-      status: 'disconnected',
-      connected_at: null,
-      phone_number: null,
-      is_active: false,
-    });
+    // The provider-side instance is gone, so ours goes too — keeping
+    // the row would leave a connection that can never be reached.
+    await deleteWhatsmiauConfig(supabase, accountId, row.instance_name);
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     if (error instanceof Error && error.name === 'WhatsmiauApiError') {
       return providerErrorResponse(error);
+    }
+    if (error instanceof ProviderError) {
+      return crmbrErrorResponse(error);
     }
     console.error('[whatsmiau/instance] could not delete the instance:', error);
     return toErrorResponse(error);

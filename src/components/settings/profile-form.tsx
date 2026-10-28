@@ -35,12 +35,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ProfileForm() {
   const t = useTranslations('Settings.profile');
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, account, canEditSettings, refreshProfile } = useAuth();
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -53,6 +54,11 @@ export function ProfileForm() {
     setFullName(profile.full_name ?? '');
     setEmail(profile.email ?? '');
   }, [profile]);
+
+  // The company name lives in `accounts.name`, not in the profile.
+  useEffect(() => {
+    setCompanyName(account?.name ?? '');
+  }, [account?.name]);
 
   // Cleanup object URLs to avoid leaks.
   useEffect(() => {
@@ -153,6 +159,24 @@ export function ProfileForm() {
         throw new Error(t('saveFailed', { message: updateError.message }));
       }
 
+      // The company name is a property of the ACCOUNT, not of the
+      // person — it is what the WhatsApp connections are named under.
+      // Writing it needs admin+ (the `accounts_update` policy), so it
+      // only happens for the roles that may.
+      const trimmedCompany = companyName.trim();
+      if (canEditSettings && account && trimmedCompany !== account.name) {
+        if (!trimmedCompany) {
+          throw new Error(t('companyNameRequired'));
+        }
+        const { error: accountError } = await supabase
+          .from('accounts')
+          .update({ name: trimmedCompany })
+          .eq('id', account.id);
+        if (accountError) {
+          throw new Error(t('saveFailed', { message: accountError.message }));
+        }
+      }
+
       // Email change goes through Supabase Auth, which emails a
       // confirmation to both the old and new addresses. We don't
       // touch profiles.email — Supabase will push the change there
@@ -197,6 +221,9 @@ export function ProfileForm() {
     !!profile &&
     (fullName.trim() !== (profile.full_name ?? '') ||
       email.trim().toLowerCase() !== (profile.email ?? '').toLowerCase() ||
+      (canEditSettings &&
+        account !== null &&
+        companyName.trim() !== account.name) ||
       pendingAvatar !== null ||
       removeAvatar);
 
@@ -277,6 +304,28 @@ export function ProfileForm() {
               disabled={saving}
               required
             />
+          </div>
+
+          {/* Company name — it is what the WhatsApp connections are
+              named under, so it belongs to the account, not the
+              person. Only admins may change it (the RLS policy on
+              `accounts` demands admin+). */}
+          <div className="space-y-2">
+            <Label htmlFor="profile-company-name" className="text-foreground">
+              {t('companyName')}
+            </Label>
+            <Input
+              id="profile-company-name"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder={t('companyNamePlaceholder')}
+              maxLength={120}
+              disabled={saving || !canEditSettings}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              {canEditSettings ? t('companyNameHint') : t('companyNameReadOnly')}
+            </p>
           </div>
 
           {/* Email */}

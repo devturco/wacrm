@@ -36,7 +36,7 @@ import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync';
 import type { MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 import {
-  upsertWhatsmiauConfig,
+  updateWhatsmiauConfigById,
   type WhatsmiauInstanceSettings,
 } from '@/lib/whatsapp/whatsmiau-config';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
@@ -52,6 +52,13 @@ export interface WhatsmiauInboundContext {
   instanceSettings: WhatsmiauInstanceSettings;
   /** Service-role storage — used to mirror inbound media. */
   storage: MirrorStorage;
+  /**
+   * The row of the connection this event belongs to. The account may
+   * hold several CRMBR connections, so a status change has to land on
+   * THIS one — not on "the account's connection", which does not exist
+   * anymore.
+   */
+  configId: string;
 }
 
 export interface InboundOutcome {
@@ -573,12 +580,12 @@ export async function handleWhatsmiauConnectionUpdate(
     statusReason?: number;
   },
 ): Promise<void> {
-  const { db, accountId } = ctx;
+  const { db, configId } = ctx;
 
   // `statusReason` is the provider's own code: 200 means "no problem",
   // anything else means the instance dropped for a reason.
   if (update.statusReason !== undefined && update.statusReason !== 200) {
-    await upsertWhatsmiauConfig(db, accountId, {
+    await updateWhatsmiauConfigById(db, configId, {
       status: 'error',
       connected_at: null,
     });
@@ -586,7 +593,7 @@ export async function handleWhatsmiauConnectionUpdate(
   }
 
   if (update.state === 'open') {
-    await upsertWhatsmiauConfig(db, accountId, {
+    await updateWhatsmiauConfigById(db, configId, {
       status: 'connected',
       phone_number: update.wuid ? normalizePhone(update.wuid) || null : null,
       wuid: update.wuid ?? null,
@@ -595,7 +602,7 @@ export async function handleWhatsmiauConnectionUpdate(
     return;
   }
 
-  await upsertWhatsmiauConfig(db, accountId, {
+  await updateWhatsmiauConfigById(db, configId, {
     status: 'disconnected',
     connected_at: null,
   });

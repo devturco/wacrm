@@ -5,10 +5,14 @@
 // reading its connection state, pushing behaviour flags and the
 // webhook config, and finally logging out or deleting it.
 //
-// The instance name is part of every URL, so it is validated locally
-// before any request — the provider answers 400 for a bad name, but
-// naming the rule locally saves a round trip and gives the UI a
-// message it can show next to the field.
+// Every call is addressed to the PROVIDER's instance name — the
+// namespaced one (`<company>_<instance>`), never the name the customer
+// typed. See `naming.ts`.
+//
+// There is deliberately NO "list the provider's instances" call here:
+// the provider account is shared by every subscriber, so that list
+// would expose one company's instances to another. The account's own
+// instances come from our own table.
 // ============================================================
 
 import type {
@@ -45,36 +49,18 @@ export interface WhatsmiauQrPayload {
   connected: boolean;
 }
 
-/** Up to 40 characters, unaccented letters, digits, dot, hyphen, underscore. */
-const INSTANCE_NAME_RE = /^[A-Za-z0-9._-]+$/;
-
 /**
  * Validate an instance name against WhatsMiau's rule: ≤ 40
  * characters, only unaccented letters / digits / dot / hyphen /
  * underscore, and at least one letter or digit.
+ *
+ * The rule lives in `naming.ts` (dependency-free, so the settings
+ * screen can use it too). The name the CUSTOMER types is checked by
+ * `validateCustomerInstanceName` there — theirs may carry accents and
+ * spaces. This one guards the name that goes into the provider's URL,
+ * which `buildProviderInstanceName` builds.
  */
-export function validateInstanceName(
-  name: string,
-): { ok: true } | { ok: false; error: string } {
-  const value = (name ?? '').trim();
-  if (!value) {
-    return { ok: false, error: 'The instance name is required.' };
-  }
-  if (value.length > 40) {
-    return { ok: false, error: 'The instance name can be at most 40 characters long.' };
-  }
-  if (!INSTANCE_NAME_RE.test(value)) {
-    return {
-      ok: false,
-      error:
-        'The instance name can only contain unaccented letters, numbers, dot, hyphen and underscore.',
-    };
-  }
-  if (!/[A-Za-z0-9]/.test(value)) {
-    return { ok: false, error: 'The instance name must contain at least one letter or digit.' };
-  }
-  return { ok: true };
-}
+export { validateProviderInstanceName } from './naming';
 
 export async function createInstance(
   conn: WhatsmiauConnection,
@@ -104,20 +90,6 @@ export async function createInstance(
       webhook: settings.webhook,
     },
   });
-}
-
-export async function listInstances(
-  conn: WhatsmiauConnection,
-): Promise<WhatsmiauRemoteInstance[]> {
-  const payload = await whatsmiauRequest<unknown>(conn, {
-    path: '/instance/fetchInstances',
-  });
-  if (Array.isArray(payload)) return payload as WhatsmiauRemoteInstance[];
-  if (payload && typeof payload === 'object') {
-    const record = payload as Record<string, unknown>;
-    if (Array.isArray(record.instances)) return record.instances as WhatsmiauRemoteInstance[];
-  }
-  return [];
 }
 
 export async function getConnectionState(

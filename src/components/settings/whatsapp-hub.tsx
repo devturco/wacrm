@@ -35,9 +35,12 @@ interface MetaState {
 
 interface CrmbrState {
   configured: boolean;
-  status: string;
-  instance_name?: string;
-  phone_number?: string | null;
+  instances: {
+    instance_name: string;
+    status: string;
+    is_active: boolean;
+    phone_number?: string | null;
+  }[];
 }
 
 /**
@@ -57,7 +60,7 @@ export function WhatsAppHub() {
   const [meta, setMeta] = useState<MetaState>({ configured: false, connected: false });
   const [crmbr, setCrmbr] = useState<CrmbrState>({
     configured: false,
-    status: 'not_configured',
+    instances: [],
   });
 
   const load = useCallback(async () => {
@@ -75,15 +78,11 @@ export function WhatsAppHub() {
     if (crmbrRes.status === 'fulfilled') {
       const value = crmbrRes.value as {
         configured?: boolean;
-        status?: string;
-        instance_name?: string;
-        phone_number?: string | null;
+        instances?: CrmbrState['instances'];
       };
       setCrmbr({
         configured: !!value?.configured,
-        status: value?.status ?? 'not_configured',
-        instance_name: value?.instance_name,
-        phone_number: value?.phone_number ?? null,
+        instances: Array.isArray(value?.instances) ? value.instances : [],
       });
     }
     if (activeRes.status === 'fulfilled') {
@@ -102,10 +101,17 @@ export function WhatsAppHub() {
   async function switchTo(provider: Provider) {
     setSwitching(true);
     try {
+      // Which CRMBR connection to activate? The account may hold
+      // several — the paired one is the candidate.
+      const paired = crmbr.instances.find((item) => item.status === 'connected');
       const res = await fetch('/api/whatsmiau/active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider }),
+        body: JSON.stringify(
+          provider === 'whatsmiau' && paired
+            ? { provider, instance_name: paired.instance_name }
+            : { provider },
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -134,7 +140,12 @@ export function WhatsAppHub() {
     );
   }
 
-  const crmbrConnected = crmbr.configured && crmbr.status === 'connected';
+  // The CRMBR API counts as connected when one of the account's
+  // instances is paired — the account may hold several, and any of
+  // them can be the one the app sends through.
+  const crmbrConnected =
+    crmbr.configured &&
+    crmbr.instances.some((item) => item.status === 'connected');
 
   return (
     <section className="animate-in fade-in-50 duration-200">

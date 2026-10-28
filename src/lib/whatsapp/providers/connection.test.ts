@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { encrypt } from '@/lib/whatsapp/encryption';
@@ -8,13 +8,19 @@ import { resolveProviderConnection } from './connection';
 /**
  * Fake supabase-js: `whatsmiau_config` resolves through maybeSingle(),
  * `whatsapp_config` (Meta) through single().
+ *
+ * The CRMBR row is only returned when it is the ACTIVE one — that is
+ * the flag the dispatcher looks at to decide which provider wins.
  */
 function fakeDb(opts: { whatsmiau?: unknown; meta?: unknown }) {
   const chain = {
     select: () => chain,
     eq: () => chain,
-    maybeSingle: () =>
-      Promise.resolve({ data: opts.whatsmiau ?? null, error: null }),
+    maybeSingle: () => {
+      const row = opts.whatsmiau as { is_active?: boolean } | null | undefined;
+      const active = row && row.is_active !== false;
+      return Promise.resolve({ data: active ? row : null, error: null });
+    },
     single: () => Promise.resolve({ data: opts.meta ?? null, error: null }),
     update: () => chain,
     then: (resolve: (v: unknown) => unknown) =>
@@ -32,9 +38,8 @@ const metaRow = {
 const whatsmiauRow = {
   id: 'wm-1',
   account_id: 'acc-1',
-  instance_name: 'Atendimento01',
-  api_key_encrypted: encrypt('wm-key'),
-  base_url: 'https://api.whatsmiau.dev/v2',
+  instance_name: 'Atendimento 01',
+  provider_instance_name: 'studio_bella_atendimento_01',
   status: 'connected',
   is_active: true,
   instance_settings: {},
@@ -43,6 +48,14 @@ const whatsmiauRow = {
 describe('resolveProviderConnection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The provider credential belongs to the platform and lives in the
+    // server's environment — never in the database and never in the
+    // customer's hands.
+    vi.stubEnv('WHATSMIAU_API_KEY', 'platform-key');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('prefers the CRMBR provider when it is active', async () => {
@@ -52,10 +65,20 @@ describe('resolveProviderConnection', () => {
     );
     expect(conn).toEqual({
       provider: 'whatsmiau',
-      instanceName: 'Atendimento01',
-      apiKey: 'wm-key',
+      // The PROVIDER-side name — the namespaced one.
+      instanceName: 'studio_bella_atendimento_01',
+      apiKey: 'platform-key',
       baseUrl: 'https://api.whatsmiau.dev/v2',
     });
+  });
+
+  it('reads the provider base URL from the environment when it is set', async () => {
+    vi.stubEnv('WHATSMIAU_BASE_URL', 'https://crmbr.example/v2/');
+    const conn = await resolveProviderConnection(
+      fakeDb({ whatsmiau: whatsmiauRow, meta: metaRow }),
+      'acc-1',
+    );
+    expect(conn).toMatchObject({ baseUrl: 'https://crmbr.example/v2' });
   });
 
   it('falls back to Meta when the CRMBR provider is not active', async () => {

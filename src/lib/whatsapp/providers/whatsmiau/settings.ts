@@ -58,9 +58,6 @@ export const DEFAULT_INSTANCE_SETTINGS: WhatsmiauInstanceSettings = {
   },
 };
 
-/** The api key never leaves the server in cleartext — the browser only ever sees this mask. */
-export const MASKED_API_KEY = '••••••••••••••••';
-
 /**
  * The webhook header WE own. The account's `webhook_secret` travels
  * in it, and the webhook route compares the incoming header against

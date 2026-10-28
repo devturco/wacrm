@@ -3,34 +3,48 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   DEFAULT_INSTANCE_SETTINGS,
-  decryptWhatsmiauApiKey,
-  encryptWhatsmiauApiKey,
+  clearActiveWhatsmiauConfig,
+  deleteWhatsmiauConfig,
   generateWebhookSecret,
-  loadWhatsmiauConfig,
+  isProviderInstanceNameTaken,
+  loadActiveWhatsmiauConfig,
   loadWhatsmiauConfigByInstanceName,
   loadWhatsmiauConfigByWebhookSecret,
+  loadWhatsmiauConfigs,
   mergeInstanceSettings,
+  setActiveWhatsmiauConfig,
+  updateWhatsmiauConfigById,
   upsertWhatsmiauConfig,
 } from './whatsmiau-config';
 
 /**
- * Minimal fake of the supabase-js query builder for the three shapes
- * this module uses: `.select().eq().maybeSingle()` on the read path
- * and `.update()/insert().select().single()` on the write path.
+ * Minimal fake of the supabase-js query builder for the shapes this
+ * module uses: `.select().eq().maybeSingle()` on the read path,
+ * `.order()`/`.limit()` on the list path and
+ * `.update()/insert()/delete().select().single()` on the write path.
+ *
  * `calls` records which write method was used; `tables` records the
  * table each query went to, so a typo'd table name cannot pass.
  */
-function fakeDb(row: Record<string, unknown> | null, insertResult?: Record<string, unknown>) {
+function fakeDb(
+  row: Record<string, unknown> | null,
+  insertResult?: Record<string, unknown>,
+) {
   const state = {
     selected: row,
     inserted: insertResult ?? row,
+    rows: row ? [row] : ([] as Record<string, unknown>[]),
     calls: [] as string[],
     tables: [] as string[],
     payloads: [] as Record<string, unknown>[],
   };
-  const chain = {
+
+  const chain: Record<string, unknown> = {
     select: () => chain,
     eq: () => chain,
+    neq: () => chain,
+    order: () => chain,
+    limit: () => chain,
     maybeSingle: () => Promise.resolve({ data: state.selected, error: null }),
     single: () => Promise.resolve({ data: state.inserted, error: null }),
     insert: (payload: Record<string, unknown>) => {
@@ -43,7 +57,15 @@ function fakeDb(row: Record<string, unknown> | null, insertResult?: Record<strin
       state.payloads.push(payload);
       return chain;
     },
+    delete: () => {
+      state.calls.push('delete');
+      return chain;
+    },
+    // The list path awaits the builder itself.
+    then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
+      Promise.resolve({ data: state.rows, error: null }).then(resolve, reject),
   };
+
   return {
     db: {
       from: (table: string) => {
@@ -58,9 +80,17 @@ function fakeDb(row: Record<string, unknown> | null, insertResult?: Record<strin
 const ROW = {
   id: 'wm-1',
   account_id: 'acc-1',
-  instance_name: 'Atendimento01',
-  api_key_encrypted: 'enc',
+  instance_name: 'Atendimento 01',
+  provider_instance_name: 'studio_bella_atendimento_01',
+  webhook_secret: 'secret-1',
+  status: 'connected',
+  phone_number: '5511999999999',
+  wuid: '99999',
+  is_active: true,
   instance_settings: DEFAULT_INSTANCE_SETTINGS,
+  connected_at: '2026-10-01T00:00:00.000Z',
+  created_at: '2026-10-01T00:00:00.000Z',
+  updated_at: '2026-10-01T00:00:00.000Z',
 };
 
 describe('whatsmiau config — defaults', () => {
@@ -113,26 +143,30 @@ describe('whatsmiau config — defaults', () => {
 });
 
 describe('whatsmiau config — read', () => {
-  it('returns null when the account has no row', async () => {
-    const { db } = fakeDb(null);
-    await expect(loadWhatsmiauConfig(db, 'acc-1')).resolves.toBeNull();
-  });
-
-  it('returns the row for the account', async () => {
+  it('lists every instance of the account', async () => {
     const { db } = fakeDb(ROW);
-    const row = await loadWhatsmiauConfig(db, 'acc-1');
-    expect(row?.instance_name).toBe('Atendimento01');
+    const rows = await loadWhatsmiauConfigs(db, 'acc-1');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].instance_name).toBe('Atendimento 01');
   });
 
   it('resolves a row by instance name', async () => {
     const { db } = fakeDb(ROW);
-    const row = await loadWhatsmiauConfigByInstanceName(db, 'Atendimento01');
+    const row = await loadWhatsmiauConfigByInstanceName(db, 'acc-1', 'Atendimento 01');
     expect(row?.account_id).toBe('acc-1');
   });
 
   it('returns null for an empty instance name', async () => {
     const { db } = fakeDb(ROW);
-    await expect(loadWhatsmiauConfigByInstanceName(db, '')).resolves.toBeNull();
+    await expect(
+      loadWhatsmiauConfigByInstanceName(db, 'acc-1', ''),
+    ).resolves.toBeNull();
+  });
+
+  it('resolves the active row', async () => {
+    const { db } = fakeDb(ROW);
+    const row = await loadActiveWhatsmiauConfig(db, 'acc-1');
+    expect(row?.is_active).toBe(true);
   });
 
   it('resolves a row by webhook secret', async () => {
@@ -143,15 +177,23 @@ describe('whatsmiau config — read', () => {
 
   it('returns null for an empty webhook secret', async () => {
     const { db } = fakeDb(ROW);
-    await expect(loadWhatsmiauConfigByWebhookSecret(db, '')).resolves.toBeNull();
+    await expect(
+      loadWhatsmiauConfigByWebhookSecret(db, ''),
+    ).resolves.toBeNull();
   });
 
   it('queries the whatsmiau_config table', async () => {
     const { db, state } = fakeDb(ROW);
-    await loadWhatsmiauConfig(db, 'acc-1');
-    await loadWhatsmiauConfigByInstanceName(db, 'Atendimento01');
+    await loadWhatsmiauConfigs(db, 'acc-1');
+    await loadWhatsmiauConfigByInstanceName(db, 'acc-1', 'Atendimento 01');
+    await loadActiveWhatsmiauConfig(db, 'acc-1');
     await loadWhatsmiauConfigByWebhookSecret(db, 'secret-1');
-    expect(state.tables).toEqual(['whatsmiau_config', 'whatsmiau_config', 'whatsmiau_config']);
+    expect(state.tables).toEqual([
+      'whatsmiau_config',
+      'whatsmiau_config',
+      'whatsmiau_config',
+      'whatsmiau_config',
+    ]);
   });
 });
 
@@ -159,8 +201,8 @@ describe('whatsmiau config — write', () => {
   it('inserts the first row and returns it', async () => {
     const { db, state } = fakeDb(null, ROW);
     const row = await upsertWhatsmiauConfig(db, 'acc-1', {
-      instance_name: 'Atendimento01',
-      api_key_encrypted: 'enc',
+      instance_name: 'Atendimento 01',
+      provider_instance_name: 'studio_bella_atendimento_01',
     });
     expect(row.id).toBe('wm-1');
     expect(state.calls).toContain('insert');
@@ -168,25 +210,30 @@ describe('whatsmiau config — write', () => {
   });
 
   it('updates the existing row instead of inserting a second one', async () => {
-    const { db, state } = fakeDb(ROW, { ...ROW, status: 'connected' });
-    const row = await upsertWhatsmiauConfig(db, 'acc-1', { status: 'connected' });
+    const { db, state } = fakeDb(ROW, { ...ROW, status: 'connecting' });
+    const row = await upsertWhatsmiauConfig(db, 'acc-1', {
+      instance_name: 'Atendimento 01',
+      status: 'connecting',
+    });
     expect(state.calls).toContain('update');
     expect(state.calls).not.toContain('insert');
-    expect(row.status).toBe('connected');
+    expect(row.status).toBe('connecting');
   });
 
-  it('refuses to create a row without an api key', async () => {
+  it('refuses to create a row without the provider instance name', async () => {
     const { db, state } = fakeDb(null, ROW);
     await expect(
-      upsertWhatsmiauConfig(db, 'acc-1', { instance_name: 'Atendimento01' }),
-    ).rejects.toThrow(/api key/i);
+      upsertWhatsmiauConfig(db, 'acc-1', { instance_name: 'Atendimento 01' }),
+    ).rejects.toThrow(/provider instance name/i);
     expect(state.calls).not.toContain('insert');
   });
 
   it('refuses to create a row without an instance name', async () => {
     const { db, state } = fakeDb(null, ROW);
     await expect(
-      upsertWhatsmiauConfig(db, 'acc-1', { api_key_encrypted: 'enc' }),
+      upsertWhatsmiauConfig(db, 'acc-1', {
+        provider_instance_name: 'studio_bella_atendimento_01',
+      }),
     ).rejects.toThrow(/instance name/i);
     expect(state.calls).not.toContain('insert');
   });
@@ -194,11 +241,64 @@ describe('whatsmiau config — write', () => {
   it('generates a webhook secret when the caller does not bring one', async () => {
     const { db, state } = fakeDb(null, ROW);
     await upsertWhatsmiauConfig(db, 'acc-1', {
-      instance_name: 'Atendimento01',
-      api_key_encrypted: 'enc',
+      instance_name: 'Atendimento 01',
+      provider_instance_name: 'studio_bella_atendimento_01',
     });
     const payload = state.payloads.at(-1)!;
     expect(payload.webhook_secret).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('updates a row by id', async () => {
+    const { db, state } = fakeDb(ROW, { ...ROW, status: 'disconnected' });
+    const row = await updateWhatsmiauConfigById(db, 'wm-1', {
+      status: 'disconnected',
+    });
+    expect(state.calls).toContain('update');
+    expect(row?.status).toBe('disconnected');
+  });
+
+  it('deletes a row', async () => {
+    const { db, state } = fakeDb(ROW);
+    await deleteWhatsmiauConfig(db, 'acc-1', 'Atendimento 01');
+    expect(state.calls).toContain('delete');
+  });
+
+  it('clears the other rows before activating one', async () => {
+    const { db, state } = fakeDb(ROW, { ...ROW, is_active: true });
+    const row = await setActiveWhatsmiauConfig(db, 'acc-1', 'Atendimento 01');
+    // One update clears the siblings, one sets the flag.
+    expect(state.calls.filter((call) => call === 'update')).toHaveLength(2);
+    expect(row?.is_active).toBe(true);
+  });
+
+  it('does not activate an instance the account does not own', async () => {
+    const { db, state } = fakeDb(null);
+    await expect(
+      setActiveWhatsmiauConfig(db, 'acc-1', 'Someone else'),
+    ).resolves.toBeNull();
+    expect(state.calls).not.toContain('update');
+  });
+
+  it('clears the active connection', async () => {
+    const { db, state } = fakeDb(ROW);
+    await clearActiveWhatsmiauConfig(db, 'acc-1');
+    expect(state.calls).toContain('update');
+  });
+});
+
+describe('whatsmiau config — provider names', () => {
+  it('reports a provider name that is already taken', async () => {
+    const { db } = fakeDb(ROW);
+    await expect(
+      isProviderInstanceNameTaken(db, 'studio_bella_atendimento_01'),
+    ).resolves.toBe(true);
+  });
+
+  it('reports a free provider name', async () => {
+    const { db } = fakeDb(null);
+    await expect(
+      isProviderInstanceNameTaken(db, 'studio_bella_atendimento_01'),
+    ).resolves.toBe(false);
   });
 });
 
@@ -207,15 +307,5 @@ describe('whatsmiau config — secrets', () => {
     const secret = generateWebhookSecret();
     expect(secret).toMatch(/^[0-9a-f]{64}$/);
     expect(generateWebhookSecret()).not.toBe(secret);
-  });
-
-  it('decrypts the stored api key', () => {
-    const row = { api_key_encrypted: encryptWhatsmiauApiKey('super-secret') } as never;
-    expect(decryptWhatsmiauApiKey(row)).toBe('super-secret');
-  });
-
-  it('throws when the stored value is not an encrypted payload', () => {
-    const row = { api_key_encrypted: 'not-encrypted' } as never;
-    expect(() => decryptWhatsmiauApiKey(row)).toThrow();
   });
 });

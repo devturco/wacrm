@@ -157,11 +157,21 @@ function planDb(fx: PlanFixture, writes: PlanWrites = {}): SupabaseClient {
           return b;
         },
         maybeSingle: async () => ({
-          data: fx.broadcast === undefined ? null : fx.broadcast,
+          // Only the broadcasts table answers with a single row here.
+          // `resolveProviderConnection` reads `whatsmiau_config` with
+          // maybeSingle too — a fixture that answered with the
+          // broadcast for every table would look like an active CRMBR
+          // instance that was never paired.
+          data:
+            table === 'broadcasts' && fx.broadcast !== undefined
+              ? fx.broadcast
+              : null,
           error: null,
         }),
         single: async () => ({
-          data: fx.config === undefined ? null : fx.config,
+          data: table === 'whatsapp_config' && fx.config !== undefined
+            ? fx.config
+            : null,
           error: null,
         }),
         then: (

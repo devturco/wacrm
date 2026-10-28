@@ -39,6 +39,7 @@ function SignupPageInner() {
   const t = useTranslations("SignupPage");
 
   const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -84,6 +85,11 @@ function SignupPageInner() {
       options: {
         data: {
           full_name: fullName,
+          // The company name lands in `accounts.name` (the signup
+          // trigger reads it from the metadata). It is what the
+          // WhatsApp connections are named under, so it has to be the
+          // real company — not the person's name.
+          company_name: companyName.trim(),
         },
         emailRedirectTo,
       },
@@ -170,6 +176,21 @@ function SignupPageInner() {
                 placeholder={t("fullNamePlaceholder")}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                required
+                className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="companyName" className="text-muted-foreground">
+                {t("companyNameLabel")}
+              </Label>
+              <Input
+                id="companyName"
+                type="text"
+                placeholder={t("companyNamePlaceholder")}
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
                 required
                 className="border-border bg-muted text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-primary/20"
               />

@@ -14,11 +14,14 @@
 // on the account's `whatsmiau_config` row.
 //
 // Account routing: the webhook secret is the routing key. It is 32
-// random bytes, generated once per account row, and the provider
-// sends it back on every call — so it identifies the account exactly.
-// The instance name in the envelope is only a cross-check: the
-// customer picks that name, and two accounts may well pick the same
-// one, which would make a name-only lookup ambiguous.
+// random bytes, generated once per instance row, and the provider
+// sends it back on every call — so it identifies the instance exactly.
+// The instance name in the envelope is only a cross-check, and it is
+// the PROVIDER's name: the customer picks a name of their own, and
+// the instance carries a namespaced one on the provider side
+// (`<empresa>_<instancia>`) — the two never match, and two accounts
+// may well pick the same customer-side name, which would make a
+// name-only lookup ambiguous.
 // An instance we do not know is a 404.
 // ============================================================
 
@@ -122,9 +125,11 @@ export async function POST(request: Request) {
   }
 
   // The envelope must belong to the instance the secret is bound to.
+  // The envelope carries the PROVIDER's name for the instance, which
+  // is the namespaced one — so this is the comparison that holds.
   // An instance we do not know is a 404: the operator needs to know
   // the instance is not wired here.
-  if (config.instance_name !== envelope.instance) {
+  if (config.provider_instance_name !== envelope.instance) {
     return NextResponse.json({ error: 'unknown_instance' }, { status: 404 });
   }
 
@@ -167,6 +172,9 @@ async function processWhatsmiauEvent(
       ownerUserId,
       instanceSettings: config.instance_settings,
       storage: db.storage,
+      // The row that owns this connection. The account may hold
+      // several, so a status change has to land on THIS one.
+      configId: config.id,
     };
 
     switch (envelope.event) {

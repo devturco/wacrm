@@ -2,18 +2,24 @@
 // Which provider is this account sending through?
 //
 // One active provider per account. Switching is explicit and never
-// silent: activating the CRMBR provider requires a PAIRED instance,
+// silent: activating the CRMBR provider requires a PAIRED connection,
 // and switching back to Meta requires a connected Meta config. If the
 // active provider is broken, sends fail loudly instead of going out
 // through the other number.
+//
+// The account may hold several CRMBR connections; the request names
+// the one to activate ("Atendimento"). Only one is ever active.
 // ============================================================
 
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import {
-  loadWhatsmiauConfig,
-  upsertWhatsmiauConfig,
+  clearActiveWhatsmiauConfig,
+  loadActiveWhatsmiauConfig,
+  loadWhatsmiauConfigByInstanceName,
+  loadWhatsmiauConfigs,
+  setActiveWhatsmiauConfig,
 } from '@/lib/whatsapp/whatsmiau-config';
 
 async function metaStatus(
@@ -32,9 +38,9 @@ async function metaStatus(
 export async function GET() {
   try {
     const { supabase, accountId } = await requireRole('viewer');
-    const whatsmiau = await loadWhatsmiauConfig(supabase, accountId);
+    const whatsmiau = await loadActiveWhatsmiauConfig(supabase, accountId);
 
-    if (whatsmiau?.is_active) {
+    if (whatsmiau) {
       return NextResponse.json(
         {
           provider: 'whatsmiau',
@@ -71,27 +77,45 @@ export async function POST(request: Request) {
     }
 
     if (provider === 'whatsmiau') {
-      const row = await loadWhatsmiauConfig(supabase, accountId);
+      // Which connection? The body names it the way the customer named
+      // it. Without a name we fall back to the account's active one and,
+      // failing that, to the first PAIRED one — so the "activate the
+      // CRMBR API" call from the hub works even when the account has
+      // several connections and none of them is active yet.
+      const instanceName =
+        typeof body?.instance_name === 'string' ? body.instance_name.trim() : '';
+
+      const row = instanceName
+        ? await loadWhatsmiauConfigByInstanceName(supabase, accountId, instanceName)
+        : (await loadActiveWhatsmiauConfig(supabase, accountId)) ??
+          ((await loadWhatsmiauConfigs(supabase, accountId)).find(
+            (item) => item.status === 'connected',
+          ) ?? null);
+
       if (!row) {
         return NextResponse.json(
           {
-            error: 'The CRMBR (non-official) API is not configured yet.',
+            error: 'This WhatsApp connection does not exist.',
             code: 'whatsapp_not_configured',
           },
-          { status: 400 },
+          { status: 404 },
         );
       }
       if (row.status !== 'connected') {
         return NextResponse.json(
           {
-            error: 'Pair the WhatsApp number before activating the CRMBR API.',
+            error: 'Pair the WhatsApp number before activating this connection.',
             code: 'provider_not_connected',
           },
           { status: 400 },
         );
       }
-      await upsertWhatsmiauConfig(supabase, accountId, { is_active: true });
-      return NextResponse.json({ success: true, provider: 'whatsmiau' }, { status: 200 });
+
+      await setActiveWhatsmiauConfig(supabase, accountId, row.instance_name);
+      return NextResponse.json(
+        { success: true, provider: 'whatsmiau', instance_name: row.instance_name },
+        { status: 200 },
+      );
     }
 
     const meta = await metaStatus(supabase, accountId);
@@ -105,7 +129,11 @@ export async function POST(request: Request) {
       );
     }
 
-    await upsertWhatsmiauConfig(supabase, accountId, { is_active: false });
+    // Switching back to Meta clears the active CRMBR connection. The
+    // partial unique index keeps at most one active per account, so
+    // clearing is what makes the switch possible.
+    await clearActiveWhatsmiauConfig(supabase, accountId);
+
     return NextResponse.json({ success: true, provider: 'meta' }, { status: 200 });
   } catch (error) {
     return toErrorResponse(error);

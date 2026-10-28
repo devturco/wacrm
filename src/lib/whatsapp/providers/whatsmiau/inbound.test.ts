@@ -146,6 +146,7 @@ function context(db: SupabaseClient): WhatsmiauInboundContext {
     db,
     accountId: 'acc-1',
     ownerUserId: 'user-1',
+    configId: 'wm-1',
     instanceSettings: {
       alwaysOnline: false,
       readMessages: false,

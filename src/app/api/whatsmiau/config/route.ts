@@ -1,40 +1,37 @@
 // ============================================================
-// The account's CRMBR (non-official WhatsApp API) configuration.
+// The account's CRMBR (non-official WhatsApp API) state.
 //
-// GET returns the stored configuration with the api key MASKED — the
-// key never travels back to the browser in cleartext.
+// GET returns everything the settings screen needs to draw itself:
+// whether the platform credential is configured on the server, the
+// company's name, and the account's own instances.
 //
-// POST saves it. The api key is encrypted before it touches the
-// database, exactly like the Meta access token.
+// There is NO api key and NO base URL in the answer, and there never
+// will be: the credential belongs to the platform and lives in the
+// server's environment. The customer never holds a key — they pick a
+// name for their connection and we provision the instance for them.
+//
+// The instance list comes from OUR table, never from the provider:
+// the provider's account is shared by every subscriber, so asking it
+// for "the instances" would show one company's instances to another.
 // ============================================================
 
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
-import { whatsmiauConnectionFromConfig } from '@/lib/whatsapp/providers/connection';
 import {
-  listInstances,
-  validateInstanceName,
-} from '@/lib/whatsapp/providers/whatsmiau/instances';
-import { MASKED_API_KEY, withoutLockedHeaders } from '@/lib/whatsapp/providers/whatsmiau/management';
+  webhookUrlFor,
+  withoutLockedHeaders,
+} from '@/lib/whatsapp/providers/whatsmiau/management';
+import { isPlatformConfigured } from '@/lib/whatsapp/providers/whatsmiau/platform-credential';
 import {
-  decryptWhatsmiauApiKey,
-  encryptWhatsmiauApiKey,
-  loadWhatsmiauConfig,
-  mergeInstanceSettings,
-  upsertWhatsmiauConfig,
+  loadWhatsmiauConfigs,
   type WhatsmiauConfigRow,
-  type WhatsmiauInstanceSettings,
 } from '@/lib/whatsapp/whatsmiau-config';
 
-const DEFAULT_BASE_URL = 'https://api.whatsmiau.dev/v2';
-
 /** The shape the browser is allowed to see. */
-function publicConfig(row: WhatsmiauConfigRow) {
+function publicInstance(row: WhatsmiauConfigRow) {
   return {
     instance_name: row.instance_name,
-    base_url: row.base_url,
-    api_key_masked: MASKED_API_KEY,
     status: row.status,
     phone_number: row.phone_number,
     is_active: row.is_active,
@@ -54,122 +51,36 @@ function publicConfig(row: WhatsmiauConfigRow) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { supabase, accountId } = await requireRole('viewer');
-    const row = await loadWhatsmiauConfig(supabase, accountId);
-    if (!row) {
-      return NextResponse.json({ configured: false }, { status: 200 });
-    }
-    return NextResponse.json({ configured: true, ...publicConfig(row) }, { status: 200 });
-  } catch (error) {
-    return toErrorResponse(error);
-  }
-}
 
-export async function POST(request: Request) {
-  try {
-    const { supabase, accountId } = await requireRole('admin');
-    const body = await request.json();
-    const existing = await loadWhatsmiauConfig(supabase, accountId);
+    const { data: account } = await supabase
+      .from('accounts')
+      .select('name')
+      .eq('id', accountId)
+      .maybeSingle();
 
-    // An empty api key means "keep the stored one" — the settings form
-    // never shows the key, so re-entering it on every save would be a
-    // toll nobody should pay.
-    let apiKey = '';
-    if (typeof body.api_key === 'string' && body.api_key.trim() !== '') {
-      apiKey = body.api_key.trim();
-    } else if (existing) {
-      try {
-        apiKey = decryptWhatsmiauApiKey(existing);
-      } catch {
-        return NextResponse.json(
-          { error: 'The stored API key could not be decrypted. Please enter it again.', field: 'api_key' },
-          { status: 400 },
-        );
-      }
-    }
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'The API key is required.', field: 'api_key' },
-        { status: 400 },
-      );
-    }
-
-    const baseUrl =
-      typeof body.base_url === 'string' && body.base_url.trim() !== ''
-        ? body.base_url.trim().replace(/\/+$/, '')
-        : (existing?.base_url ?? DEFAULT_BASE_URL);
-
-    const instanceName =
-      typeof body.instance_name === 'string' && body.instance_name.trim() !== ''
-        ? body.instance_name.trim()
-        : (existing?.instance_name ?? '');
-
-    if (!instanceName) {
-      return NextResponse.json(
-        { error: 'The instance name is required.', field: 'instance_name' },
-        { status: 400 },
-      );
-    }
-    const nameCheck = validateInstanceName(instanceName);
-    if (!nameCheck.ok) {
-      return NextResponse.json(
-        { error: nameCheck.error, field: 'instance_name' },
-        { status: 400 },
-      );
-    }
-
-    const incoming = (body.instance_settings ?? {}) as Partial<WhatsmiauInstanceSettings>;
-    const settings = mergeInstanceSettings(existing?.instance_settings, {
-      ...incoming,
-      // The Authorization header is ours — a browser can never set it,
-      // and storing one would leak the webhook secret back to every
-      // reader of this route.
-      ...(incoming.webhook
-        ? {
-            webhook: {
-              ...incoming.webhook,
-              headers: withoutLockedHeaders(incoming.webhook.headers),
-            },
-          }
-        : {}),
-    });
-
-    const row = await upsertWhatsmiauConfig(supabase, accountId, {
-      api_key_encrypted: encryptWhatsmiauApiKey(apiKey),
-      base_url: baseUrl,
-      instance_name: instanceName,
-      instance_settings: settings,
-    });
-
-    // Verify the key against the provider — BEST EFFORT. The row is
-    // already saved, so a provider outage never blocks the setup; the
-    // UI surfaces the warning and the user can retry.
-    let verified = true;
-    let warning: string | undefined;
-    try {
-      await listInstances(whatsmiauConnectionFromConfig(row));
-    } catch (error) {
-      verified = false;
-      warning =
-        error instanceof Error
-          ? error.message
-          : 'Could not reach the CRMBR API with this key.';
-    }
+    const rows = await loadWhatsmiauConfigs(supabase, accountId);
 
     return NextResponse.json(
       {
-        success: true,
-        saved: true,
-        verified,
-        ...(warning ? { warning } : {}),
-        config: publicConfig(row),
+        // The platform credential lives in the environment. When it is
+        // missing the screen says the feature is unavailable on this
+        // server instead of showing a request that cannot succeed.
+        configured: isPlatformConfigured(),
+        company_name: account?.name ?? '',
+        // The address the server pushes to the provider. It comes from
+        // the SERVER, not from the browser: the provider has to be
+        // able to reach it, and the browser's own origin is a
+        // development address in local testing. Showing the very same
+        // string the server uses keeps the screen honest.
+        webhook_url: webhookUrlFor(request),
+        instances: rows.map(publicInstance),
       },
       { status: 200 },
     );
   } catch (error) {
-    console.error('[whatsmiau/config] could not save the configuration:', error);
     return toErrorResponse(error);
   }
 }

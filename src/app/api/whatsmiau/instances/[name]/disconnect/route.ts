@@ -1,21 +1,23 @@
 // ============================================================
-// Disconnect the number without deleting the instance.
+// Disconnect the number without deleting the connection.
 //
-// `logout` unlinks the WhatsApp number but keeps the instance and
+// `logout` unlinks the WhatsApp number but keeps the connection and
 // its settings — the user re-scans a QR code and is back. Deleting
-// the instance is a different, irreversible operation.
+// the connection is a different, irreversible operation.
 // ============================================================
 
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
 import { whatsmiauConnectionFromConfig } from '@/lib/whatsapp/providers/connection';
 import { logoutInstance } from '@/lib/whatsapp/providers/whatsmiau/instances';
 import {
+  crmbrErrorResponse,
   providerErrorResponse,
   resolveOwnedInstance,
 } from '@/lib/whatsapp/providers/whatsmiau/management';
-import { upsertWhatsmiauConfig } from '@/lib/whatsapp/whatsmiau-config';
+import { updateWhatsmiauConfigById } from '@/lib/whatsapp/whatsmiau-config';
 
 type RouteContext = { params: Promise<{ name: string }> };
 
@@ -26,12 +28,14 @@ export async function POST(_request: Request, context: RouteContext) {
 
     const row = await resolveOwnedInstance(supabase, accountId, name);
     if (!row) {
-      return NextResponse.json({ error: 'Instance not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Connection not found.' }, { status: 404 });
     }
 
-    await logoutInstance(whatsmiauConnectionFromConfig(row), name);
+    await logoutInstance(whatsmiauConnectionFromConfig(row), row.provider_instance_name);
 
-    await upsertWhatsmiauConfig(supabase, accountId, {
+    // The connection stops being the active one: the app must not keep
+    // sending through a number that is no longer linked.
+    await updateWhatsmiauConfigById(supabase, row.id, {
       status: 'disconnected',
       connected_at: null,
       phone_number: null,
@@ -42,6 +46,9 @@ export async function POST(_request: Request, context: RouteContext) {
   } catch (error) {
     if (error instanceof Error && error.name === 'WhatsmiauApiError') {
       return providerErrorResponse(error);
+    }
+    if (error instanceof ProviderError) {
+      return crmbrErrorResponse(error);
     }
     console.error('[whatsmiau/instance] could not disconnect the instance:', error);
     return toErrorResponse(error);

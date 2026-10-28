@@ -2,40 +2,48 @@
 // Which provider is this account sending through?
 //
 // One active provider per account. The CRMBR (WhatsMiau) provider
-// wins when its row is active; otherwise Meta is used.
+// wins when one of its instances is active; otherwise Meta is used.
 //
 // There is deliberately NO fallback from an active-but-disconnected
 // CRMBR provider back to Meta: sending the customer's message from
 // the wrong number is worse than failing loudly.
+//
+// The provider credential is the PLATFORM's, read from the server's
+// environment — there is no per-customer key anywhere in this file.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
 import {
-  decryptWhatsmiauApiKey,
-  loadWhatsmiauConfig,
+  loadActiveWhatsmiauConfig,
   type WhatsmiauConfigRow,
 } from '@/lib/whatsapp/whatsmiau-config';
 import { ProviderError } from './errors';
 import type { ProviderConnection, WhatsmiauConnection } from './types';
+import { platformCredential } from './whatsmiau/platform-credential';
 
 /**
  * Build a WhatsMiau connection from a stored config row.
  *
- * The CRMBR management routes (list instances, fetch the QR code, push
- * the webhook config) talk to the provider directly instead of going
- * through the send path, so they need the same connection object the
- * dispatcher would build.
+ * The CRMBR management routes (fetch the QR code, push the webhook
+ * config) talk to the provider directly instead of going through the
+ * send path, so they need the same connection object the dispatcher
+ * would build.
+ *
+ * The instance name used against the provider is the row's
+ * `provider_instance_name` — the namespaced one. The customer's own
+ * name never leaves the app.
  */
 export function whatsmiauConnectionFromConfig(
   row: WhatsmiauConfigRow,
 ): WhatsmiauConnection {
+  const { apiKey, baseUrl } = platformCredential();
   return {
     provider: 'whatsmiau',
-    instanceName: row.instance_name,
-    apiKey: decryptWhatsmiauApiKey(row),
-    baseUrl: row.base_url,
+    instanceName: row.provider_instance_name,
+    apiKey,
+    baseUrl,
   };
 }
 
@@ -43,9 +51,9 @@ export async function resolveProviderConnection(
   db: SupabaseClient,
   accountId: string,
 ): Promise<ProviderConnection> {
-  const whatsmiau = await loadWhatsmiauConfig(db, accountId);
+  const whatsmiau = await loadActiveWhatsmiauConfig(db, accountId);
 
-  if (whatsmiau?.is_active) {
+  if (whatsmiau) {
     if (whatsmiau.status !== 'connected') {
       throw new ProviderError(
         'provider_not_connected',
@@ -53,11 +61,12 @@ export async function resolveProviderConnection(
         400,
       );
     }
+    const { apiKey, baseUrl } = platformCredential();
     return {
       provider: 'whatsmiau',
-      instanceName: whatsmiau.instance_name,
-      apiKey: decryptWhatsmiauApiKey(whatsmiau),
-      baseUrl: whatsmiau.base_url,
+      instanceName: whatsmiau.provider_instance_name,
+      apiKey,
+      baseUrl,
     };
   }
 
