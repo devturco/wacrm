@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 import { cn } from '@/lib/utils';
@@ -32,7 +33,13 @@ export function SettingsRail({
   hints?: Partial<Record<SettingsSection, ReactNode>>;
 }) {
   const t = useTranslations('Settings');
-  const activeRef = useRef<HTMLButtonElement>(null);
+  // The active item can be a `<button>` OR a `<Link>` (a section with
+  // its own route), and the two have different ref types — a callback
+  // ref typed as the WIDER `HTMLElement` serves both.
+  const activeRef = useRef<HTMLElement | null>(null);
+  const setActiveRef = useCallback((node: HTMLElement | null) => {
+    activeRef.current = node;
+  }, []);
 
   // When horizontal (mobile), keep the active chip in view. On desktop
   // the rail is a static column, so skip.
@@ -73,21 +80,15 @@ export function SettingsRail({
               const meta = SECTION_META[s];
               const Icon = meta.icon;
               const isActive = s === active;
-              return (
-                <button
-                  key={s}
-                  ref={isActive ? activeRef : undefined}
-                  type="button"
-                  onClick={() => onSelect(s)}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={cn(
-                    'flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors',
-                    'lg:w-full',
-                    isActive
-                      ? 'bg-primary-soft text-primary'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  )}
-                >
+              const className = cn(
+                'flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors',
+                'lg:w-full',
+                isActive
+                  ? 'bg-primary-soft text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              );
+              const inner = (
+                <>
                   <Icon className="size-4 shrink-0" />
                   <span className="flex-1">{t(`sections.${s}`)}</span>
                   {hints?.[s] != null ? (
@@ -100,6 +101,35 @@ export function SettingsRail({
                       {hints[s]}
                     </span>
                   ) : null}
+                </>
+              );
+
+              // A section with its own route is a real link; everything
+              // else stays a button that swaps the `?tab=` query.
+              if (meta.href) {
+                return (
+                  <Link
+                    key={s}
+                    href={meta.href}
+                    ref={isActive ? setActiveRef : undefined}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={className}
+                  >
+                    {inner}
+                  </Link>
+                );
+              }
+
+              return (
+                <button
+                  key={s}
+                  ref={isActive ? setActiveRef : undefined}
+                  type="button"
+                  onClick={() => onSelect(s)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={className}
+                >
+                  {inner}
                 </button>
               );
             })}
