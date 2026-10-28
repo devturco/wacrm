@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
-import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
-import { decrypt } from '@/lib/whatsapp/encryption';
+import {
+  sendReactionMessage,
+  resolveProviderConnection,
+} from '@/lib/whatsapp/providers';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types';
 import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity';
 import {
   checkRateLimit,
@@ -98,26 +102,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // WhatsApp config + access token. Account-scoped post-multi-user.
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('phone_number_id, access_token')
-      .eq('account_id', accountId)
-      .single();
-
-    if (configError || !config) {
-      return NextResponse.json(
-        { error: t('common.whatsappNotConfiguredDot') },
-        { status: 400 },
-      );
+    // Which provider is this account sending through? Account-scoped.
+    let connection: ProviderConnection;
+    try {
+      connection = await resolveProviderConnection(supabase, accountId);
+    } catch (err) {
+      if (err instanceof ProviderError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
     }
 
-    const accessToken = decrypt(config.access_token);
-
     try {
-      await sendReactionMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      await sendReactionMessage(connection, {
         to: sendTarget.target,
         targetMessageId: targetMessage.message_id,
         emoji,

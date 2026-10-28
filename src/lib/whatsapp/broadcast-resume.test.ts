@@ -12,6 +12,8 @@ import {
 
 vi.mock('@/lib/whatsapp/encryption', () => ({
   decrypt: (v: string) => `decrypted:${v}`,
+  encrypt: (v: string) => v,
+  isLegacyFormat: () => false,
 }));
 
 // ============================================================
@@ -240,7 +242,11 @@ describe('planBroadcastResume', () => {
         params: ['B456', 'Monday'],
       },
     ]);
-    expect(plan.accessToken).toBe('decrypted:tok');
+    expect(plan.connection).toEqual({
+      provider: 'meta',
+      phoneNumberId: 'pn-1',
+      accessToken: 'decrypted:tok',
+    });
     expect(remaining).toBe(0);
     expect(unsendable).toBe(0);
   });

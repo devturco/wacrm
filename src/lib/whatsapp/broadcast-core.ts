@@ -7,9 +7,10 @@
 //   createBroadcast()  — validate, resolve contacts, insert the
 //                        `broadcasts` row + `broadcast_recipients`
 //                        rows (status 'pending'), return a plan.
-//   deliverBroadcast() — send each recipient's template via Meta
-//                        (phone-variant retry), stamp each recipient
-//                        row + the aggregate counts, finalize status.
+//   deliverBroadcast() — send each recipient's template through the
+//                        active provider (phone-variant retry), stamp
+//                        each recipient row + the aggregate counts,
+//                        finalize status.
 //
 // Recipient rows carry `whatsapp_message_id`, so the inbound webhook's
 // status handler (which matches on that column) updates delivered/read
@@ -18,8 +19,13 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
-import { decrypt } from '@/lib/whatsapp/encryption';
+import {
+  sendTemplateMessage,
+  resolveProviderConnection,
+  assertProviderSupportsMessageType,
+} from '@/lib/whatsapp/providers';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types';
 import {
   parseInternationalPhone,
   phoneVariants,
@@ -65,8 +71,8 @@ export interface BroadcastPlan {
   broadcastId: string;
   templateName: string;
   templateLanguage: string;
-  phoneNumberId: string;
-  accessToken: string;
+  /** The provider the account sends through — Meta or CRMBR. */
+  connection: ProviderConnection;
   templateRow: MessageTemplate | null;
   planned: PlannedRecipient[];
   /** Phones rejected up front (invalid E.164) — counted as failed. */
@@ -107,21 +113,20 @@ export async function createBroadcast(
     );
   }
 
-  // Config (fail fast + provides the audit trail owner already resolved
-  // by the caller). Meta send needs phone_number_id + decrypted token.
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
-  if (configError || !config) {
-    throw new BroadcastError(
-      'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
-      400
-    );
+  // Which provider is this account sending through? A broadcast is a
+  // template campaign, and the CRMBR (non-official) API has no
+  // template endpoint — refuse with a clear message instead of
+  // degrading to plain text.
+  let connection: ProviderConnection;
+  try {
+    connection = await resolveProviderConnection(db, accountId);
+    assertProviderSupportsMessageType(connection, 'template');
+  } catch (err) {
+    if (err instanceof ProviderError) {
+      throw new BroadcastError(err.code, err.message, err.status);
+    }
+    throw err;
   }
-  const accessToken = decrypt(config.access_token);
 
   // Template row (once) for header/button components; guard a
   // malformed local row rather than N identical opaque failures.
@@ -237,8 +242,7 @@ export async function createBroadcast(
     broadcastId,
     templateName,
     templateLanguage: resolvedTemplate.language,
-    phoneNumberId: config.phone_number_id,
-    accessToken,
+    connection,
     templateRow,
     planned,
     rejected,
@@ -269,9 +273,7 @@ export async function deliverBroadcast(
 
     for (const variant of variants) {
       try {
-        const result = await sendTemplateMessage({
-          phoneNumberId: plan.phoneNumberId,
-          accessToken: plan.accessToken,
+        const result = await sendTemplateMessage(plan.connection, {
           to: variant,
           templateName: plan.templateName,
           language: plan.templateLanguage,

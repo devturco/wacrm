@@ -22,6 +22,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { parseInternationalPhone } from '@/lib/whatsapp/phone-utils';
+import { resolveProviderConnection } from '@/lib/whatsapp/providers';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
 import { SendMessageError } from '@/lib/whatsapp/send-message';
 import { resolveAuditUserId, ContactError } from '@/lib/api/v1/contacts';
 
@@ -57,18 +59,15 @@ export async function resolveConversationByPhone(
   }
 
   // Fail fast (and create nothing) when the account has no WhatsApp
-  // connected — the same error the send would raise anyway.
-  const { data: config } = await db
-    .from('whatsapp_config')
-    .select('id')
-    .eq('account_id', accountId)
-    .maybeSingle();
-  if (!config) {
-    throw new SendMessageError(
-      'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
-      400
-    );
+  // connected — the same error the send would raise anyway. The check
+  // covers BOTH providers: a CRMBR-only account is connected too.
+  try {
+    await resolveProviderConnection(db, accountId);
+  } catch (err) {
+    if (err instanceof ProviderError) {
+      throw new SendMessageError(err.code, err.message, err.status);
+    }
+    throw err;
   }
 
   // Audit user for created rows = the single account-wide default used

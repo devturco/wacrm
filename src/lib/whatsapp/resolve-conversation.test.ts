@@ -1,8 +1,32 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types';
+import { ProviderError } from '@/lib/whatsapp/providers/errors';
 
 import { resolveConversationByPhone } from './resolve-conversation';
 import { SendMessageError } from './send-message';
+
+// The account's ACTIVE provider is resolved through the dispatcher.
+// Only the resolution is mocked — everything else in the provider
+// module stays real.
+const providerMocks = vi.hoisted(() => ({
+  resolveProviderConnection: vi.fn(
+    async (): Promise<ProviderConnection> => ({
+      provider: 'meta',
+      phoneNumberId: 'pn-1',
+      accessToken: 'tok-1',
+    })
+  ),
+}));
+
+vi.mock('@/lib/whatsapp/providers', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/whatsapp/providers')>();
+  return {
+    ...actual,
+    resolveProviderConnection: providerMocks.resolveProviderConnection,
+  };
+});
 
 // ------------------------------------------------------------
 // Chainable Supabase stub, scripted per table. Terminal methods
@@ -30,6 +54,23 @@ interface Script {
 }
 
 function makeDb(script: Script): SupabaseClient {
+  // The account's provider: no config = not connected (the same error
+  // the send would raise).
+  providerMocks.resolveProviderConnection.mockImplementation(async () => {
+    if (!script.config) {
+      throw new ProviderError(
+        'whatsapp_not_configured',
+        'WhatsApp not configured. Please set up your WhatsApp integration first.',
+        400
+      );
+    }
+    return {
+      provider: 'meta',
+      phoneNumberId: 'pn-1',
+      accessToken: 'tok-1',
+    };
+  });
+
   let table = '';
   let mode: 'select' | 'insert' | 'update' = 'select';
   let contactLookupCalls = 0;
@@ -109,6 +150,14 @@ function makeDb(script: Script): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
+beforeEach(() => {
+  providerMocks.resolveProviderConnection.mockResolvedValue({
+    provider: 'meta',
+    phoneNumberId: 'pn-1',
+    accessToken: 'tok-1',
+  });
+});
+
 describe('resolveConversationByPhone', () => {
   it('rejects an invalid phone before any DB call', async () => {
     const db = {
@@ -150,6 +199,25 @@ describe('resolveConversationByPhone', () => {
     await expect(
       resolveConversationByPhone(db, 'acct', '+14155550123')
     ).rejects.toBeInstanceOf(SendMessageError);
+  });
+
+  it('does not require the Meta config when the CRMBR provider is active', async () => {
+    const db = makeDb({
+      config: { user_id: 'owner-1' },
+      contactCandidates: [{ id: 'c1', phone: '14155550123' }],
+      existingConversation: { id: 'cv1' },
+    });
+    providerMocks.resolveProviderConnection.mockResolvedValue({
+      provider: 'whatsmiau',
+      instanceName: 'Atendimento01',
+      apiKey: 'key-1',
+      baseUrl: 'https://api.whatsmiau.dev/v2',
+    });
+
+    const resolved = await resolveConversationByPhone(db, 'acct', '+14155550123');
+
+    expect(resolved.conversationId).toBeTruthy();
+    expect(providerMocks.resolveProviderConnection).toHaveBeenCalled();
   });
 
   it('returns the existing contact + conversation without creating', async () => {

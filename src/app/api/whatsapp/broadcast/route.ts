@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
-import { decrypt } from '@/lib/whatsapp/encryption'
+import {
+  sendTemplateMessage,
+  resolveProviderConnection,
+  assertProviderSupportsMessageType,
+} from '@/lib/whatsapp/providers'
+import { ProviderError } from '@/lib/whatsapp/providers/errors'
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types'
 import type { SendTimeParams } from '@/lib/whatsapp/template-send-builder'
 import { resolveTemplateRow } from '@/lib/whatsapp/template-body'
 import {
@@ -123,23 +128,19 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
-
-    if (configError || !config) {
-      return NextResponse.json(
-        {
-          error:
-            t('common.whatsappNotConfiguredSetup'),
-        },
-        { status: 400 }
-      )
+    // Which provider is this account sending through? A broadcast is a
+    // template campaign — the CRMBR (non-official) API has no template
+    // endpoint, so it refuses with a clear message.
+    let connection: ProviderConnection
+    try {
+      connection = await resolveProviderConnection(supabase, accountId)
+      assertProviderSupportsMessageType(connection, 'template')
+    } catch (err) {
+      if (err instanceof ProviderError) {
+        return NextResponse.json({ error: err.message }, { status: err.status })
+      }
+      throw err
     }
-
-    const accessToken = decrypt(config.access_token)
 
     // Load the template row once so sendTemplateMessage can build
     // header + button components on each iteration. Loading inside
@@ -188,9 +189,7 @@ export async function POST(request: Request) {
 
       for (const variant of variants) {
         try {
-          const result = await sendTemplateMessage({
-            phoneNumberId: config.phone_number_id,
-            accessToken,
+          const result = await sendTemplateMessage(connection, {
             to: variant,
             templateName: template_name,
             language: resolvedTemplate.language,

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types';
 import {
   createBroadcast,
   finalizeBroadcastStatus,
@@ -10,14 +11,46 @@ import {
 // them so these tests focus on the persistence boundary.
 vi.mock('@/lib/whatsapp/encryption', () => ({
   decrypt: () => 'plain-access-token',
+  encrypt: (v: string) => v,
+  isLegacyFormat: () => false,
 }));
 vi.mock('@/lib/api/v1/contacts', () => ({
   findOrCreateContact: vi.fn(async () => ({ id: 'c1' })),
 }));
 
+// The account's ACTIVE provider is resolved through the dispatcher.
+// Only the resolution is mocked — the capability check stays real, so
+// the "no templates on CRMBR" refusal is the production one.
+const providerMocks = vi.hoisted(() => ({
+  resolveProviderConnection: vi.fn(
+    async (): Promise<ProviderConnection> => ({
+      provider: 'meta',
+      phoneNumberId: 'pn-1',
+      accessToken: 'tok-1',
+    })
+  ),
+}));
+
+vi.mock('@/lib/whatsapp/providers', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/whatsapp/providers')>();
+  return {
+    ...actual,
+    resolveProviderConnection: providerMocks.resolveProviderConnection,
+  };
+});
+
 // These assertions all fire in the pure validation prologue, before
 // any Supabase call — a bare stub is enough.
 const db = {} as SupabaseClient;
+
+beforeEach(() => {
+  providerMocks.resolveProviderConnection.mockResolvedValue({
+    provider: 'meta',
+    phoneNumberId: 'pn-1',
+    accessToken: 'tok-1',
+  });
+});
 
 describe('createBroadcast validation', () => {
   it('rejects a missing template_name', async () => {
@@ -133,6 +166,46 @@ describe('createBroadcast recipient validation (#586)', () => {
       })
     ).rejects.toMatchObject({ code: 'bad_request', status: 400 });
     expect(calls.rpc).toHaveLength(0);
+  });
+});
+
+describe('createBroadcast — provider dispatch', () => {
+  it('refuses a broadcast when the active provider has no template support', async () => {
+    providerMocks.resolveProviderConnection.mockResolvedValue({
+      provider: 'whatsmiau',
+      instanceName: 'Atendimento01',
+      apiKey: 'key-1',
+      baseUrl: 'https://api.whatsmiau.dev/v2',
+    });
+    const { db } = makeDb({
+      data: [{ broadcast_id: 'b-1', recipient_id: 'r-1', contact_id: 'c1' }],
+      error: null,
+    });
+
+    await expect(
+      createBroadcast(db, 'acc', 'user', {
+        templateName: 'hello',
+        recipients: [{ to: '+5511999998888', params: ['x'] }],
+      })
+    ).rejects.toThrow(/template/i);
+  });
+
+  it('carries the resolved connection into the plan', async () => {
+    const { db } = makeDb({
+      data: [{ broadcast_id: 'b-1', recipient_id: 'r-1', contact_id: 'c1' }],
+      error: null,
+    });
+
+    const plan = await createBroadcast(db, 'acc', 'user', {
+      templateName: 'promo',
+      recipients: [{ to: '+14155550123' }],
+    });
+
+    expect(plan.connection).toEqual({
+      provider: 'meta',
+      phoneNumberId: 'pn-1',
+      accessToken: 'tok-1',
+    });
   });
 });
 
