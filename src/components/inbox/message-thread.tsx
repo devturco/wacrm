@@ -3,6 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useActiveProvider } from "@/hooks/use-active-provider";
 import { usePresence } from "@/hooks/use-presence";
 import { PresenceDot } from "@/components/presence/presence-dot";
 import { presenceLabel } from "@/lib/presence";
@@ -192,6 +193,9 @@ export function MessageThread({
   const tPresence = useTranslations("Presence");
 
   const { user } = useAuth();
+  // The CRMBR (non-official) API has no approved message templates, so
+  // the composer hides the template picker when that provider is active.
+  const { supportsTemplates } = useActiveProvider();
   const { getPresence, getRow, now } = usePresence();
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1294,6 +1298,7 @@ export function MessageThread({
         onOpenTemplates={handleOpenTemplates}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
+        canUseTemplates={supportsTemplates}
       />
 
       <TemplatePicker

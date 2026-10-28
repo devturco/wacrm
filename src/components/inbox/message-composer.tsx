@@ -118,6 +118,12 @@ interface MessageComposerProps {
   onOpenTemplates: () => void;
   replyTo?: ReplyDraft | null;
   onClearReply?: () => void;
+  /**
+   * The CRMBR (non-official) API has no approved templates, so the
+   * picker is hidden when it is the active provider. Defaults to true
+   * so the Meta path is unchanged.
+   */
+  canUseTemplates?: boolean;
 }
 
 function formatDuration(seconds: number): string {
@@ -140,6 +146,7 @@ export function MessageComposer({
   onOpenTemplates,
   replyTo,
   onClearReply,
+  canUseTemplates = true,
 }: MessageComposerProps) {
   const t = useTranslations("Inbox.composer");
   const tGate = useTranslations("GatedButton");
@@ -563,20 +570,27 @@ export function MessageComposer({
           />
         </div>
       )}
+      {!canUseTemplates ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t("crmbrNoTemplates")}
+        </p>
+      ) : null}
       {sessionExpired && (
         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-500/10 px-3 py-2">
           <p className="text-xs text-amber-400">
             {t("sessionExpiredHint")}
           </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-amber-400 hover:text-amber-300"
-            onClick={onOpenTemplates}
-          >
-            <LayoutTemplate className="mr-1 h-3 w-3" />
-            {t("templates")}
-          </Button>
+          {canUseTemplates ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-amber-400 hover:text-amber-300"
+              onClick={onOpenTemplates}
+            >
+              <LayoutTemplate className="mr-1 h-3 w-3" />
+              {t("templates")}
+            </Button>
+          ) : null}
         </div>
       )}
 
@@ -718,17 +732,19 @@ export function MessageComposer({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <GatedButton
-            variant="ghost"
-            size="sm"
-            canAct={!readOnly}
-            gateReason={tGate("reasons.sendMessages")}
-            title={readOnly ? undefined : t("sendTemplate")}
-            className="h-9 w-9 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-            onClick={onOpenTemplates}
-          >
-            <LayoutTemplate className="h-4 w-4" />
-          </GatedButton>
+          {canUseTemplates ? (
+            <GatedButton
+              variant="ghost"
+              size="sm"
+              canAct={!readOnly}
+              gateReason={tGate("reasons.sendMessages")}
+              title={readOnly ? undefined : t("sendTemplate")}
+              className="h-9 w-9 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+              onClick={onOpenTemplates}
+            >
+              <LayoutTemplate className="h-4 w-4" />
+            </GatedButton>
+          ) : null}
 
           <GatedButton
             variant="ghost"

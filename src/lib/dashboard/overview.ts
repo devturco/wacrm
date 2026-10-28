@@ -281,7 +281,7 @@ export interface SetupStep {
 
 export function setupSteps(setup: OverviewSetup): SetupStep[] {
   return [
-    { id: 'whatsapp', done: setup.whatsappConnected, href: '/settings?tab=whatsapp' },
+    { id: 'whatsapp', done: setup.whatsappConnected, href: '/settings/whatsapp' },
     { id: 'contacts', done: setup.hasContacts, href: '/contacts' },
     { id: 'template', done: setup.hasApprovedTemplate, href: '/settings?tab=templates' },
     { id: 'teammate', done: setup.memberCount > 1, href: '/settings?tab=members' },

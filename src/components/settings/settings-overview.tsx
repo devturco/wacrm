@@ -5,6 +5,7 @@ import { ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { createClient } from '@/lib/supabase/client';
+import { useActiveProvider } from '@/hooks/use-active-provider';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { THEMES } from '@/lib/themes';
@@ -39,6 +40,9 @@ export function SettingsOverview({
   const { user, profile, accountId, accountRole, defaultCurrency, canManageMembers } =
     useAuth();
   const { mode, theme } = useTheme();
+  // Which WhatsApp API this account actually sends through — a CRMBR
+  // account has no `whatsapp_config` row at all.
+  const { provider: activeProvider } = useActiveProvider();
   const t = useTranslations('Settings.overview');
   const tRoles = useTranslations('Settings.roles');
   const tSections = useTranslations('Settings.sections');
@@ -117,9 +121,34 @@ export function SettingsOverview({
       setCountsLoading(false);
     })();
 
-    // WhatsApp connection status — slower, independent.
+    // WhatsApp connection status — slower, independent. `activeProvider`
+    // tells us which API the account actually sends through: a CRMBR
+    // account has no `whatsapp_config` row at all, and reading only
+    // that table would report "not set up" for a perfectly working
+    // account.
     (async () => {
       setWhatsappLoading(true);
+      if (activeProvider !== 'meta') {
+        const [crmbr, active] = await Promise.allSettled([
+          fetch('/api/whatsmiau/config', { cache: 'no-store' }).then((r) =>
+            r.json(),
+          ),
+          fetch('/api/whatsmiau/active', { cache: 'no-store' }).then((r) =>
+            r.json(),
+          ),
+        ]);
+        if (cancelled) return;
+        const configured =
+          crmbr.status === 'fulfilled' && !!crmbr.value?.configured;
+        const connected =
+          active.status === 'fulfilled' &&
+          active.value?.provider === 'whatsmiau' &&
+          !!active.value?.connected;
+        setWhatsapp({ configured, connected });
+        setWhatsappLoading(false);
+        return;
+      }
+
       const [row, health] = await Promise.allSettled([
         supabase
           .from('whatsapp_config')
@@ -139,7 +168,7 @@ export function SettingsOverview({
     return () => {
       cancelled = true;
     };
-  }, [user?.id, accountId, canManageMembers]);
+  }, [user?.id, accountId, canManageMembers, activeProvider]);
 
   const displayName = profile?.full_name || profile?.email || t('yourAccount');
   const initial = (profile?.full_name || profile?.email || 'U').charAt(0).toUpperCase();

@@ -412,6 +412,7 @@
       "document": "문서",
       "voiceNote": "음성 메모",
       "sendTemplate": "템플릿 보내기",
+      "crmbrNoTemplates": "CRMBR API에는 메시지 템플릿이 없습니다 — 해당 기능은 Meta 공식 API를 사용하세요.",
       "aiNotConfigured": "AI가 아직 설정되지 않았습니다 — 설정 → AI 어시스턴트에서 활성화하세요.",
       "draftFailed": "답장 초안을 작성하지 못했습니다.",
       "draftEmpty": "어시스턴트가 답장을 반환하지 않았습니다.",

@@ -10,6 +10,7 @@ import {
 } from "@/lib/inbox/conversations";
 import type { Conversation, Message, Contact, ConversationStatus } from "@/types";
 import { useRealtime } from "@/hooks/use-realtime";
+import { useActiveProvider } from "@/hooks/use-active-provider";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { parseInboxFilter } from "@/lib/inbox/inbox-filters";
 import { MessageThread } from "@/components/inbox/message-thread";
@@ -49,6 +50,11 @@ function InboxPageInner() {
    * automatically instead of showing the empty center panel.
    */
   const deepLinkConvId = searchParams.get("c");
+
+  // Which WhatsApp API this account sends through — the "not
+  // connected" banner has to follow the active provider, not the Meta
+  // table (a CRMBR account has no `whatsapp_config` row).
+  const { provider: activeProvider } = useActiveProvider();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] =
@@ -190,6 +196,19 @@ function InboxPageInner() {
 
       if (!user) return;
 
+      // A CRMBR account has no `whatsapp_config` row — the banner must
+      // follow the ACTIVE provider, not the Meta table.
+      if (activeProvider === "whatsmiau") {
+        const res = await fetch("/api/whatsmiau/active", {
+          cache: "no-store",
+        });
+        const body = res.ok ? await res.json() : null;
+        setWhatsappConnected(
+          body?.provider === "whatsmiau" && !!body?.connected,
+        );
+        return;
+      }
+
       // whatsapp_config is one-row-per-account post-multi-user, so
       // the previous `.eq('user_id', user.id)` would miss the row
       // for any teammate who didn't personally save the config —
@@ -217,7 +236,7 @@ function InboxPageInner() {
     };
 
     checkConnection();
-  }, []);
+  }, [activeProvider]);
 
   // Handle realtime message events
   const handleMessageEvent = useCallback(

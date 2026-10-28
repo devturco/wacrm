@@ -412,6 +412,7 @@
       "document": "Documento",
       "voiceNote": "Mensagem de voz",
       "sendTemplate": "Enviar modelo",
+      "crmbrNoTemplates": "A API CRMBR não tem mensagens de modelo — use a API oficial da Meta para isso.",
       "aiNotConfigured": "A IA ainda não está configurada — ative-a em Configurações → Assistente de IA.",
       "draftFailed": "Não foi possível redigir uma resposta.",
       "draftEmpty": "O assistente não retornou uma resposta.",

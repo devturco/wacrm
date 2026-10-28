@@ -412,6 +412,7 @@
       "document": "Document",
       "voiceNote": "Voice note",
       "sendTemplate": "Send template",
+      "crmbrNoTemplates": "The CRMBR API has no message templates — use the official Meta API for those.",
       "aiNotConfigured": "AI isn't set up yet — enable it in Settings → AI Assistant.",
       "draftFailed": "Couldn't draft a reply.",
       "draftEmpty": "The assistant didn't return a reply.",
