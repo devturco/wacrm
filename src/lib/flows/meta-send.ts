@@ -3,12 +3,14 @@ import {
   sendInteractiveList,
   sendMediaMessage,
   sendTextMessage,
-  type InteractiveButton,
-  type InteractiveListSection,
-  type MediaKind,
+  resolveProviderConnection,
+} from '@/lib/whatsapp/providers'
+import type {
+  InteractiveButton,
+  InteractiveListSection,
+  MediaKind,
 } from '@/lib/whatsapp/meta-api'
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
-import { decrypt } from '@/lib/whatsapp/encryption'
 import {
   phoneVariants,
   isRecipientNotAllowedError,
@@ -21,7 +23,7 @@ import { getT } from '@/lib/i18n/translate'
 const t = getT('LibErrors')
 
 // ------------------------------------------------------------
-// Flows-side Meta sender (interactive variants).
+// Flows-side sender (interactive variants).
 //
 // Mirrors src/lib/automations/meta-send.ts (engineSendText /
 // engineSendTemplate) but emits interactive button + list messages.
@@ -30,34 +32,15 @@ const t = getT('LibErrors')
 // phone-variant retry + DB persistence are obvious extraction
 // candidates into a shared base.
 //
+// The actual provider call goes through the dispatcher
+// (`@/lib/whatsapp/providers`), so a flow can run through Meta or
+// through the CRMBR (non-official) API without this file knowing
+// which one is active.
+//
 // PR #1 ships this in isolation: callers don't exist yet. PR #2
 // brings the flow runner online and wires it up. Shipping it now
 // keeps the foundation PR self-contained and unit-testable.
 // ------------------------------------------------------------
-
-/**
- * Resolve the account's Meta sending credentials: the phone number id
- * plus the DECRYPTED access token from `whatsapp_config`. The single
- * home for that decrypt step — callers outside this file (the AI
- * auto-reply's typing indicator) reuse it rather than growing a copy.
- */
-export async function loadAccountMetaCredentials(
-  db: ReturnType<typeof supabaseAdmin>,
-  accountId: string,
-): Promise<{ phoneNumberId: string; accessToken: string }> {
-  const { data: config, error: configErr } = await db
-    .from('whatsapp_config')
-    .select('phone_number_id, access_token')
-    .eq('account_id', accountId)
-    .single()
-  if (configErr || !config) {
-    throw new Error(t('send.notConfigured'))
-  }
-  return {
-    phoneNumberId: config.phone_number_id,
-    accessToken: decrypt(config.access_token),
-  }
-}
 
 interface SendTextEngineArgs {
   /** Account-level tenancy key. Drives contact + whatsapp_config
@@ -118,15 +101,10 @@ export async function engineSendText(
   }
   const sanitized = sendTarget.target
 
-  const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
-    db,
-    args.accountId,
-  )
+  const conn = await resolveProviderConnection(db, args.accountId)
 
   const attempt = async (phone: string): Promise<string> => {
-    const r = await sendTextMessage({
-      phoneNumberId,
-      accessToken,
+    const r = await sendTextMessage(conn, {
       to: phone,
       text: args.text,
     })
@@ -232,15 +210,10 @@ export async function engineSendMedia(
   }
   const sanitized = sendTarget.target
 
-  const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
-    db,
-    args.accountId,
-  )
+  const conn = await resolveProviderConnection(db, args.accountId)
 
   const attempt = async (phone: string): Promise<string> => {
-    const r = await sendMediaMessage({
-      phoneNumberId,
-      accessToken,
+    const r = await sendMediaMessage(conn, {
       to: phone,
       kind: args.kind,
       link: args.link,
@@ -339,7 +312,7 @@ interface SendInteractiveListEngineArgs {
 export async function engineSendInteractiveButtons(
   args: SendInteractiveButtonsEngineArgs,
 ): Promise<{ whatsapp_message_id: string }> {
-  return sendInteractiveViaMeta({ ...args, kind: 'buttons' })
+  return sendInteractiveViaProvider({ ...args, kind: 'buttons' })
 }
 
 /**
@@ -349,19 +322,19 @@ export async function engineSendInteractiveButtons(
 export async function engineSendInteractiveList(
   args: SendInteractiveListEngineArgs,
 ): Promise<{ whatsapp_message_id: string }> {
-  return sendInteractiveViaMeta({ ...args, kind: 'list' })
+  return sendInteractiveViaProvider({ ...args, kind: 'list' })
 }
 
 type SendInput =
   | (SendInteractiveButtonsEngineArgs & { kind: 'buttons' })
   | (SendInteractiveListEngineArgs & { kind: 'list' })
 
-async function sendInteractiveViaMeta(
+async function sendInteractiveViaProvider(
   input: SendInput,
 ): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
 
-  // Scope the contact + whatsapp_config lookups by account_id —
+  // Scope the contact + provider lookups by account_id —
   // same defense-in-depth rationale as automations/meta-send.ts.
   // Migration 017 moved both tables to account-scoped tenancy.
   const { data: contact, error: contactErr } = await db
@@ -388,16 +361,11 @@ async function sendInteractiveViaMeta(
   }
   const sanitized = sendTarget.target
 
-  const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
-    db,
-    input.accountId,
-  )
+  const conn = await resolveProviderConnection(db, input.accountId)
 
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'buttons') {
-      const r = await sendInteractiveButtons({
-        phoneNumberId,
-        accessToken,
+      const r = await sendInteractiveButtons(conn, {
         to: phone,
         bodyText: input.bodyText,
         buttons: input.buttons,
@@ -406,9 +374,7 @@ async function sendInteractiveViaMeta(
       })
       return r.messageId
     }
-    const r = await sendInteractiveList({
-      phoneNumberId,
-      accessToken,
+    const r = await sendInteractiveList(conn, {
       to: phone,
       bodyText: input.bodyText,
       buttonLabel: input.buttonLabel,

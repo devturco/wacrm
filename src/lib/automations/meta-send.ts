@@ -1,10 +1,14 @@
-import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import {
+  sendTextMessage,
+  sendTemplateMessage,
+  resolveProviderConnection,
+  assertProviderSupportsMessageType,
+} from '@/lib/whatsapp/providers'
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
 import {
   engineSendInteractiveButtons,
   engineSendInteractiveList,
 } from '@/lib/flows/meta-send'
-import { decrypt } from '@/lib/whatsapp/encryption'
 import {
   phoneVariants,
   isRecipientNotAllowedError,
@@ -22,7 +26,7 @@ import { getT } from '@/lib/i18n/translate'
 const t = getT('LibErrors')
 
 // ------------------------------------------------------------
-// Automation-side Meta sender.
+// Automation-side sender.
 //
 // Mirrors the logic in src/app/api/whatsapp/send/route.ts but uses
 // the service-role client (engine has no cookies) and accepts the
@@ -30,6 +34,10 @@ const t = getT('LibErrors')
 // on hand. Kept here (rather than refactoring the user-facing send
 // route) to avoid risk to the working manual-send path — they can
 // converge in a later refactor.
+//
+// The provider call goes through the dispatcher
+// (`@/lib/whatsapp/providers`), so the engine follows whichever API
+// the account has active without this file knowing about either.
 // ------------------------------------------------------------
 
 interface SendTextArgs {
@@ -148,16 +156,7 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
   }
   const sanitized = sendTarget.target
 
-  const { data: config, error: configErr } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', input.accountId)
-    .single()
-  if (configErr || !config) {
-    throw new Error(t('send.notConfigured'))
-  }
-
-  const accessToken = decrypt(config.access_token)
+  const conn = await resolveProviderConnection(db, input.accountId)
 
   // Local template row. A missing row is fine: the send still goes
   // out, we just can't reconstruct the text the customer saw.
@@ -173,11 +172,15 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
         ).row
       : null
 
+  // The CRMBR (non-official) API has no template endpoint — refuse
+  // before the send, with a message that names the alternative.
+  if (input.kind === 'template') {
+    assertProviderSupportsMessageType(conn, 'template')
+  }
+
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'template') {
-      const r = await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const r = await sendTemplateMessage(conn, {
         to: phone,
         templateName: input.templateName,
         language: input.language,
@@ -186,9 +189,7 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
       })
       return r.messageId
     }
-    const r = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await sendTextMessage(conn, {
       to: phone,
       text: input.text,
     })

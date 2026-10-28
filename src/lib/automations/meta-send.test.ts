@@ -1,9 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ProviderConnection } from '@/lib/whatsapp/providers/types'
 
 const state = vi.hoisted(() => ({
   templateRows: [] as unknown[],
   insertedMessage: null as Record<string, unknown> | null,
 }))
+
+// The engine resolves the ACTIVE provider through the dispatcher.
+// Only the resolution is mocked here — the dispatcher itself (and the
+// Meta adapter behind it) stays real, so these tests keep asserting
+// the exact Graph payload that leaves the app.
+const providerMocks = vi.hoisted(() => ({
+  resolveProviderConnection: vi.fn(async (): Promise<ProviderConnection> => ({
+    provider: 'meta',
+    phoneNumberId: 'pn-1',
+    accessToken: 'token',
+  })),
+}))
+
+vi.mock('@/lib/whatsapp/providers', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/whatsapp/providers')>()
+  return {
+    ...actual,
+    resolveProviderConnection: providerMocks.resolveProviderConnection,
+  }
+})
 
 vi.mock('@/lib/whatsapp/encryption', () => ({
   decrypt: (v: string) => v,
@@ -44,7 +66,7 @@ vi.mock('./admin-client', () => ({
   }),
 }))
 
-import { engineSendTemplate } from './meta-send'
+import { engineSendTemplate, engineSendText } from './meta-send'
 
 type FetchResult = { ok: boolean; json: () => Promise<unknown> }
 
@@ -189,5 +211,39 @@ describe('engineSendTemplate — templates without a header keep their payload',
       language: { code: 'en_US' },
       components: [BODY_COMPONENT],
     })
+  })
+})
+
+describe('engineSendText — provider dispatch', () => {
+  it('resolves the provider connection instead of the Meta credentials', async () => {
+    await engineSendText({
+      accountId: 'acct-1',
+      userId: 'user-1',
+      conversationId: 'cv-1',
+      contactId: 'ct-1',
+      text: 'hi',
+    })
+
+    expect(providerMocks.resolveProviderConnection).toHaveBeenCalled()
+    // The dispatcher handed the resolved connection to Meta: the Graph
+    // call went out with the phone number id it carries.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/pn-1/messages')
+  })
+})
+
+describe('engineSendTemplate — the CRMBR provider has no templates', () => {
+  it('refuses the send instead of degrading it to plain text', async () => {
+    providerMocks.resolveProviderConnection.mockResolvedValueOnce({
+      provider: 'whatsmiau',
+      instanceName: 'Atendimento01',
+      apiKey: 'key-1',
+      baseUrl: 'https://api.whatsmiau.dev/v2',
+    })
+
+    await expect(engineSendTemplate(SEND_ARGS)).rejects.toThrow(
+      /does not support message templates/,
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

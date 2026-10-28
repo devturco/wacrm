@@ -8,10 +8,11 @@ const h = vi.hoisted(() => ({
   retrieveKnowledge: vi.fn(),
   generateReply: vi.fn(),
   engineSendText: vi.fn(),
-  loadAccountMetaCredentials: vi.fn(),
+  resolveProviderConnection: vi.fn(),
   sendTypingIndicator: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
+    contact: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
     claim: true as boolean,
     updatePayload: null as Record<string, unknown> | null,
@@ -26,9 +27,9 @@ vi.mock('./knowledge', () => ({ retrieveKnowledge: h.retrieveKnowledge }))
 vi.mock('./generate', () => ({ generateReply: h.generateReply }))
 vi.mock('@/lib/flows/meta-send', () => ({
   engineSendText: h.engineSendText,
-  loadAccountMetaCredentials: h.loadAccountMetaCredentials,
 }))
-vi.mock('@/lib/whatsapp/meta-api', () => ({
+vi.mock('@/lib/whatsapp/providers', () => ({
+  resolveProviderConnection: h.resolveProviderConnection,
   sendTypingIndicator: h.sendTypingIndicator,
 }))
 vi.mock('./admin-client', () => ({
@@ -54,6 +55,19 @@ vi.mock('./admin-client', () => ({
             Promise.resolve({ data: h.state.latestInbound, error: null }),
         }
         return chain
+      }
+      if (table === 'contacts') {
+        // .select().eq().eq().maybeSingle() → the recipient's address
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: () =>
+                  Promise.resolve({ data: h.state.contact, error: null }),
+              }),
+            }),
+          }),
+        }
       }
       // conversations
       return {
@@ -108,6 +122,11 @@ beforeEach(() => {
     ai_autoreply_disabled: false,
     ai_reply_count: 0,
   }
+  h.state.contact = {
+    id: 'contact-1',
+    phone: '15551234567',
+    wa_user_id: null,
+  }
   h.state.autoResponders = []
   h.state.claim = true
   h.state.updatePayload = null
@@ -118,7 +137,8 @@ beforeEach(() => {
   h.retrieveKnowledge.mockResolvedValue([])
   h.generateReply.mockResolvedValue({ text: 'Hello!', handoff: false })
   h.engineSendText.mockResolvedValue({ whatsapp_message_id: 'm1' })
-  h.loadAccountMetaCredentials.mockResolvedValue({
+  h.resolveProviderConnection.mockResolvedValue({
+    provider: 'meta',
     phoneNumberId: 'pn-1',
     accessToken: 'tok',
   })
@@ -240,21 +260,38 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 describe('dispatchInboundToAiReply — typing indicator (#527)', () => {
   it('shows "typing…" on the inbound wamid before calling the LLM', async () => {
     await dispatchInboundToAiReply(ARGS)
-    expect(h.loadAccountMetaCredentials).toHaveBeenCalledWith(
-      expect.anything(),
-      'acct-1',
-    )
+    expect(h.resolveProviderConnection).toHaveBeenCalled()
     expect(h.sendTypingIndicator).toHaveBeenCalledTimes(1)
-    expect(h.sendTypingIndicator).toHaveBeenCalledWith({
-      phoneNumberId: 'pn-1',
-      accessToken: 'tok',
-      messageId: 'wamid.inbound-1',
-    })
+    expect(h.sendTypingIndicator).toHaveBeenCalledWith(
+      { provider: 'meta', phoneNumberId: 'pn-1', accessToken: 'tok' },
+      { to: '15551234567', messageId: 'wamid.inbound-1' },
+    )
     // Ordering: the indicator goes out while the customer waits on the
     // model, not after the reply is already generated.
     const typingOrder = h.sendTypingIndicator.mock.invocationCallOrder[0]
     const llmOrder = h.generateReply.mock.invocationCallOrder[0]
     expect(typingOrder).toBeLessThan(llmOrder)
+    expect(h.engineSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('addresses the indicator at the CRMBR provider too', async () => {
+    h.resolveProviderConnection.mockResolvedValue({
+      provider: 'whatsmiau',
+      instanceName: 'Atendimento01',
+      apiKey: 'key-1',
+      baseUrl: 'https://api.whatsmiau.dev/v2',
+    })
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.sendTypingIndicator).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'whatsmiau' }),
+      { to: '15551234567', messageId: 'wamid.inbound-1' },
+    )
+  })
+
+  it('skips the indicator when the contact has no addressable target', async () => {
+    h.state.contact = { id: 'contact-1', phone: '', wa_user_id: null }
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.sendTypingIndicator).not.toHaveBeenCalled()
     expect(h.engineSendText).toHaveBeenCalledTimes(1)
   })
 
@@ -275,7 +312,7 @@ describe('dispatchInboundToAiReply — typing indicator (#527)', () => {
 
   it('still sends the reply when the WhatsApp credentials cannot be loaded', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    h.loadAccountMetaCredentials.mockRejectedValue(
+    h.resolveProviderConnection.mockRejectedValue(
       new Error('WhatsApp not configured for this account'),
     )
     await dispatchInboundToAiReply(ARGS)
@@ -289,7 +326,7 @@ describe('dispatchInboundToAiReply — typing indicator (#527)', () => {
     void _omit
     await dispatchInboundToAiReply(legacyArgs)
     expect(h.sendTypingIndicator).not.toHaveBeenCalled()
-    expect(h.loadAccountMetaCredentials).not.toHaveBeenCalled()
+    expect(h.resolveProviderConnection).not.toHaveBeenCalled()
     expect(h.engineSendText).toHaveBeenCalledTimes(1)
   })
 
@@ -297,7 +334,7 @@ describe('dispatchInboundToAiReply — typing indicator (#527)', () => {
     h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyEnabled: false }))
     await dispatchInboundToAiReply(ARGS)
     expect(h.sendTypingIndicator).not.toHaveBeenCalled()
-    expect(h.loadAccountMetaCredentials).not.toHaveBeenCalled()
+    expect(h.resolveProviderConnection).not.toHaveBeenCalled()
   })
 })
 

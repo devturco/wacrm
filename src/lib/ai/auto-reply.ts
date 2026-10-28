@@ -7,11 +7,12 @@ import { buildSystemPrompt } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
+import { engineSendText } from '@/lib/flows/meta-send'
 import {
-  engineSendText,
-  loadAccountMetaCredentials,
-} from '@/lib/flows/meta-send'
-import { sendTypingIndicator } from '@/lib/whatsapp/meta-api'
+  resolveProviderConnection,
+  sendTypingIndicator,
+} from '@/lib/whatsapp/providers'
+import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 
 interface DispatchArgs {
@@ -119,7 +120,10 @@ export async function dispatchInboundToAiReply(
     // nothing to undo on the handoff / no-text path. Strictly
     // best-effort: a failed indicator must never cost us the reply.
     if (inboundMessageId) {
-      await showTypingIndicator(db, accountId, inboundMessageId)
+      const recipient = await resolveRecipientTarget(db, accountId, contactId)
+      if (recipient) {
+        await showTypingIndicator(db, accountId, inboundMessageId, recipient)
+      }
     }
 
     // Ground the reply in the account's knowledge base (best-effort).
@@ -240,6 +244,29 @@ async function hasNewerInbound(
 }
 
 /**
+ * Where to address a typing indicator.
+ *
+ * Meta's indicator rides the inbound message id and ignores the
+ * recipient, but the CRMBR (non-official) provider needs the
+ * customer's number — so the contact has to be addressable. A contact
+ * with neither a phone nor a WhatsApp user ID gets no indicator; the
+ * reply itself still goes out.
+ */
+async function resolveRecipientTarget(
+  db: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+  contactId: string,
+): Promise<string | null> {
+  const { data: contact } = await db
+    .from('contacts')
+    .select('phone, wa_user_id')
+    .eq('id', contactId)
+    .eq('account_id', accountId)
+    .maybeSingle()
+  return resolveContactSendTarget(contact)?.target ?? null
+}
+
+/**
  * Best-effort "typing…" for the inbound we're about to answer. Swallows
  * every failure (no WhatsApp config, bad token, Meta 4xx) with a warning
  * — the indicator is cosmetic, the reply is not.
@@ -248,15 +275,12 @@ async function showTypingIndicator(
   db: ReturnType<typeof supabaseAdmin>,
   accountId: string,
   inboundMessageId: string,
+  to: string,
 ): Promise<void> {
   try {
-    const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
-      db,
-      accountId,
-    )
-    await sendTypingIndicator({
-      phoneNumberId,
-      accessToken,
+    const conn = await resolveProviderConnection(db, accountId)
+    await sendTypingIndicator(conn, {
+      to,
       messageId: inboundMessageId,
     })
   } catch (err) {
