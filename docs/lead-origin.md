@@ -26,6 +26,19 @@ A tag faz três coisas:
 A tag não cria contato, não injeta nada na página e não envia nada
 além da origem.
 
+Dois detalhes que só aparecem com um navegador de verdade:
+
+- **A tag roda no site do cliente**, não no CRM. Por isso ela fala com
+  o CRM pelo endereço de onde foi servida — o atributo `src` da própria
+  tag — e nunca por um caminho relativo, que resolveria no site do
+  cliente.
+- **O clique no WhatsApp espera a resposta.** O código que amarra o
+  clique à primeira mensagem viaja dentro do texto que o cliente
+  envia (`ref A7X9K2M4`), e esse texto só existe depois que a origem
+  foi gravada. Então o clique espera a captura responder e só então
+  abre o WhatsApp. Se a captura falhar, o link abre do mesmo jeito,
+  sem o código.
+
 ### 2. A amarração
 
 Quando o lead escreve, o CRM procura a origem pendente:
@@ -87,3 +100,8 @@ visitante é quem chama). O que ele NÃO faz:
 - não cria contato;
 - não responde o conteúdo gravado — devolve só o código do toque;
 - tem limite de requisições por chave.
+
+O endpoint responde **cross-origin** — é para isso que ele existe: o
+navegador do visitante está no site do cliente. A autenticação é a
+capture key, nunca um cookie (`credentials: 'omit'`), e o que trava o
+uso de verdade é a lista de domínios.

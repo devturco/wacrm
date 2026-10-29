@@ -8,6 +8,16 @@
  *
  * It creates no contact and sends nothing but the origin. It
  * injects nothing into the DOM.
+ *
+ * TWO THINGS THIS SCRIPT GETS RIGHT THAT ARE EASY TO GET WRONG:
+ *
+ * 1. The script runs on the CLIENT's site, so a relative URL would
+ *    point at the client, not at the CRM. The endpoint is the place
+ *    the script was served from.
+ * 2. The code that ties the click to the first message rides INSIDE
+ *    the prefilled message (`ref A7X9K2M4`), because that is what
+ *    the CRM reads when the message arrives. A URL parameter would
+ *    never make it there.
  */
 export const TRACK_SCRIPT = `(function () {
   'use strict';
@@ -56,8 +66,8 @@ export const TRACK_SCRIPT = `(function () {
       if (read) touch[UTM[i]] = read;
     }
     for (var j = 0; j < CLICKS.length; j++) {
-      var click = params.get(CLICKS[j]);
-      if (click) touch.click_ids[CLICKS[j]] = click;
+      var read = params.get(CLICKS[j]);
+      if (read) touch.click_ids[CLICKS[j]] = read;
     }
     touch.landing_path = params.get('landing_path');
     touch.referrer = params.get('referrer');
@@ -85,13 +95,29 @@ export const TRACK_SCRIPT = `(function () {
     return params.toString();
   }
 
-  function key() {
-    var script = document.currentScript ||
+  function scriptElement() {
+    return document.currentScript ||
       (function () {
         var all = document.getElementsByTagName('script');
         return all[all.length - 1];
       })();
+  }
+
+  function key() {
+    var script = scriptElement();
     return script ? script.getAttribute('data-key') : null;
+  }
+
+  // Where the API lives. The script runs on the CLIENT's site, so a
+  // relative URL would point at the client — the endpoint is where
+  // the script itself was served from.
+  function apiBase() {
+    var script = scriptElement();
+    var src = script ? script.getAttribute('src') : null;
+    if (!src) return null;
+    var base = src.split('?')[0].split('#')[0].replace(/\\/api\\/leads\\/track\\.js$/, '');
+    if (base.indexOf('http') !== 0 && base.indexOf('//') !== 0) return null;
+    return base;
   }
 
   function referrer() {
@@ -100,7 +126,9 @@ export const TRACK_SCRIPT = `(function () {
   }
 
   var captureKey = key();
-  if (!captureKey) return;
+  var endpoint = apiBase();
+  if (!captureKey || !endpoint) return;
+  var CAPTURE_URL = endpoint + '/api/leads/capture';
 
   var now = touchFromUrl(location);
   now.referrer = referrer();
@@ -115,9 +143,41 @@ export const TRACK_SCRIPT = `(function () {
   }
   var first = decodeTouch(stored);
 
+  // The code goes INSIDE the prefilled message: the CRM reads it
+  // from the text the customer sends. It is "ref A7X9K2M4" — a
+  // space, not an equals sign.
+  function withToken(href, token) {
+    var code = encodeURIComponent('ref ' + token);
+    var hashIndex = href.indexOf('#');
+    var hash = hashIndex === -1 ? '' : href.slice(hashIndex);
+    var base = hashIndex === -1 ? href : href.slice(0, hashIndex);
+    var queryIndex = base.indexOf('?');
+    var path = queryIndex === -1 ? base : base.slice(0, queryIndex);
+    var query = queryIndex === -1 ? '' : base.slice(queryIndex + 1);
+
+    // A "wa:" link carries the message as "?text=".
+    if (path.indexOf('wa:') === 0) {
+      return path + '?text=' + code + hash;
+    }
+
+    // wa.me and api.whatsapp.com: append the code to the message
+    // that is already there.
+    var parts = query ? query.split('&') : [];
+    var found = false;
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].indexOf('text=') === 0) {
+        parts[i] = parts[i] + '%20' + code;
+        found = true;
+      }
+    }
+    if (!found) parts.push('text=' + code);
+    return path + '?' + parts.join('&') + hash;
+  }
+
+  // The token, or null when the capture did not answer.
   function send(action, channel, phone) {
     try {
-      fetch('/api/leads/capture', {
+      return fetch(CAPTURE_URL, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -135,28 +195,25 @@ export const TRACK_SCRIPT = `(function () {
       }).then(function (res) {
         return res.ok ? res.json() : null;
       }).then(function (body) {
-        if (!body || !body.leadToken) return;
-        var token = body.leadToken;
-        var links = document.querySelectorAll(
-          'a[href*="wa.me"], a[href*="api.whatsapp.com"], a[href^="wa:"], ' +
-          'a[href*="instagram.com"], a[href*="tiktok.com"]'
-        );
-        for (var i = 0; i < links.length; i++) {
-          var href = links[i].getAttribute('href') || '';
-          if (href.indexOf('ref%20') !== -1 || href.indexOf('ref ') !== -1) continue;
-          links[i].setAttribute(
-            'data-lead-ref',
-            href + (href.indexOf('?') === -1 ? '?' : '&') + 'ref=' + token
-          );
-        }
-      }).catch(function () {});
-    } catch (err) {}
+        return body && body.leadToken ? body.leadToken : null;
+      }).catch(function () {
+        return null;
+      });
+    } catch (err) {
+      return Promise.resolve(null);
+    }
   }
 
   function channelOf(href) {
     if (href.indexOf('instagram.com') !== -1) return 'instagram_dm';
     if (href.indexOf('tiktok.com') !== -1) return 'tiktok_dm';
     return 'whatsapp';
+  }
+
+  function isWhatsapp(href) {
+    return href.indexOf('wa.me') !== -1 ||
+      href.indexOf('api.whatsapp.com') !== -1 ||
+      href.indexOf('wa:') === 0;
   }
 
   function phoneOf() {
@@ -192,14 +249,36 @@ export const TRACK_SCRIPT = `(function () {
     }
     if (!node || !node.getAttribute) return;
     var href = node.getAttribute('href') || '';
-    var isSocial =
+    var social =
       href.indexOf('wa.me') !== -1 ||
       href.indexOf('api.whatsapp.com') !== -1 ||
       href.indexOf('wa:') === 0 ||
       href.indexOf('instagram.com') !== -1 ||
       href.indexOf('tiktok.com') !== -1;
-    if (!isSocial) return;
-    send('link_click', channelOf(href), phoneOf());
+    if (!social) return;
+
+    // Instagram and TikTok have no prefilled message: the code
+    // cannot ride along. There, the ad's own referral does the job.
+    if (!isWhatsapp(href)) {
+      send('link_click', channelOf(href), phoneOf());
+      return;
+    }
+
+    // The code has to be IN the message the customer sends, and the
+    // message only exists once the capture answers. So the click
+    // waits for the code and then goes.
+    event.preventDefault();
+    var blank = node.getAttribute('target') === '_blank';
+    send('link_click', 'whatsapp', phoneOf()).then(function (token) {
+      var url = token ? withToken(href, token) : href;
+      if (blank) {
+        var opened = window.open(url, '_blank');
+        if (opened) opened.opener = null;
+        else window.location.href = url;
+      } else {
+        window.location.href = url;
+      }
+    });
   }, true);
 })();
-`;
+`

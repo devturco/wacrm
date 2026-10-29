@@ -5,6 +5,11 @@
 > rodada no Supabase — sem ela, `lead_settings` e `lead_origins` não
 > existem e o módulo inteiro falha em runtime (a suíte passa, porque os
 > testes rodam contra o SQL em disco).
+>
+> **Correção pós-implementação:** o script e o endpoint público foram
+> ajustados para o caso cross-origin — o script roda no site do
+> cliente, não no CRM. Três defeitos que só apareceriam com um
+> navegador de verdade (ver o Step 6b da Task 3).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -2260,6 +2265,16 @@ export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
  *
  * It creates no contact and sends nothing but the origin. It
  * injects nothing into the DOM.
+ *
+ * TWO THINGS THIS SCRIPT GETS RIGHT THAT ARE EASY TO GET WRONG:
+ *
+ * 1. The script runs on the CLIENT's site, so a relative URL would
+ *    point at the client, not at the CRM. The endpoint is the place
+ *    the script was served from.
+ * 2. The code that ties the click to the first message rides INSIDE
+ *    the prefilled message (`ref A7X9K2M4`), because that is what
+ *    the CRM reads when the message arrives. A URL parameter would
+ *    never make it there.
  */
 export const TRACK_SCRIPT = `(function () {
   'use strict';
@@ -2308,8 +2323,8 @@ export const TRACK_SCRIPT = `(function () {
       if (read) touch[UTM[i]] = read;
     }
     for (var j = 0; j < CLICKS.length; j++) {
-      var click = params.get(CLICKS[j]);
-      if (click) touch.click_ids[CLICKS[j]] = click;
+      var read = params.get(CLICKS[j]);
+      if (read) touch.click_ids[CLICKS[j]] = read;
     }
     touch.landing_path = params.get('landing_path');
     touch.referrer = params.get('referrer');
@@ -2337,13 +2352,29 @@ export const TRACK_SCRIPT = `(function () {
     return params.toString();
   }
 
-  function key() {
-    var script = document.currentScript ||
+  function scriptElement() {
+    return document.currentScript ||
       (function () {
         var all = document.getElementsByTagName('script');
         return all[all.length - 1];
       })();
+  }
+
+  function key() {
+    var script = scriptElement();
     return script ? script.getAttribute('data-key') : null;
+  }
+
+  // Where the API lives. The script runs on the CLIENT's site, so a
+  // relative URL would point at the client — the endpoint is where
+  // the script itself was served from.
+  function apiBase() {
+    var script = scriptElement();
+    var src = script ? script.getAttribute('src') : null;
+    if (!src) return null;
+    var base = src.split('?')[0].split('#')[0].replace(/\\/api\\/leads\\/track\\.js$/, '');
+    if (base.indexOf('http') !== 0 && base.indexOf('//') !== 0) return null;
+    return base;
   }
 
   function referrer() {
@@ -2352,7 +2383,9 @@ export const TRACK_SCRIPT = `(function () {
   }
 
   var captureKey = key();
-  if (!captureKey) return;
+  var endpoint = apiBase();
+  if (!captureKey || !endpoint) return;
+  var CAPTURE_URL = endpoint + '/api/leads/capture';
 
   var now = touchFromUrl(location);
   now.referrer = referrer();
@@ -2362,14 +2395,46 @@ export const TRACK_SCRIPT = `(function () {
   // not overwrite it.
   var stored = readCookie();
   if (!stored) {
-    writeCookie(encodeTouch(now));
     stored = encodeTouch(now);
+    writeCookie(stored);
   }
   var first = decodeTouch(stored);
 
+  // The code goes INSIDE the prefilled message: the CRM reads it
+  // from the text the customer sends. It is "ref A7X9K2M4" — a
+  // space, not an equals sign.
+  function withToken(href, token) {
+    var code = encodeURIComponent('ref ' + token);
+    var hashIndex = href.indexOf('#');
+    var hash = hashIndex === -1 ? '' : href.slice(hashIndex);
+    var base = hashIndex === -1 ? href : href.slice(0, hashIndex);
+    var queryIndex = base.indexOf('?');
+    var path = queryIndex === -1 ? base : base.slice(0, queryIndex);
+    var query = queryIndex === -1 ? '' : base.slice(queryIndex + 1);
+
+    // A "wa:" link carries the message as "?text=".
+    if (path.indexOf('wa:') === 0) {
+      return path + '?text=' + code + hash;
+    }
+
+    // wa.me and api.whatsapp.com: append the code to the message
+    // that is already there.
+    var parts = query ? query.split('&') : [];
+    var found = false;
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].indexOf('text=') === 0) {
+        parts[i] = parts[i] + '%20' + code;
+        found = true;
+      }
+    }
+    if (!found) parts.push('text=' + code);
+    return path + '?' + parts.join('&') + hash;
+  }
+
+  // The token, or null when the capture did not answer.
   function send(action, channel, phone) {
     try {
-      fetch('/api/leads/capture', {
+      return fetch(CAPTURE_URL, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -2387,28 +2452,25 @@ export const TRACK_SCRIPT = `(function () {
       }).then(function (res) {
         return res.ok ? res.json() : null;
       }).then(function (body) {
-        if (!body || !body.leadToken) return;
-        var token = body.leadToken;
-        var links = document.querySelectorAll(
-          'a[href*="wa.me"], a[href*="api.whatsapp.com"], a[href^="wa:"], ' +
-          'a[href*="instagram.com"], a[href*="tiktok.com"]'
-        );
-        for (var i = 0; i < links.length; i++) {
-          var href = links[i].getAttribute('href') || '';
-          if (href.indexOf('ref%20') !== -1 || href.indexOf('ref ') !== -1) continue;
-          links[i].setAttribute(
-            'data-lead-ref',
-            href + (href.indexOf('?') === -1 ? '?' : '&') + 'ref=' + token
-          );
-        }
-      }).catch(function () {});
-    } catch (err) {}
+        return body && body.leadToken ? body.leadToken : null;
+      }).catch(function () {
+        return null;
+      });
+    } catch (err) {
+      return Promise.resolve(null);
+    }
   }
 
   function channelOf(href) {
     if (href.indexOf('instagram.com') !== -1) return 'instagram_dm';
     if (href.indexOf('tiktok.com') !== -1) return 'tiktok_dm';
     return 'whatsapp';
+  }
+
+  function isWhatsapp(href) {
+    return href.indexOf('wa.me') !== -1 ||
+      href.indexOf('api.whatsapp.com') !== -1 ||
+      href.indexOf('wa:') === 0;
   }
 
   function phoneOf() {
@@ -2444,14 +2506,36 @@ export const TRACK_SCRIPT = `(function () {
     }
     if (!node || !node.getAttribute) return;
     var href = node.getAttribute('href') || '';
-    var isSocial =
+    var social =
       href.indexOf('wa.me') !== -1 ||
       href.indexOf('api.whatsapp.com') !== -1 ||
       href.indexOf('wa:') === 0 ||
       href.indexOf('instagram.com') !== -1 ||
       href.indexOf('tiktok.com') !== -1;
-    if (!isSocial) return;
-    send('link_click', channelOf(href), phoneOf());
+    if (!social) return;
+
+    // Instagram and TikTok have no prefilled message: the code
+    // cannot ride along. There, the ad's own referral does the job.
+    if (!isWhatsapp(href)) {
+      send('link_click', channelOf(href), phoneOf());
+      return;
+    }
+
+    // The code has to be IN the message the customer sends, and the
+    // message only exists once the capture answers. So the click
+    // waits for the code and then goes.
+    event.preventDefault();
+    var blank = node.getAttribute('target') === '_blank';
+    send('link_click', 'whatsapp', phoneOf()).then(function (token) {
+      var url = token ? withToken(href, token) : href;
+      if (blank) {
+        var opened = window.open(url, '_blank');
+        if (opened) opened.opener = null;
+        else window.location.href = url;
+      } else {
+        window.location.href = url;
+      }
+    });
   }, true);
 })();
 `
@@ -2486,9 +2570,11 @@ import { normalizePhone, parseInternationalPhone } from '@/lib/whatsapp/phone-ut
 
 import { supabaseAdmin } from '@/lib/leads/admin-client'
 import { generateUniqueLeadToken } from '@/lib/leads/origin'
-import { createLeadOriginStore, createLeadSettingsStore } from '@/lib/leads/store'
 import {
-  emptyTouch,
+  createLeadOriginStore,
+  createLeadSettingsStore,
+} from '@/lib/leads/store'
+import {
   isDifferentTouch,
   isEmptyTouch,
   normalizeTouch,
@@ -2568,8 +2654,44 @@ function hostAllowed(host: string | null, allowedHosts: string[]): boolean {
   return allowedHosts.some((allowed) => allowed.toLowerCase() === host)
 }
 
+/**
+ * The CORS headers.
+ *
+ * The script runs on the CLIENT's site, so the capture is a
+ * cross-origin POST: without these the browser blocks the call
+ * before it leaves the page. The origin is reflected, not fixed,
+ * because every account has its own site — and the endpoint is
+ * public by design: it authenticates with the capture key, never
+ * with a cookie (`credentials: 'omit'`).
+ */
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get('origin')
+  return {
+    'Access-Control-Allow-Origin': origin ?? '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'content-type, x-capture-key',
+    'Access-Control-Max-Age': '600',
+    Vary: 'Origin',
+  }
+}
+
+/** The browser asks before the real call. */
+export function OPTIONS(request: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(request) })
+}
+
+/** The answer the browser of the visitor is allowed to read. */
+function withCors(response: Response, request: Request): Response {
+  for (const [name, value] of Object.entries(corsHeaders(request))) {
+    response.headers.set(name, value)
+  }
+  return response
+}
+
 /** Validate the untrusted body. */
-function parseBody(raw: unknown): { ok: true; body: CaptureBody } | { ok: false; fields: string[] } {
+function parseBody(
+  raw: unknown
+): { ok: true; body: CaptureBody } | { ok: false; fields: string[] } {
   const fields: string[] = []
   if (!isRecord(raw)) return { ok: false, fields: ['body'] }
 
@@ -2578,7 +2700,10 @@ function parseBody(raw: unknown): { ok: true; body: CaptureBody } | { ok: false;
     fields.push('action')
   }
   const channel = raw.channel
-  if (typeof channel !== 'string' || !CHANNELS.includes(channel as CaptureChannel)) {
+  if (
+    typeof channel !== 'string' ||
+    !CHANNELS.includes(channel as CaptureChannel)
+  ) {
     fields.push('channel')
   }
   if (fields.length > 0) return { ok: false, fields }
@@ -2603,14 +2728,21 @@ function parseBody(raw: unknown): { ok: true; body: CaptureBody } | { ok: false;
  * The FIRST touch always gets a row. The "now" row only when it
  * brings something the first one did not (spec §5.2).
  */
-export function buildCaptureRows(first: TouchPayload, now: TouchPayload): TouchPayload[] {
+export function buildCaptureRows(
+  first: TouchPayload,
+  now: TouchPayload
+): TouchPayload[] {
   if (isEmptyTouch(first)) return [now]
   if (isEmptyTouch(now)) return [first]
   if (!isDifferentTouch(first, now)) return [first]
   return [first, now]
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
+  return withCors(await capture(request), request)
+}
+
+async function capture(request: Request): Promise<Response> {
   try {
     const captureKey = request.headers.get('x-capture-key')?.trim()
     if (!captureKey) {
@@ -2621,7 +2753,7 @@ export async function POST(request: Request) {
     // brute-force the account space.
     const ipLimit = checkRateLimit(
       `lead-capture:ip:${getClientIp(request)}`,
-      RATE_LIMITS.leadCapture,
+      RATE_LIMITS.leadCapture
     )
     if (!ipLimit.success) return rateLimitResponse(ipLimit)
 
@@ -2637,13 +2769,16 @@ export async function POST(request: Request) {
 
     const keyLimit = checkRateLimit(
       `lead-capture:key:${captureKey}`,
-      RATE_LIMITS.leadCapture,
+      RATE_LIMITS.leadCapture
     )
     if (!keyLimit.success) return rateLimitResponse(keyLimit)
 
     const host = requestHost(request)
     if (!hostAllowed(host, settings.allowed_hosts)) {
-      return NextResponse.json({ error: t('leads.hostNotAllowed') }, { status: 403 })
+      return NextResponse.json(
+        { error: t('leads.hostNotAllowed') },
+        { status: 403 }
+      )
     }
 
     const raw = await request.json().catch(() => null)
@@ -2651,7 +2786,7 @@ export async function POST(request: Request) {
     if (!parsed.ok) {
       return NextResponse.json(
         { error: t('leads.invalidPayload'), fields: parsed.fields },
-        { status: 400 },
+        { status: 400 }
       )
     }
 
@@ -2697,10 +2832,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ leadToken })
   } catch (err) {
     console.error('[leads/capture] could not record the origin:', err)
-    return NextResponse.json({ error: t('leads.captureFailed') }, { status: 500 })
+    return NextResponse.json(
+      { error: t('leads.captureFailed') },
+      { status: 500 }
+    )
   }
 }
 ```
+
+- [x] **Step 6b: Corrija o endpoint e o script para o caso cross-origin**
+
+O plano (e o spec) nasceram com a suposição de que o script roda na
+mesma origem do CRM. Ele roda no **site do cliente** — três defeitos
+que só aparecem em runtime, com o navegador de verdade:
+
+1. **A origem errada.** O script fazia `fetch('/api/leads/capture')`:
+   uma URL relativa resolve no site do cliente, e a captura nunca
+   chegava ao CRM. Agora o endpoint sai do atributo `src` do próprio
+   script — o lugar de onde ele foi servido.
+2. **Sem CORS.** Um POST cross-origin com `content-type: application/json`
+   dispara um *preflight*: sem `OPTIONS` e sem `Access-Control-Allow-Origin`,
+   o navegador bloqueia a chamada **antes** de ela sair da página.
+3. **O código não chegava à mensagem.** O script escrevia um atributo
+   `data-lead-ref` (que nada lia) com `ref=TOKEN` — e o inbound lê o
+   código do **texto** que o cliente envia (`ref A7X9K2M4`, com espaço).
+   Agora o clique no link do WhatsApp espera a captura responder e
+   navega para a URL com o código dentro do `text`.
+
+A captura do token é assíncrona e o clique navega na hora — sem
+esperar, o primeiro clique perderia o código. Por isso o clique é
+interceptado (`preventDefault`) e a navegação acontece depois da
+resposta. Se a captura falhar, o link original abre do mesmo jeito.
+
+Cobertura: `src/lib/leads/track-script.test.ts` (9 testes, com um DOM
+falsinho — sem jsdom e sem dependência nova) e dois testes de CORS em
+`src/app/api/leads/capture/route.test.ts`.
 
 - [x] **Step 7: Escreva `src/app/api/leads/track.js/route.ts`**
 

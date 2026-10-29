@@ -108,6 +108,40 @@ function hostAllowed(host: string | null, allowedHosts: string[]): boolean {
   return allowedHosts.some((allowed) => allowed.toLowerCase() === host);
 }
 
+/**
+ * The CORS headers.
+ *
+ * The script runs on the CLIENT's site, so the capture is a
+ * cross-origin POST: without these the browser blocks the call
+ * before it leaves the page. The origin is reflected, not fixed,
+ * because every account has its own site — and the endpoint is
+ * public by design: it authenticates with the capture key, never
+ * with a cookie (`credentials: 'omit'`).
+ */
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get('origin');
+  return {
+    'Access-Control-Allow-Origin': origin ?? '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'content-type, x-capture-key',
+    'Access-Control-Max-Age': '600',
+    Vary: 'Origin',
+  };
+}
+
+/** The browser asks before the real call. */
+export function OPTIONS(request: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
+}
+
+/** The answer the browser of the visitor is allowed to read. */
+function withCors(response: Response, request: Request): Response {
+  for (const [name, value] of Object.entries(corsHeaders(request))) {
+    response.headers.set(name, value);
+  }
+  return response;
+}
+
 /** Validate the untrusted body. */
 function parseBody(
   raw: unknown
@@ -158,7 +192,11 @@ export function buildCaptureRows(
   return [first, now];
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
+  return withCors(await capture(request), request);
+}
+
+async function capture(request: Request): Promise<Response> {
   try {
     const captureKey = request.headers.get('x-capture-key')?.trim();
     if (!captureKey) {

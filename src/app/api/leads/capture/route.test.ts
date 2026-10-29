@@ -56,7 +56,7 @@ vi.mock('@/lib/rate-limit', () => ({
     new Response(JSON.stringify({ error: 'rate limited' }), { status: 429 }),
 }));
 
-import { POST } from './route';
+import { OPTIONS, POST } from './route';
 
 function request(body: unknown, headers: Record<string, string> = {}) {
   return new Request('https://crm.example.com/api/leads/capture', {
@@ -197,5 +197,27 @@ describe('POST /api/leads/capture', () => {
     const body = (await res.json()) as { leadToken: string };
     expect(fake.inserts[0].lead_token).toBe(body.leadToken);
     expect(fake.inserts[1].lead_token).toBeNull();
+  });
+});
+
+describe('the cross-origin answer', () => {
+  it('answers the browser preflight', () => {
+    const res = OPTIONS(request(VALID));
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe(
+      'https://site.example.com'
+    );
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST');
+    expect(res.headers.get('access-control-allow-headers')).toContain(
+      'x-capture-key'
+    );
+  });
+
+  it('lets the browser of the visitor read the answer', async () => {
+    const res = await POST(request(VALID));
+    expect(res.headers.get('access-control-allow-origin')).toBe(
+      'https://site.example.com'
+    );
+    expect(res.headers.get('vary')).toContain('Origin');
   });
 });
