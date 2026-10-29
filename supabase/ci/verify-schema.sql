@@ -12,6 +12,8 @@
 -- build the schema", not a spec of it — asserting every column here
 -- would just be the migrations restated in a second place, drifting.
 DO $$
+DECLARE
+  missing_index TEXT;
 BEGIN
   -- The core tables, from 001.
   IF to_regclass('public.messages') IS NULL THEN
@@ -215,6 +217,45 @@ BEGIN
     RAISE EXCEPTION
       'redeem_invitation does not guard the lead tables — migration 067 did not apply';
   END IF;
+
+  -- 068 -- the performance indexes. A foreign key without an index
+  -- is a sequential scan of the whole child table every time the
+  -- parent row is deleted, and every one of these is created with
+  -- IF NOT EXISTS -- so a typo'd name applies cleanly and does
+  -- nothing. These are the ones the app leans on:
+  --
+  --   idx_lead_origins_contact         the contact cascade
+  --   idx_lead_origins_pending_phone   the capture path (hot)
+  --   idx_lead_settings_links_gin      the campaign link lookup
+  --   idx_messages_conversation_media_created   the media tabs
+  FOREACH missing_index IN ARRAY ARRAY[
+    'idx_contact_notes_contact',
+    'idx_contact_custom_values_field',
+    'idx_notifications_account',
+    'idx_notifications_conversation',
+    'idx_notifications_contact',
+    'idx_automation_pending_automation',
+    'idx_automation_pending_log',
+    'idx_automation_pending_contact',
+    'idx_automation_pending_parent_step',
+    'idx_automation_logs_contact',
+    'idx_broadcast_recipients_contact',
+    'idx_deals_contact',
+    'idx_deals_conversation',
+    'idx_flow_runs_contact',
+    'idx_flow_runs_conversation',
+    'idx_flow_runs_last_prompt',
+    'idx_account_invitations_account',
+    'idx_ai_usage_log_conversation',
+    'idx_lead_origins_contact',
+    'idx_lead_origins_pending_phone',
+    'idx_lead_settings_links_gin',
+    'idx_messages_conversation_media_created'
+  ] LOOP
+    IF to_regclass('public.' || missing_index) IS NULL THEN
+      RAISE EXCEPTION '% is missing — migration 068 did not apply', missing_index;
+    END IF;
+  END LOOP;
 
   RAISE NOTICE 'schema verification passed';
 END
