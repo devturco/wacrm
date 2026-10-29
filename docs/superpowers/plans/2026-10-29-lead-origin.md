@@ -1,6 +1,12 @@
 # Origem do Lead — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status (2026-10-29): as 7 tasks estão implementadas e commitadas.** A
+> migration `supabase/migrations/067_lead_origin.sql` ainda precisa ser
+> rodada no Supabase — sem ela, `lead_settings` e `lead_origins` não
+> existem e o módulo inteiro falha em runtime (a suíte passa, porque os
+> testes rodam contra o SQL em disco).
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Capturar de onde veio cada lead (anúncio, post, DM, site) e mostrar essa origem no card do contato, no painel do inbox e em Configurações.
 
@@ -75,7 +81,7 @@ docs/lead-origin.md                                   NOVA  — documentação
 - Produces: `redeem_invitation` recriada com `lead_settings` e `lead_origins` no `v_has_data`.
 - Consumes: nada (primeira tarefa).
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [x] **Step 1: Escreva o teste que falha**
 
 Crie `src/lib/leads/migration.test.ts`:
 
@@ -217,13 +223,13 @@ describe("redeem_invitation", () => {
 });
 ```
 
-- [ ] **Step 2: Rode o teste e veja falhar**
+- [x] **Step 2: Rode o teste e veja falhar**
 
 Run: `npx vitest run src/lib/leads/migration.test.ts`
 
 Expected: FAIL com `"Migration 067_lead_origin.sql not found"`.
 
-- [ ] **Step 3: Escreva a migration**
+- [x] **Step 3: Escreva a migration**
 
 Crie `supabase/migrations/067_lead_origin.sql`:
 
@@ -530,17 +536,17 @@ REVOKE ALL ON FUNCTION public.redeem_invitation(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.redeem_invitation(TEXT) TO authenticated;
 ```
 
-- [ ] **Step 4: Rode o teste e veja passar**
+- [x] **Step 4: Rode o teste e veja passar**
 
 Run: `npx vitest run src/lib/leads/migration.test.ts`
 
 Expected: PASS (todos os `it` verdes).
 
-- [ ] **Step 5: Avise o usuário que o SQL precisa ser rodado**
+- [x] **Step 5: Avise o usuário que o SQL precisa ser rodado**
 
 > A migration 067 está escrita. **Precisa rodar o `supabase/migrations/067_lead_origin.sql` no Supabase** antes de usar o módulo — sem as duas tabelas o app não grava origem.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add supabase/migrations/067_lead_origin.sql src/lib/leads/migration.test.ts
@@ -566,7 +572,7 @@ git commit -m "feat(leads): migration 067 — lead_settings + lead_origins"
 - Produces (`origin.ts`): `PHONE_MATCH_WINDOW_DAYS = 30`, `LeadOriginStore` (interface), `ReferralFacts`, `ResolveOriginInput`, `ResolveOriginResult`, `resolveOrigin(store, input)`, `generateUniqueLeadToken(store, accountId)`.
 - Consumes: nada (nenhuma tarefa anterior entrega código para esta).
 
-- [ ] **Step 1: Escreva o teste que falha — `src/lib/leads/token.test.ts`**
+- [x] **Step 1: Escreva o teste que falha — `src/lib/leads/token.test.ts`**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -656,7 +662,7 @@ describe("extractLeadToken", () => {
 });
 ```
 
-- [ ] **Step 2: Escreva o teste que falha — `src/lib/leads/utm.test.ts`**
+- [x] **Step 2: Escreva o teste que falha — `src/lib/leads/utm.test.ts`**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -802,7 +808,7 @@ describe("the key lists", () => {
 });
 ```
 
-- [ ] **Step 3: Escreva o teste que falha — `src/lib/leads/origin.test.ts`**
+- [x] **Step 3: Escreva o teste que falha — `src/lib/leads/origin.test.ts`**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1140,13 +1146,13 @@ describe("generateUniqueLeadToken", () => {
 });
 ```
 
-- [ ] **Step 4: Rode os três testes e veja falhar**
+- [x] **Step 4: Rode os três testes e veja falhar**
 
 Run: `npx vitest run src/lib/leads/token.test.ts src/lib/leads/utm.test.ts src/lib/leads/origin.test.ts`
 
 Expected: FAIL com "Cannot find module './token'" (e idem para `./utm` e `./origin`).
 
-- [ ] **Step 5: Escreva `src/lib/leads/types.ts`**
+- [x] **Step 5: Escreva `src/lib/leads/types.ts`**
 
 ```ts
 /**
@@ -1233,7 +1239,7 @@ export interface LeadSettings {
 }
 ```
 
-- [ ] **Step 6: Escreva `src/lib/leads/token.ts`**
+- [x] **Step 6: Escreva `src/lib/leads/token.ts`**
 
 ```ts
 /**
@@ -1318,7 +1324,7 @@ export function extractLeadToken(
 }
 ```
 
-- [ ] **Step 7: Escreva `src/lib/leads/utm.ts`**
+- [x] **Step 7: Escreva `src/lib/leads/utm.ts`**
 
 ```ts
 /**
@@ -1559,7 +1565,7 @@ export function decodeFirstTouch(value: string): FirstTouchPayload {
 }
 ```
 
-- [ ] **Step 8: Escreva `src/lib/leads/origin.ts`**
+- [x] **Step 8: Escreva `src/lib/leads/origin.ts`**
 
 ```ts
 /**
@@ -1809,13 +1815,13 @@ export async function generateUniqueLeadToken(
 }
 ```
 
-- [ ] **Step 9: Rode os testes e veja passar**
+- [x] **Step 9: Rode os testes e veja passar**
 
 Run: `npx vitest run src/lib/leads/token.test.ts src/lib/leads/utm.test.ts src/lib/leads/origin.test.ts`
 
 Expected: PASS — 3 arquivos, todos os `it` verdes.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/lib/leads
@@ -1841,7 +1847,7 @@ git commit -m "feat(leads): token, utm e resolveOrigin — a amarração da orig
 - Produces: `POST /api/leads/capture` → `200 { leadToken }`, `404`, `403`, `429`, `400`.
 - Produces: `GET /api/leads/track.js` → `application/javascript`.
 
-- [ ] **Step 1: Escreva o teste que falha — `src/app/api/leads/capture/route.test.ts`**
+- [x] **Step 1: Escreva o teste que falha — `src/app/api/leads/capture/route.test.ts`**
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -2003,13 +2009,13 @@ describe("POST /api/leads/capture", () => {
 });
 ```
 
-- [ ] **Step 2: Rode o teste e veja falhar**
+- [x] **Step 2: Rode o teste e veja falhar**
 
 Run: `npx vitest run src/app/api/leads/capture/route.test.ts`
 
 Expected: FAIL com "Cannot find module '@/lib/leads/admin-client'" (ou "Cannot find module './route'").
 
-- [ ] **Step 3: Escreva `src/lib/leads/admin-client.ts`**
+- [x] **Step 3: Escreva `src/lib/leads/admin-client.ts`**
 
 ```ts
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -2036,7 +2042,7 @@ export function supabaseAdmin(): SupabaseClient {
 }
 ```
 
-- [ ] **Step 4: Escreva `src/lib/leads/store.ts`**
+- [x] **Step 4: Escreva `src/lib/leads/store.ts`**
 
 ```ts
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -2241,7 +2247,7 @@ export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
 }
 ```
 
-- [ ] **Step 5: Escreva `src/lib/leads/track-script.ts`**
+- [x] **Step 5: Escreva `src/lib/leads/track-script.ts`**
 
 ```ts
 /**
@@ -2451,7 +2457,7 @@ export const TRACK_SCRIPT = `(function () {
 `
 ```
 
-- [ ] **Step 6: Escreva `src/app/api/leads/capture/route.ts`**
+- [x] **Step 6: Escreva `src/app/api/leads/capture/route.ts`**
 
 ```ts
 // ============================================================
@@ -2696,7 +2702,7 @@ export async function POST(request: Request) {
 }
 ```
 
-- [ ] **Step 7: Escreva `src/app/api/leads/track.js/route.ts`**
+- [x] **Step 7: Escreva `src/app/api/leads/track.js/route.ts`**
 
 ```ts
 import { TRACK_SCRIPT } from '@/lib/leads/track-script'
@@ -2718,7 +2724,7 @@ export function GET() {
 }
 ```
 
-- [ ] **Step 8: Adicione o bucket de rate limit**
+- [x] **Step 8: Adicione o bucket de rate limit**
 
 Em `src/lib/rate-limit.ts`, dentro de `RATE_LIMITS`, adicione:
 
@@ -2730,13 +2736,13 @@ Em `src/lib/rate-limit.ts`, dentro de `RATE_LIMITS`, adicione:
   leadCapture: { limit: 30, windowMs: 60_000 },
 ```
 
-- [ ] **Step 9: Rode o teste e veja passar**
+- [x] **Step 9: Rode o teste e veja passar**
 
 Run: `npx vitest run src/app/api/leads/capture/route.test.ts`
 
 Expected: PASS — todos os `it` verdes.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/lib/leads src/lib/rate-limit.ts src/app/api/leads
@@ -2755,7 +2761,7 @@ git commit -m "feat(leads): endpoint público de captura e o script track.js"
 - Consumes: `parseTouch`, `encodeFirstTouch`, `FIRST_TOUCH_COOKIE`, `FIRST_TOUCH_COOKIE_MAX_AGE_DAYS` (de `utm.ts`); `createLeadSettingsStore`, `createLeadOriginStore` (de `store.ts`); `generateUniqueLeadToken` (de `origin.ts`).
 - Produces: `GET /r/<code>` → `302` para o destino, com o cookie `crmbr_oid` gravado.
 
-- [ ] **Step 1: Escreva o teste que falha — `src/app/r/[code]/route.test.ts`**
+- [x] **Step 1: Escreva o teste que falha — `src/app/r/[code]/route.test.ts`**
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -2932,13 +2938,13 @@ describe("GET /r/[code]", () => {
 });
 ```
 
-- [ ] **Step 2: Rode o teste e veja falhar**
+- [x] **Step 2: Rode o teste e veja falhar**
 
 Run: `npx vitest run "src/app/r/[code]/route.test.ts"`
 
 Expected: FAIL com "Cannot find module './route'".
 
-- [ ] **Step 3: Escreva `src/app/r/[code]/route.ts`**
+- [x] **Step 3: Escreva `src/app/r/[code]/route.ts`**
 
 ```ts
 // ============================================================
@@ -3101,13 +3107,13 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 4: Rode o teste e veja passar**
+- [x] **Step 4: Rode o teste e veja passar**
 
 Run: `npx vitest run "src/app/r/[code]/route.test.ts"`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "src/app/r"
@@ -3128,7 +3134,7 @@ git commit -m "feat(leads): link de campanha /r/<code>"
 - Produces: `stripLeadCode(text)` → `{ token, text }` (de `@/lib/leads/inbound`), `referralFromMetaMessage(message)` → `ReferralFacts | null` (de `@/lib/leads/inbound`).
 - Produces: o `referral` no tipo `WhatsAppMessage` do webhook Meta.
 
-- [ ] **Step 1: Escreva `src/lib/leads/inbound.ts`**
+- [x] **Step 1: Escreva `src/lib/leads/inbound.ts`**
 
 ```ts
 /**
@@ -3208,7 +3214,7 @@ function readString(value: unknown): string | null {
 }
 ```
 
-- [ ] **Step 2: Escreva o teste que falha — `src/lib/leads/inbound.test.ts`**
+- [x] **Step 2: Escreva o teste que falha — `src/lib/leads/inbound.test.ts`**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3270,13 +3276,13 @@ describe("referralFromMetaMessage", () => {
 });
 ```
 
-- [ ] **Step 3: Rode o teste e see it fail, then pass**
+- [x] **Step 3: Rode o teste e see it fail, then pass**
 
 Run: `npx vitest run src/lib/leads/inbound.test.ts`
 
 Expected: PASS (o arquivo foi criado no Step 1 com o código completo).
 
-- [ ] **Step 4: Ligue o gancho no webhook da Meta**
+- [x] **Step 4: Ligue o gancho no webhook da Meta**
 
 Em `src/app/api/whatsapp/webhook/route.ts`:
 
@@ -3371,7 +3377,7 @@ import { createLeadOriginStore } from '@/lib/leads/store'
   }
 ```
 
-- [ ] **Step 5: Ligue o gancho no inbound do whatsmiau**
+- [x] **Step 5: Ligue o gancho no inbound do whatsmiau**
 
 Em `src/lib/whatsapp/providers/whatsmiau/inbound.ts`:
 
@@ -3437,13 +3443,13 @@ O `contentText` cru continua vivo em `rawContentText` — é ele que vai para `l
 
 **Nota:** o import do Step 5(a) é apenas `stripLeadCode` — o `referralFromMetaMessage` é específico da Meta e não é usado neste arquivo (import não usado quebra o lint).
 
-- [ ] **Step 6: Rode os testes**
+- [x] **Step 6: Rode os testes**
 
 Run: `npx vitest run src/lib/leads/`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/lib/leads/inbound.ts src/lib/leads/inbound.test.ts src/app/api/whatsapp/webhook/route.ts src/lib/whatsapp/providers/whatsmiau/inbound.ts
@@ -3475,7 +3481,7 @@ git commit -m "feat(leads): registra a origem do lead no inbound de Meta e whats
 
 > **Nota de rota nova:** `src/app/api/leads/origins/route.ts` não estava no "Mapa de arquivos" do topo do plano. Ele é necessário: o badge é account-scoped e não pode ler `lead_origins` direto do browser sem uma rota que aplique o escopo da conta.
 
-- [ ] **Step 1: `generateCaptureKey()` em `src/lib/leads/token.ts`**
+- [x] **Step 1: `generateCaptureKey()` em `src/lib/leads/token.ts`**
 
 Acrescente no fim do arquivo:
 
@@ -3497,21 +3503,27 @@ export function generateCaptureKey(): string {
 }
 ```
 
-- [ ] **Step 2: `capture_key` no `update()` de `src/lib/leads/store.ts`**
+- [x] **Step 2: `capture_key` no `update()` de `src/lib/leads/store.ts`**
 
 O `upsert` atual monta o corpo sem `capture_key`, e `capture_key` é `NOT NULL` sem default. O Postgres valida o NOT NULL **antes** do ramo `ON CONFLICT`, então um upsert sem a coluna falha mesmo quando a linha já existe. Troque o método:
 
 ```ts
     async update(accountId, patch) {
+      const current = await read(accountId);
+
+      // `capture_key` is NOT NULL with no default and Postgres
+      // validates it BEFORE the ON CONFLICT branch runs — an upsert
+      // that omits it fails even when the row already exists. The
+      // current value always travels with the update; on the first
+      // save there is no current value, so the patch has to bring one.
+      const captureKey = patch.capture_key ?? current?.capture_key;
+      if (!captureKey) throw new Error('Lead settings not found');
+
       const body: Record<string, unknown> = {
         account_id: accountId,
+        capture_key: captureKey,
         updated_at: new Date().toISOString(),
       }
-      // `capture_key` is NOT NULL with no default, and Postgres
-      // validates NOT NULL BEFORE the ON CONFLICT branch runs — an
-      // upsert that omits it fails even when the row already exists.
-      // It always travels.
-      if (patch.capture_key !== undefined) body.capture_key = patch.capture_key
       if (patch.enabled !== undefined) body.enabled = patch.enabled
       if (patch.allowed_hosts !== undefined) body.allowed_hosts = patch.allowed_hosts
       if (patch.links !== undefined) body.links = patch.links
@@ -3528,7 +3540,13 @@ O `upsert` atual monta o corpo sem `capture_key`, e `capture_key` é `NOT NULL` 
 
 A assinatura `update(accountId: string, patch: Partial<LeadSettings>): Promise<LeadSettings>` continua válida — `LeadSettings` já tem `capture_key`.
 
-- [ ] **Step 3: `src/app/api/leads/settings/route.ts`**
+> **`update` é um UPSERT de verdade.** A primeira versão do plano lia a
+> linha atual e lançava `Lead settings not found` quando ela não
+> existia — ou seja, na conta que ainda não tinha salvo nada. Como o
+> `capture_key` chega no patch (`existing?.capture_key ?? generateCaptureKey()`),
+> o upsert cria a linha. `create()` não é chamado pela rota.
+
+- [x] **Step 3: `src/app/api/leads/settings/route.ts`**
 
 ```ts
 // ============================================================
@@ -3788,7 +3806,7 @@ function normalizeDestination(value: unknown): string | null {
 }
 ```
 
-- [ ] **Step 4: `src/app/api/leads/origins/route.ts`**
+- [x] **Step 4: `src/app/api/leads/origins/route.ts`**
 
 ```ts
 // ============================================================
@@ -3852,7 +3870,7 @@ export async function GET(request: Request) {
 }
 ```
 
-- [ ] **Step 5: `src/components/leads/lead-origin-badge.tsx`**
+- [x] **Step 5: `src/components/leads/lead-origin-badge.tsx`**
 
 ```tsx
 "use client";
@@ -3894,27 +3912,32 @@ export function LeadOriginBadge({
   const [origins, setOrigins] = useState<LeadOriginRow[] | null>(null);
   const [open, setOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `/api/leads/origins?contactId=${encodeURIComponent(contactId)}`,
-      );
-      if (!response.ok) {
-        setOrigins([]);
-        return;
-      }
-      const body = (await response.json()) as { origins?: LeadOriginRow[] };
-      setOrigins(Array.isArray(body.origins) ? body.origins : []);
-    } catch {
-      // A failed load must not break the contact card: the badge
-      // simply does not show up.
-      setOrigins([]);
-    }
-  }, [contactId]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+
+    async function fetchOrigins(): Promise<LeadOriginRow[]> {
+      try {
+        const response = await fetch(
+          `/api/leads/origins?contactId=${encodeURIComponent(contactId)}`,
+        );
+        if (!response.ok) return [];
+        const body = (await response.json()) as { origins?: LeadOriginRow[] };
+        return Array.isArray(body.origins) ? body.origins : [];
+      } catch {
+        // A failed load must not break the contact card: the badge
+        // simply does not show up.
+        return [];
+      }
+    }
+
+    void fetchOrigins().then((rows) => {
+      if (!cancelled) setOrigins(rows);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contactId]);
 
   if (!origins || origins.length === 0) return null;
 
@@ -3929,15 +3952,19 @@ export function LeadOriginBadge({
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
       <Target className="size-3.5 shrink-0 text-primary" />
-      <span className="truncate">
-        {t("origin")}: {t(`channel.${primary.channel}`)}
-        {campaign ? ` · ${campaign}` : ""} · {date}
-      </span>
+      {compact ? null : (
+        <span className="truncate">
+          {t("origin")}: {t(`channel.${primary.channel}`)}
+          {campaign ? ` · ${campaign}` : ""} · {date}
+        </span>
+      )}
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium whitespace-nowrap text-foreground transition-colors hover:bg-muted">
           <Route className="size-3" />
-          {t("journey", { count: origins.length })}
+          {compact
+            ? (campaign ?? t(`channel.${primary.channel}`))
+            : t("journey", { count: origins.length })}
         </SheetTrigger>
         <SheetContent side="right" className="sm:max-w-md!">
           <SheetHeader>
@@ -3999,7 +4026,20 @@ function OriginRow({ label, value }: { label: string; value: string | null }) {
 }
 ```
 
-- [ ] **Step 6: `src/components/settings/lead-origin-settings.tsx`**
+> **Duas correções na implementação:**
+>
+> 1. O `fetch` ficou DENTRO do efeito (com a flag `cancelled`) em vez de
+>    um `useCallback` separado. A regra `react-hooks/set-state-in-effect`
+>    do `eslint-config-next` é **erro** (não aviso): ela acusa o
+>    `void load()` porque o `load` chama `setState`. O `setState` dentro
+>    de um `.then()` não é síncrono no corpo do efeito e a regra
+>    passa.
+> 2. O prop `compact` precisa ser USADO — a regra `no-unused-vars`
+>    quebra o build com um prop declarado e nunca lido. Na versão
+>    compacta (a barra do inbox, que é estreita) o chip mostra a
+>    campanha; na versão cheia, o chip mostra a contagem da jornada.
+
+- [x] **Step 6: `src/components/settings/lead-origin-settings.tsx`**
 
 ```tsx
 "use client";
@@ -4446,7 +4486,7 @@ export function LeadOriginSettings() {
 
 > **`Check` não é usado** — tire o import `Check` do bloco acima antes de salvar o arquivo (o lint `@typescript-eslint/no-unused-vars` quebra o build).
 
-- [ ] **Step 7: registre a seção em `src/components/settings/settings-sections.ts`**
+- [x] **Step 7: registre a seção em `src/components/settings/settings-sections.ts`**
 
 Acrescente `'leads'` em `SETTINGS_SECTIONS` (entre `'media'` e `'members'`):
 
@@ -4475,7 +4515,7 @@ Acrescente o `Target` no import de `lucide-react` e a entrada em `SECTION_META`:
   leads: { id: 'leads', label: 'Lead origin', icon: Target, group: 'workspace' },
 ```
 
-- [ ] **Step 8: registre o painel em `src/components/settings/settings-page-client.tsx`**
+- [x] **Step 8: registre o painel em `src/components/settings/settings-page-client.tsx`**
 
 Importe e registre:
 
@@ -4489,7 +4529,7 @@ import { LeadOriginSettings } from '@/components/settings/lead-origin-settings';
     members: <MembersTab />,
 ```
 
-- [ ] **Step 9: o badge nas duas superfícies**
+- [x] **Step 9: o badge nas duas superfícies**
 
 **Em `src/components/contacts/contact-detail-view.tsx`:** importe e monte logo abaixo do cabeçalho (depois do bloco `</SheetHeader>`, antes de `<Tabs`):
 
@@ -4510,12 +4550,15 @@ import { LeadOriginBadge } from '@/components/leads/lead-origin-badge';
 ```
 
 ```tsx
-          <div className="mt-2 px-1">
+          <div className="mt-2 flex justify-center px-1">
             <LeadOriginBadge contactId={contact.id} compact />
           </div>
 ```
 
-- [ ] **Step 10: as strings**
+> O bloco do contato no inbox é **centralizado** (`items-center
+> text-center`), então o badge entra centralizado também.
+
+- [x] **Step 10: as strings**
 
 Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`, `messages/pt.json`, `messages/es.json` e `messages/ko.json`.
 
@@ -4561,7 +4604,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "captureDescription": "Turn the capture on to start recording where each lead came from.",
       "enabled": "Record the origin of every lead",
       "scriptTitle": "Script for your site",
-      "scriptDescription": "Paste this before the closing </body> tag of the pages where people arrive. It records the campaign parameters and remembers the first visit.",
+      "scriptDescription": "Paste this at the end of the pages where people arrive. It records the campaign parameters and remembers the first visit.",
       "captureKey": "Capture key",
       "keyHint": "The key is public — it identifies your account and grants no access. It is safe to publish.",
       "notConfigured": "Save once to generate your key",
@@ -4575,7 +4618,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "linkLabel": "Label",
       "linkLabelPlaceholder": "Summer ad",
       "linkDestination": "Destination",
-      "linkDestinationHint": "Only wa:<number> and url:<https link> are accepted.",
+      "linkDestinationHint": "Only the wa: and url: destinations are accepted — a WhatsApp number or an https link.",
       "copyLink": "Copy the link",
       "removeLink": "Remove the link",
       "hostsTitle": "Allowed domains",
@@ -4634,7 +4677,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "captureDescription": "Ative a captura para começar a registrar de onde veio cada lead.",
       "enabled": "Registrar a origem de cada lead",
       "scriptTitle": "Script para o seu site",
-      "scriptDescription": "Cole antes da tag </body> das páginas por onde as pessoas chegam. Ele registra os parâmetros de campanha e lembra a primeira visita.",
+      "scriptDescription": "Cole no fim das páginas por onde as pessoas chegam. Ele registra os parâmetros de campanha e lembra a primeira visita.",
       "captureKey": "Chave de captura",
       "keyHint": "A chave é pública — ela identifica a sua conta e não dá acesso a nada. Pode publicar.",
       "notConfigured": "Salve uma vez para gerar a sua chave",
@@ -4648,7 +4691,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "linkLabel": "Rótulo",
       "linkLabelPlaceholder": "Anúncio de verão",
       "linkDestination": "Destino",
-      "linkDestinationHint": "Só wa:<número> e url:<link https> são aceitos.",
+      "linkDestinationHint": "Só os destinos wa: e url: são aceitos — um número de WhatsApp ou um link https.",
       "copyLink": "Copiar o link",
       "removeLink": "Remover o link",
       "hostsTitle": "Domínios permitidos",
@@ -4707,7 +4750,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "captureDescription": "Activa la captura para empezar a registrar de dónde viene cada lead.",
       "enabled": "Registrar el origen de cada lead",
       "scriptTitle": "Script para tu sitio",
-      "scriptDescription": "Pega antes de la etiqueta </body> de las páginas por donde llegan las personas. Registra los parámetros de campaña y recuerda la primera visita.",
+      "scriptDescription": "Pega al final de las páginas por donde llegan las personas. Registra los parámetros de campaña y recuerda la primera visita.",
       "captureKey": "Clave de captura",
       "keyHint": "La clave es pública — identifica tu cuenta y no da acceso a nada. Es seguro publicarla.",
       "notConfigured": "Guarda una vez para generar tu clave",
@@ -4721,7 +4764,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "linkLabel": "Etiqueta",
       "linkLabelPlaceholder": "Anuncio de verano",
       "linkDestination": "Destino",
-      "linkDestinationHint": "Solo se aceptan wa:<número> y url:<enlace https>.",
+      "linkDestinationHint": "Solo se aceptan los destinos wa: y url: — un número de WhatsApp o un enlace https.",
       "copyLink": "Copiar el enlace",
       "removeLink": "Quitar el enlace",
       "hostsTitle": "Dominios permitidos",
@@ -4780,7 +4823,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "captureDescription": "캡처를 켜면 각 리드의 유입 경로를 기록합니다.",
       "enabled": "모든 리드의 유입 경로 기록",
       "scriptTitle": "사이트에 넣을 스크립트",
-      "scriptDescription": "방문자가 도착하는 페이지의 </body> 닫는 태그 바로 앞에 붙여넣으세요. 캠페인 매개변수를 기록하고 첫 방문을 기억합니다.",
+      "scriptDescription": "방문자가 도착하는 페이지의 맨 아래에 붙여넣으세요. 캠페인 매개변수를 기록하고 첫 방문을 기억합니다.",
       "captureKey": "캡처 키",
       "keyHint": "키는 공개 정보입니다 — 계정을 식별할 뿐 접근 권한을 주지 않습니다. 공개해도 안전합니다.",
       "notConfigured": "한 번 저장하면 키가 생성됩니다",
@@ -4794,7 +4837,7 @@ Acrescente o namespace `Leads` e o bloco `Settings.leads` em `messages/en.json`,
       "linkLabel": "라벨",
       "linkLabelPlaceholder": "여름 광고",
       "linkDestination": "목적지",
-      "linkDestinationHint": "wa:<번호>와 url:<https 링크>만 허용됩니다.",
+      "linkDestinationHint": "wa:와 url: 목적지만 허용됩니다 — WhatsApp 번호 또는 https 링크.",
       "copyLink": "링크 복사",
       "removeLink": "링크 삭제",
       "hostsTitle": "허용 도메인",
@@ -4822,9 +4865,16 @@ Acrescente também `Settings.sections.leads` em cada idioma:
 | `es` | `"Origen de los leads"` |
 | `ko` | `"리드 유입 경로"` |
 
-> **Ordem das chaves:** `messages/*.json` é lido pelo `next-intl` — a ordem não importa para o runtime, mas o repositório mantém o JSON em ordem alfabética por namespace. Coloque `Leads` entre `Interactive` e `JoinPage`, e `Settings.leads` entre `Settings.inbox` e `Settings.media`.
+> **Ordem das chaves:** `messages/*.json` é lido pelo `next-intl` — a ordem não importa para o runtime. O `Leads` entra depois de `Interactive` e o `Settings.leads` antes de `Settings.media`.
+>
+> **Duas strings NÃO podem ter `<` nem `>`:** o `scriptDescription` e o
+> `linkDestinationHint`. O test `src/i18n/messages.test.ts` exige que
+> uma string lida com `t()` seja ICU válida — e `<number>` é lido como
+> tag de rich text, `</body>` como tag de fechamento sem abertura. As
+> duas foram reescritas sem o HTML. O mesmo vale para qualquer
+> tradução: o nome da tag tem de ser o MESMO nos quatro idiomas.
 
-- [ ] **Step 11: escreva o teste que falha — `src/app/api/leads/settings/route.test.ts`**
+- [x] **Step 11: escreva o teste que falha — `src/app/api/leads/settings/route.test.ts`**
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -5009,7 +5059,7 @@ describe("PUT /api/leads/settings", () => {
 });
 ```
 
-- [ ] **Step 12: escreva o teste que falha — `src/app/api/leads/origins/route.test.ts`**
+- [x] **Step 12: escreva o teste que falha — `src/app/api/leads/origins/route.test.ts`**
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -5112,7 +5162,7 @@ describe("GET /api/leads/origins", () => {
 });
 ```
 
-- [ ] **Step 13: rode os testes e o build**
+- [x] **Step 13: rode os testes e o build**
 
 Run: `npx vitest run`
 
@@ -5122,7 +5172,7 @@ Run: `CIRCLE_NODE_TOTAL=4 npx next build`
 
 Expected: EXIT=0. (Sem `CIRCLE_NODE_TOTAL` o build abre 23 workers em 23 CPUs e morre com segfault — sempre use esta forma.)
 
-- [ ] **Step 14: Commit**
+- [x] **Step 14: Commit**
 
 ```bash
 git add src/app/api/leads src/components/leads src/components/settings src/components/contacts/contact-detail-view.tsx src/components/inbox/contact-sidebar.tsx src/lib/leads messages
@@ -5140,7 +5190,7 @@ git commit -m "feat(leads): badge de origem, jornada e painel de configuracao"
 - Consumes: nada do código — é a página que explica o fluxo para quem opera o CRM.
 - Produces: `docs/lead-origin.md`.
 
-- [ ] **Step 1: Escreva `docs/lead-origin.md`**
+- [x] **Step 1: Escreva `docs/lead-origin.md`**
 
 ```markdown
 # Origem dos leads
@@ -5234,7 +5284,7 @@ visitante é quem chama). O que ele NÃO faz:
 - tem limite de requisições por chave.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/lead-origin.md
