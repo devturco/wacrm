@@ -472,65 +472,79 @@ export function ContactDetailView({
 
             {/* Tabs */}
             <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
-              {/* Five labels of very different lengths in one row: the
-                  triggers size to their own text (sharing the row
-                  evenly squeezed the long ones and clipped the last),
-                  and the row scrolls when the panel is still too
-                  narrow instead of cutting a tab in half.
+              {/* Eight tabs, labels of very different lengths, and a panel
+                  that is 576px wide at most: the last tab did not fit
+                  and there was no scrollbar to reach it — the tab
+                  simply did not exist for the user.
+
+                  The list WRAPS instead of scrolling, so every tab stays
+                  reachable without a hidden gesture. Two details make
+                  the wrap actually work:
+
+                  - `h-auto!` on the LIST releases the fixed one-row
+                    height the base variant imposes (`h-8`).
+                  - `h-auto!` on every TRIGGER releases
+                    `h-[calc(100%-1px)]`, the base height. That value is
+                    a percentage of the list's height, so once the list
+                    grew to two rows the trigger grew with it (51px
+                    instead of 26px): the second row was pushed past the
+                    list's bottom and `overflow-y-hidden` cut it away.
+                    The tab existed in the DOM but was never painted —
+                    which is why "Links" simply vanished.
 
                   `overflow-y-hidden` is not redundant with the
-                  `overflow-x-auto` above it: CSS computes a `visible`
+                  `overflow-x-auto` below it: CSS computes a `visible`
                   axis to `auto` as soon as the other axis scrolls, and
                   the tab indicator's `after` pseudo-element hangs 5px
                   below the trigger — 1px past the list's bottom even
                   while invisible. That 1px is enough to paint a
                   vertical scrollbar with its arrow buttons on Windows. */}
-              <TabsList className="bg-muted/50 border-b border-border mx-4 mt-3 max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="bg-muted/50 border-b border-border mx-4 mt-3 w-full max-w-full flex flex-wrap justify-start h-auto! overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <TabsTrigger
                   value="details"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.details')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="tags"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.tags')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="notes"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.notes')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="custom"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.custom')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="deals"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {t('tabs.deals')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="media"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {tMediaTabs('media')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="documents"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {tMediaTabs('documents')}
                 </TabsTrigger>
                 <TabsTrigger
                   value="links"
-                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                  className="flex-none h-auto! data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   {tMediaTabs('links')}
                 </TabsTrigger>
