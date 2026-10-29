@@ -193,7 +193,9 @@ describe("lead_origins", () => {
 
 describe("a migration that only creates tables", () => {
   it("never alters an existing table", () => {
-    const altered = [...sql.matchAll(/alter\s+table\s+(?!if\s+exists\s+lead_)([a-z_]+)/gi)]
+    // `lead_settings` and `lead_origins` are the tables THIS migration
+    // creates, so the ALTER that enables RLS on them is expected.
+    const altered = [...sql.matchAll(/alter\s+table\s+(?!lead_)([a-z_]+)/gi)]
       .map((m) => m[1].toLowerCase());
     expect(altered).toEqual([]);
   });
