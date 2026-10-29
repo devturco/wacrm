@@ -192,6 +192,9 @@ async function processWhatsmiauEvent(
       // The row that owns this connection. The account may hold
       // several, so a status change has to land on THIS one.
       configId: config.id,
+      // The namespaced name the instance carries ON THE PROVIDER — it
+      // is what goes into the provider's URLs.
+      providerInstanceName: config.provider_instance_name,
     };
 
     switch (envelope.event) {

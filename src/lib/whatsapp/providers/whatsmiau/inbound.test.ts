@@ -76,6 +76,12 @@ vi.mock('./mirror-media', () => ({
   mirrorWhatsmiauMedia: vi.fn(async () => 'https://cdn.test/mirrored.png'),
 }));
 
+// The contact's picture — a separate concern, exercised in
+// `avatar.test.ts`. Here it only has to stay out of the way.
+vi.mock('./avatar', () => ({
+  refreshContactAvatar: vi.fn(async () => undefined),
+}));
+
 import {
   handleWhatsmiauInboundMessage,
   type WhatsmiauInboundContext,
@@ -147,6 +153,7 @@ function context(db: SupabaseClient): WhatsmiauInboundContext {
     accountId: 'acc-1',
     ownerUserId: 'user-1',
     configId: 'wm-1',
+    providerInstanceName: 'acme_lojista',
     instanceSettings: {
       alwaysOnline: false,
       readMessages: false,

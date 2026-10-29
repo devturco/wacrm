@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Message, Conversation } from "@/types";
+import type { Message, Conversation, Contact } from "@/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface RealtimeEvent<T> {
@@ -15,6 +15,12 @@ interface UseRealtimeOptions {
   channelName: string;
   onMessageEvent?: (event: RealtimeEvent<Message>) => void;
   onConversationEvent?: (event: RealtimeEvent<Conversation>) => void;
+  /**
+   * Contact changes. The contact's picture arrives this way: the
+   * server copies it into our bucket and writes `avatar_url`, and the
+   * inbox shows it without waiting for a reload.
+   */
+  onContactEvent?: (event: RealtimeEvent<Contact>) => void;
   enabled?: boolean;
 }
 
@@ -22,6 +28,7 @@ export function useRealtime({
   channelName,
   onMessageEvent,
   onConversationEvent,
+  onContactEvent,
   enabled = true,
 }: UseRealtimeOptions) {
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -34,9 +41,11 @@ export function useRealtime({
   // callbacks, which always run after the render that updates it.
   const onMessageRef = useRef(onMessageEvent);
   const onConversationRef = useRef(onConversationEvent);
+  const onContactRef = useRef(onContactEvent);
   useEffect(() => {
     onMessageRef.current = onMessageEvent;
     onConversationRef.current = onConversationEvent;
+    onContactRef.current = onContactEvent;
   });
 
   useEffect(() => {
@@ -65,6 +74,17 @@ export function useRealtime({
             eventType: payload.eventType as RealtimeEvent<Conversation>["eventType"],
             new: payload.new as Conversation,
             old: payload.old as Partial<Conversation>,
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contacts" },
+        (payload) => {
+          onContactRef.current?.({
+            eventType: payload.eventType as RealtimeEvent<Contact>["eventType"],
+            new: payload.new as Contact,
+            old: payload.old as Partial<Contact>,
           });
         }
       )

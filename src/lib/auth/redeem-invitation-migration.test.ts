@@ -14,6 +14,10 @@ const tablesWithoutDomainData = new Set([
   "account_invitations",
   "member_presence",
   "pending_message_statuses",
+  // Derived data, not domain data: a row only exists because the
+  // contact it points at exists, so the `contacts` check already
+  // covers the account.
+  "contact_avatars",
 ]);
 
 function accountScopedTables(): Set<string> {

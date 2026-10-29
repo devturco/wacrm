@@ -361,6 +361,33 @@ function InboxPageInner() {
     [activeConversation, hydrateConversation]
   );
 
+  /**
+   * A contact changed. The one that matters is the picture: the
+   * server copies it into our bucket and writes `avatar_url`, and the
+   * row arrives here — so the photo shows up without a reload.
+   */
+  const handleContactEvent = useCallback(
+    (event: { eventType: string; new: Contact }) => {
+      const contact = event.new;
+      if (!contact?.id) return;
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.contact?.id === contact.id ? { ...c, contact: { ...c.contact, ...contact } } : c,
+        ),
+      );
+      setActiveContact((prev) =>
+        prev && prev.id === contact.id ? { ...prev, ...contact } : prev,
+      );
+      setActiveConversation((prev) =>
+        prev && prev.contact?.id === contact.id
+          ? { ...prev, contact: { ...prev.contact, ...contact } }
+          : prev,
+      );
+    },
+    [],
+  );
+
   // Subscribe to realtime. The `isConnected` flag below feeds the
   // reconnect resync: realtime is best-effort and events sent while the
   // WS was disconnected (laptop sleep, network blip, background-tab
@@ -369,6 +396,7 @@ function InboxPageInner() {
     channelName: "inbox-realtime",
     onMessageEvent: handleMessageEvent,
     onConversationEvent: handleConversationEvent,
+    onContactEvent: handleContactEvent,
     enabled: true,
   });
 

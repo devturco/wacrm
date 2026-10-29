@@ -944,6 +944,38 @@ curl -X POST 'https://api.whatsmiau.dev/v2/chat/fetchProfilePictureUrl/Atendimen
 }'
 ```
 
+#### Como o wacrm usa a foto de perfil
+
+A API oficial (Meta) **não expõe** a foto de um contato — o webhook do Meta
+entrega nome e número, e é só isso. A CRMBR expõe, então a caixa de entrada
+passa a mostrar a imagem do cliente em vez da inicial.
+
+O fluxo, no servidor (`src/lib/whatsapp/providers/whatsmiau/`):
+
+| Passo | Onde | O que acontece |
+|---|---|---|
+| Consulta | `profile-picture.ts` | `POST /chat/fetchProfilePictureUrl/<instância>` com o número do contato. `profilePictureUrl: null` = o contato não tem foto (ou escondeu). |
+| Cópia | `profile-picture.ts` | A URL vive no CDN do WhatsApp e **expira** — os bytes são baixados (limite de 2 MB) e gravados no bucket público `chat-media`, em `account-<id>/avatars/<contact_id>.<ext>`. |
+| Referência | `avatar.ts` | `contacts.avatar_url` passa a apontar para o **nosso** objeto — durável, servido pelo mesmo bucket que já serve as mídias da conversa. |
+| Memória | `avatar.ts` + migration `065` | A tabela `contact_avatars` guarda o resultado (`found` / `missing` / `pending`) e a hora da última consulta. Uma janela de **24 h** impede que cada mensagem de um contato sem foto vire uma chamada ao provedor. |
+
+Regras que valem para este fluxo:
+
+- **Falha do provedor não é "o contato não tem foto".** Um erro é gravado como
+  `pending` e a consulta é refeita depois da janela; só a resposta `null` vira
+  `missing`.
+- **Tudo é melhor-esforço.** Um erro na foto nunca derruba a mensagem: ela já
+  foi gravada antes da consulta, e a foto é best-effort.
+- **A foto aparece ao vivo.** A migration `065` coloca `contacts` na publicação
+  do Realtime; quando `avatar_url` é gravado, o navegador recebe o evento e a
+  imagem aparece sem recarregar a página.
+- **O evento `contacts.upsert`** (§7.6) traz `profilePicUrl`, mas ele é
+  **ignorado na v1** — o webhook chega sem o contato ter conversado, e a
+  consulta por demanda cobre qualquer contato a qualquer momento.
+
+> Sem a migration `065` aplicada, o fluxo continua funcionando (a foto é
+> buscada a cada mensagem), mas sem a janela de 24 h e sem o aviso ao vivo.
+
 ### 7. Apagar mensagem para todos
 
 **`DELETE /chat/deleteMessageForEveryone/:instance`**

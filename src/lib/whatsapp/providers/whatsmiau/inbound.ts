@@ -41,9 +41,12 @@ import {
 } from '@/lib/whatsapp/whatsmiau-config';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 
+import { refreshContactAvatar } from './avatar';
 import { mirrorWhatsmiauMedia } from './mirror-media';
 import type { NormalizedInboundMessage } from './normalize';
+import { platformCredential, isPlatformConfigured } from './platform-credential';
 import { activateIfOnlyUsableConnection } from './status-sync';
+import type { WhatsmiauConnection } from '../types';
 
 export interface WhatsmiauInboundContext {
   db: SupabaseClient;
@@ -60,6 +63,12 @@ export interface WhatsmiauInboundContext {
    * anymore.
    */
   configId: string;
+  /**
+   * The instance name ON THE PROVIDER — the namespaced one
+   * (`<empresa>_<instancia>`). It goes into the provider's URLs, so
+   * the customer's own name never leaves the app.
+   */
+  providerInstanceName: string;
 }
 
 export interface InboundOutcome {
@@ -113,7 +122,7 @@ function contentTypeFor(kind: NormalizedInboundMessage['kind']): string {
 }
 
 interface ContactOutcome {
-  contact: { id: string; phone: string; name?: string | null };
+  contact: { id: string; phone: string; name?: string | null; avatar_url?: string | null };
   wasCreated: boolean;
 }
 
@@ -281,6 +290,25 @@ async function applyReaction(
       { onConflict: 'message_id,actor_type,actor_id' },
     );
   if (error) console.error('[whatsmiau] reaction upsert failed:', error.message);
+}
+
+/**
+ * The provider connection for the platform credential.
+ *
+ * The credential lives in the server's environment. A deployment
+ * without it simply has no pictures — the rest of the app keeps
+ * working, so this returns null instead of throwing.
+ */
+function providerConnection(instanceName: string): WhatsmiauConnection | null {
+  // A deployment without the platform credential simply has no
+  // pictures — the rest of the app keeps working.
+  if (!isPlatformConfigured()) return null;
+  try {
+    const { apiKey, baseUrl } = platformCredential();
+    return { provider: 'whatsmiau', instanceName, apiKey, baseUrl };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -452,6 +480,25 @@ export async function handleWhatsmiauInboundMessage(
 
   // Flag the reply so the broadcast's `replied_count` advances.
   await flagBroadcastReply(db, accountId, contactOutcome.contact.id);
+
+  // The contact's picture. The provider knows it and we do not; the
+  // bytes are copied into our own bucket so the URL never expires.
+  // It runs AFTER the message is stored — a slow provider must not
+  // hold the message back.
+  const connection = providerConnection(ctx.providerInstanceName);
+  if (connection) {
+    await refreshContactAvatar({
+      db,
+      accountId,
+      storage: ctx.storage,
+      conn: connection,
+      contactId: contactOutcome.contact.id,
+      phone,
+      currentAvatarUrl: contactOutcome.contact.avatar_url ?? null,
+    }).catch((error) =>
+      console.error('[whatsmiau] could not refresh the contact picture:', error),
+    );
+  }
 
   // The flow runner. When it consumes the message we suppress the
   // content-level automation triggers — the customer is navigating a
