@@ -105,6 +105,9 @@ describe("lead_origins", () => {
     expect(sql).toMatch(/create\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*phone\s*\)/i);
     expect(sql).toMatch(/create\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*lead_token\s*\)/i);
     expect(sql).toMatch(
+      /create\s+unique\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*lead_token\s*\)\s+where\s+lead_token\s+is\s+not\s+null/i,
+    );
+    expect(sql).toMatch(
       /create\s+unique\s+index[\s\S]*?on\s+lead_origins\s*\(\s*contact_id\s*\)\s+where\s+is_primary\s+and\s+contact_id\s+is\s+not\s+null/i,
     );
     expect(sql).toMatch(/create\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*campaign_id\s*\)/i);

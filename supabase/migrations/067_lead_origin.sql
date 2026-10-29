@@ -134,6 +134,15 @@ CREATE INDEX IF NOT EXISTS idx_lead_origins_account_phone
 CREATE INDEX IF NOT EXISTS idx_lead_origins_account_token
   ON lead_origins (account_id, lead_token);
 
+-- Um codigo por conta. O codigo e a PONTE entre o clique e a
+-- mensagem: se dois cliques dividissem o mesmo codigo, o lead
+-- poderia ser amarrado a origem errada. O indice UNICO PARCIAL
+-- transforma essa colisao (2^-40 por clique) num erro visivel no
+-- banco em vez de uma atribuicao silenciosa.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_origins_unique_token
+  ON lead_origins (account_id, lead_token)
+  WHERE lead_token IS NOT NULL;
+
 -- UMA origem principal por contato, garantido no banco.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_origins_primary_contact
   ON lead_origins (contact_id)

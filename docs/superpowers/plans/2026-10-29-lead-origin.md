@@ -171,6 +171,9 @@ describe("lead_origins", () => {
     expect(sql).toMatch(/create\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*phone\s*\)/i);
     expect(sql).toMatch(/create\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*lead_token\s*\)/i);
     expect(sql).toMatch(
+      /create\s+unique\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*lead_token\s*\)\s+where\s+lead_token\s+is\s+not\s+null/i,
+    );
+    expect(sql).toMatch(
       /create\s+unique\s+index[\s\S]*?on\s+lead_origins\s*\(\s*contact_id\s*\)\s+where\s+is_primary\s+and\s+contact_id\s+is\s+not\s+null/i,
     );
     expect(sql).toMatch(/create\s+index[\s\S]*?on\s+lead_origins\s*\(\s*account_id\s*,\s*campaign_id\s*\)/i);
@@ -360,6 +363,15 @@ CREATE INDEX IF NOT EXISTS idx_lead_origins_account_phone
 -- Amarracao pelo codigo de 8 chars.
 CREATE INDEX IF NOT EXISTS idx_lead_origins_account_token
   ON lead_origins (account_id, lead_token);
+
+-- Um codigo por conta. O codigo e a PONTE entre o clique e a
+-- mensagem: se dois cliques dividissem o mesmo codigo, o lead
+-- poderia ser amarrado a origem errada. O indice UNICO PARCIAL
+-- transforma essa colisao (2^-40 por clique) num erro visivel no
+-- banco em vez de uma atribuicao silenciosa.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_origins_unique_token
+  ON lead_origins (account_id, lead_token)
+  WHERE lead_token IS NOT NULL;
 
 -- UMA origem principal por contato, garantido no banco.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lead_origins_primary_contact
@@ -799,9 +811,17 @@ import {
   generateUniqueLeadToken,
   resolveOrigin,
   type LeadOriginStore,
-  type NewLeadOrigin,
 } from "./origin";
-import type { LeadOriginRow } from "./types";
+import type { LeadOriginRow, NewLeadOrigin } from "./types";
+
+/**
+ * The clock of the test, so the 30-day window does not depend on the
+ * day the suite runs.
+ */
+const NOW_ISO = new Date().toISOString();
+
+/** Far enough in the past to be outside any window. */
+const LONG_AGO_ISO = "2020-01-01T00:00:00.000Z";
 
 function makeRow(overrides: Partial<LeadOriginRow> = {}): LeadOriginRow {
   return {
@@ -828,10 +848,10 @@ function makeRow(overrides: Partial<LeadOriginRow> = {}): LeadOriginRow {
     link_code: null,
     phone: null,
     is_primary: false,
-    touched_at: "2026-10-29T12:00:00.000Z",
+    touched_at: NOW_ISO,
     meta: {},
-    created_at: "2026-10-29T12:00:00.000Z",
-    updated_at: "2026-10-29T12:00:00.000Z",
+    created_at: NOW_ISO,
+    updated_at: NOW_ISO,
     ...overrides,
   };
 }
@@ -900,7 +920,7 @@ const BASE = {
   accountId: "acc-1",
   contactId: "contact-1",
   provider: "meta" as const,
-  touchedAt: "2026-10-29T12:00:00.000Z",
+  touchedAt: NOW_ISO,
 };
 
 describe("resolveOrigin", () => {
@@ -960,7 +980,7 @@ describe("resolveOrigin", () => {
     const old = makeRow({
       id: "origin-old",
       phone: "5511999999999",
-      touched_at: "2020-01-01T00:00:00.000Z",
+      touched_at: LONG_AGO_ISO,
     });
     const { store } = makeStore([old]);
 
@@ -1093,17 +1113,26 @@ describe("generateUniqueLeadToken", () => {
     const taken = makeRow({ id: "origin-1", lead_token: "AAAAAAAA" });
     const { store } = makeStore([taken]);
 
-    const token = await generateUniqueLeadToken(store, "acc-1", () => 0);
+    const codes = ["AAAAAAAA", "BBBBBBBB"];
+    let index = 0;
+    const token = await generateUniqueLeadToken(
+      store,
+      "acc-1",
+      5,
+      () => codes[index++] ?? "CCCCCCCC"
+    );
 
-    expect(token).not.toBe("AAAAAAAA");
+    expect(token).toBe("BBBBBBBB");
   });
 
   it("gives up after the attempts are exhausted", async () => {
-    const { store } = makeStore([]);
+    const taken = makeRow({ id: "origin-1", lead_token: "AAAAAAAA" });
+    const { store } = makeStore([taken]);
+
     let calls = 0;
     const token = await generateUniqueLeadToken(store, "acc-1", 2, () => {
       calls += 1;
-      return 0;
+      return "AAAAAAAA";
     });
     expect(calls).toBe(2);
     expect(token).toBe("AAAAAAAA");
@@ -1757,19 +1786,25 @@ export async function resolveOrigin(
  *
  * 40 bits is a lot of room, but a collision inside one account would
  * tie two leads to the same origin — so we check and regenerate.
+ *
+ * `generate` is injectable so the test can hand out a known sequence
+ * of codes; in production it draws from the alphabet.
  */
 export async function generateUniqueLeadToken(
   store: LeadOriginStore,
   accountId: string,
   maxAttempts = 5,
-  random: () => number = Math.random,
+  generate: () => string = () => generateLeadToken()
 ): Promise<string> {
-  let token = generateLeadToken(random);
+  let token = '';
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    token = generate();
     const taken = await store.isTokenTaken(accountId, token);
     if (!taken) return token;
-    token = generateLeadToken(random);
   }
+  // Every attempt collided: the last code is returned and the unique
+  // index on the table rejects it — the collision surfaces in the
+  // database instead of silently tying two leads to one origin.
   return token;
 }
 ```
@@ -2121,17 +2156,19 @@ function toSettings(row: Record<string, unknown>): LeadSettings {
 }
 
 export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
+  const read = async (accountId: string): Promise<LeadSettings | null> => {
+    const { data, error } = await db
+      .from('lead_settings')
+      .select('*')
+      .eq('account_id', accountId)
+      .limit(1)
+    if (error) throw error
+    const row = data?.[0] as Record<string, unknown> | undefined
+    return row ? toSettings(row) : null
+  }
+
   return {
-    async read(accountId) {
-      const { data, error } = await db
-        .from('lead_settings')
-        .select('*')
-        .eq('account_id', accountId)
-        .limit(1)
-      if (error) throw error
-      const row = data?.[0] as Record<string, unknown> | undefined
-      return row ? toSettings(row) : null
-    },
+    read,
 
     async create(accountId, captureKey) {
       const { data, error } = await db
@@ -2150,8 +2187,16 @@ export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
     },
 
     async update(accountId, patch) {
+      const current = await read(accountId)
+      if (!current) throw new Error('Lead settings not found')
+
       const body: Record<string, unknown> = {
         account_id: accountId,
+        // `capture_key` is NOT NULL with no default and Postgres
+        // validates it BEFORE the ON CONFLICT branch runs — an upsert
+        // that omits it fails even when the row already exists. The
+        // current value always travels with the update.
+        capture_key: patch.capture_key ?? current.capture_key,
         updated_at: new Date().toISOString(),
       }
       if (patch.enabled !== undefined) body.enabled = patch.enabled
