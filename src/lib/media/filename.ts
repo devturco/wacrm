@@ -25,7 +25,10 @@ import type { ContentType } from "@/types";
 /**
  * Extension per MIME type. Covers the `chat-media` bucket's allow-list
  * (migration 023) plus the inbound-only types Meta can hand us (notably
- * `image/webp` stickers and `audio/ogg` voice notes).
+ * `image/webp` stickers and `audio/ogg` voice notes) and the everyday
+ * formats that now reach the bucket through the `application/octet-
+ * stream` catch-all — without an extension a spreadsheet would land as
+ * `planilha.bin` and the agent would have no idea what it is.
  */
 const EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -33,15 +36,24 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/tiff": "tiff",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/avif": "avif",
   "video/mp4": "mp4",
   "video/3gpp": "3gp",
   "video/quicktime": "mov",
+  "video/webm": "webm",
   "audio/ogg": "ogg",
   "audio/opus": "opus",
   "audio/mpeg": "mp3",
   "audio/mp4": "m4a",
   "audio/aac": "aac",
   "audio/amr": "amr",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/webm": "weba",
   "application/pdf": "pdf",
   "application/msword": "doc",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -51,7 +63,24 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "application/vnd.ms-powerpoint": "ppt",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation":
     "pptx",
+  "application/vnd.oasis.opendocument.text": "odt",
+  "application/vnd.oasis.opendocument.spreadsheet": "ods",
+  "application/vnd.oasis.opendocument.presentation": "odp",
+  "application/vnd.oasis.opendocument.graphics": "odg",
+  "application/rtf": "rtf",
+  "application/json": "json",
+  "application/xml": "xml",
+  "text/xml": "xml",
+  "text/csv": "csv",
   "text/plain": "txt",
+  "application/zip": "zip",
+  "application/x-zip-compressed": "zip",
+  "application/x-rar-compressed": "rar",
+  "application/vnd.rar": "rar",
+  "application/x-7z-compressed": "7z",
+  "application/gzip": "gz",
+  "application/x-tar": "tar",
+  "application/epub+zip": "epub",
 };
 
 /** Longest filename we'll produce, extension included. */
@@ -105,6 +134,11 @@ function hasExtension(name: string): boolean {
  * and with `buildMediaPath`'s `<epoch-ms>-` prefix removed. Returns "" when
  * the URL has no filename-looking last segment (e.g. a proxy URL, whose
  * last segment is a bare Meta media-id).
+ *
+ * Objects mirrored before migration 066 kept the provider's media id in
+ * front of the name (`<id>-invoice.pdf`), so a run of 10+ digits is
+ * still stripped. Newer objects carry the id in their own path segment,
+ * so their last segment is already the name.
  */
 export function basenameFromUrl(url: string): string {
   let path = url;

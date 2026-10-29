@@ -3,9 +3,10 @@ import {
   MIRROR_BUCKET,
   mirrorFileName,
   mirrorInboundMedia,
+  mirrorObjectPath,
   normalizeMimeType,
 } from "./mirror-inbound-media";
-import { MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
+import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 
 const ACCOUNT = "11111111-2222-3333-4444-555555555555";
 const MEDIA_ID = "1234567890123456";
@@ -19,7 +20,7 @@ function fakeStorage(uploadError: { message: string } | null = null) {
   const uploads: Array<{
     bucket: string;
     path: string;
-    body: Uint8Array | Buffer;
+    body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
     options: { contentType: string; cacheControl: string; upsert: boolean };
   }> = [];
 
@@ -28,7 +29,7 @@ function fakeStorage(uploadError: { message: string } | null = null) {
       return {
         async upload(
           path: string,
-          body: Uint8Array | Buffer,
+          body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
           options: {
             contentType: string;
             cacheControl: string;
@@ -50,9 +51,19 @@ function fakeStorage(uploadError: { message: string } | null = null) {
   return { storage, uploads };
 }
 
+/** A stream carrying `bytes` bytes, like the real downloader returns. */
+function fakeStream(bytes: number) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    },
+  });
+}
+
 function fakeDownload(bytes: number, contentType = "image/jpeg") {
   return vi.fn(async () => ({
-    buffer: Buffer.alloc(bytes),
+    stream: fakeStream(bytes),
     contentType,
   }));
 }
@@ -81,38 +92,33 @@ describe("normalizeMimeType", () => {
 describe("mirrorFileName", () => {
   it("keeps a document's own name so the download reads sensibly", () => {
     const name = mirrorFileName({
-      mediaId: MEDIA_ID,
       mimeType: "application/pdf",
       fileName: "invoice.pdf",
     });
-    expect(name).toBe(`${MEDIA_ID}-invoice.pdf`);
+    expect(name).toBe("invoice.pdf");
   });
 
   it("re-derives the extension from the MIME, not the sender's name", () => {
     // A sender-controlled ".exe" must not survive into the object path.
     const name = mirrorFileName({
-      mediaId: MEDIA_ID,
       mimeType: "application/pdf",
       fileName: "../../payload.exe",
     });
-    expect(name).toBe(`${MEDIA_ID}-payload.pdf`);
+    expect(name).toBe("payload.pdf");
   });
 
   it("synthesises a stamped name when there is no filename", () => {
     const name = mirrorFileName({
-      mediaId: MEDIA_ID,
       mimeType: "image/jpeg",
       messageTimestamp: "1754899200",
     });
-    expect(name).toBe(`${MEDIA_ID}-image-1754899200.jpg`);
+    expect(name).toBe("image-1754899200.jpg");
   });
 
   it("stays under buildMediaPath's 40-char basename cap", () => {
-    // A 19-digit id is the longest Meta realistically issues; if the
-    // synthesised name outgrows the cap, buildMediaPath silently
-    // truncates it and the timestamp stops disambiguating anything.
+    // buildMediaPath silently truncates a basename past 40 characters,
+    // and the timestamp stops disambiguating anything.
     const name = mirrorFileName({
-      mediaId: "1234567890123456789",
       mimeType: "image/jpeg",
       messageTimestamp: "1754899200",
     });
@@ -121,11 +127,32 @@ describe("mirrorFileName", () => {
 
   it("falls back to a .bin extension for an unknown MIME", () => {
     const name = mirrorFileName({
-      mediaId: MEDIA_ID,
       mimeType: "application/x-nonsense",
       messageTimestamp: "1754899200",
     });
-    expect(name).toBe(`${MEDIA_ID}-document-1754899200.bin`);
+    expect(name).toBe("document-1754899200.bin");
+  });
+});
+
+describe("mirrorObjectPath", () => {
+  it("keeps the media id in its own segment", () => {
+    expect(mirrorObjectPath(ACCOUNT, MEDIA_ID, "invoice.pdf")).toBe(
+      `account-${ACCOUNT}/inbound/${MEDIA_ID}/invoice.pdf`,
+    );
+  });
+
+  it("sanitises an id that carries path separators", () => {
+    // The whole run of unsafe characters collapses into one underscore,
+    // so the id can never climb out of its own segment.
+    expect(mirrorObjectPath(ACCOUNT, "../../etc", "invoice.pdf")).toBe(
+      `account-${ACCOUNT}/inbound/_etc/invoice.pdf`,
+    );
+  });
+
+  it("never produces an empty segment", () => {
+    expect(mirrorObjectPath(ACCOUNT, "", "invoice.pdf")).toBe(
+      `account-${ACCOUNT}/inbound/media/invoice.pdf`,
+    );
   });
 });
 
@@ -154,11 +181,11 @@ describe("mirrorInboundMedia", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0].bucket).toBe(MIRROR_BUCKET);
     expect(uploads[0].path).toBe(
-      `account-${ACCOUNT}/inbound/${MEDIA_ID}-image-1754899200.jpg`,
+      `account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
     );
     expect(uploads[0].options.contentType).toBe("image/jpeg");
     expect(url).toBe(
-      `https://cdn.test/storage/chat-media/account-${ACCOUNT}/inbound/${MEDIA_ID}-image-1754899200.jpg`,
+      `https://cdn.test/storage/chat-media/account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
     );
   });
 
@@ -197,6 +224,36 @@ describe("mirrorInboundMedia", () => {
     expect(uploads[0].path).toMatch(/\.ogg$/);
   });
 
+  it("declares an unknown format as a download instead of refusing it", async () => {
+    // The old bucket list refused this outright and the media was
+    // lost. Now it is stored as the catch-all and the browser
+    // downloads it.
+    const { storage, uploads } = fakeStorage();
+
+    const url = await mirrorInboundMedia({
+      ...BASE,
+      storage,
+      mimeType: "application/x-7z-compressed",
+      download: fakeDownload(1024, "application/x-7z-compressed"),
+    });
+
+    expect(url).not.toBeNull();
+    expect(uploads[0].options.contentType).toBe("application/octet-stream");
+  });
+
+  it("never declares active content inline", async () => {
+    const { storage, uploads } = fakeStorage();
+
+    await mirrorInboundMedia({
+      ...BASE,
+      storage,
+      mimeType: "text/html",
+      download: fakeDownload(1024, "text/html"),
+    });
+
+    expect(uploads[0].options.contentType).toBe("application/octet-stream");
+  });
+
   it("skips oversized media without downloading it", async () => {
     const { storage, uploads } = fakeStorage();
     const download = fakeDownload(1024);
@@ -205,7 +262,7 @@ describe("mirrorInboundMedia", () => {
       ...BASE,
       storage,
       mimeType: "application/pdf",
-      fileSize: MEDIA_MAX_BYTES + 1,
+      fileSize: CHAT_MEDIA_MAX_BYTES + 1,
       download,
     });
 
@@ -214,24 +271,27 @@ describe("mirrorInboundMedia", () => {
     expect(uploads).toHaveLength(0);
   });
 
-  it("skips media that turns out oversized once downloaded", async () => {
-    // Meta's file_size is advisory; the transfer is the truth.
-    const { storage, uploads } = fakeStorage();
+  it("hands the ceiling to the downloader so an oversized file never lands whole", async () => {
+    const { storage } = fakeStorage();
+    const download = fakeDownload(1024);
 
-    const url = await mirrorInboundMedia({
+    await mirrorInboundMedia({
       ...BASE,
       storage,
       mimeType: "video/mp4",
       fileSize: 1024,
-      download: fakeDownload(MEDIA_MAX_BYTES + 1, "video/mp4"),
+      download,
     });
 
-    expect(url).toBeNull();
-    expect(uploads).toHaveLength(0);
+    expect(download).toHaveBeenCalledWith({
+      downloadUrl: BASE.downloadUrl,
+      accessToken: BASE.accessToken,
+      maxBytes: CHAT_MEDIA_MAX_BYTES,
+    });
   });
 
   it("returns null when Storage refuses the upload", async () => {
-    // e.g. a document whose MIME is outside the bucket's allow-list.
+    // e.g. the bucket is unreachable.
     const { storage } = fakeStorage({ message: "mime type not supported" });
 
     const url = await mirrorInboundMedia({

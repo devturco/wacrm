@@ -11,7 +11,11 @@ function fakeStorage(publicUrl = 'https://cdn.test/public.png') {
   const uploads: { path: string; contentType: string }[] = [];
   const storage: MirrorStorage = {
     from: () => ({
-      upload: async (path: string, _body: Uint8Array | Buffer, options: { contentType: string }) => {
+      upload: async (
+        path: string,
+        _body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
+        options: { contentType: string },
+      ) => {
         uploads.push({ path, contentType: options.contentType });
         return { error: null };
       },
@@ -19,6 +23,16 @@ function fakeStorage(publicUrl = 'https://cdn.test/public.png') {
     }),
   };
   return { storage, uploads };
+}
+
+/** A stream carrying `bytes` bytes, like the real downloader returns. */
+function fakeStream(bytes: number) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    },
+  });
 }
 
 const baseArgs = {
@@ -31,7 +45,7 @@ describe('mirrorWhatsmiauMedia', () => {
   it('downloads the public url and stores it in chat-media', async () => {
     const { storage, uploads } = fakeStorage();
     const download = vi.fn(async () => ({
-      buffer: new Uint8Array([1, 2, 3]),
+      stream: fakeStream(3),
       contentType: 'image/png',
     }));
 
@@ -42,11 +56,50 @@ describe('mirrorWhatsmiauMedia', () => {
       download,
     } as MirrorWhatsmiauMediaArgs);
 
-    expect(download).toHaveBeenCalledWith('https://cdn.test/original.png');
+    expect(download).toHaveBeenCalledWith('https://cdn.test/original.png', 104857600);
     expect(uploads[0]?.path).toContain('account-acc-1');
     expect(uploads[0]?.path).toContain('inbound');
     expect(uploads[0]?.contentType).toBe('image/png');
     expect(url).toContain('https://cdn.test/public.png');
+  });
+
+  it('keeps the media id in its own path segment, so the name stays clean', async () => {
+    const { storage, uploads } = fakeStorage();
+    const download = vi.fn(async () => ({
+      stream: fakeStream(3),
+      contentType: 'application/pdf',
+    }));
+
+    await mirrorWhatsmiauMedia({
+      ...baseArgs,
+      storage,
+      mediaId: '3EB0C767D-A1B2',
+      mimeType: 'application/pdf',
+      fileName: 'contrato.pdf',
+      mediaUrl: 'https://cdn.test/original.pdf',
+      download,
+    } as MirrorWhatsmiauMediaArgs);
+
+    // .../inbound/<id>/contrato.pdf — the last segment IS the name.
+    expect(uploads[0]?.path).toBe('account-acc-1/inbound/3EB0C767D-A1B2/contrato.pdf');
+  });
+
+  it('declares an unknown format as a download, never as active content', async () => {
+    const { storage, uploads } = fakeStorage();
+    const download = vi.fn(async () => ({
+      stream: fakeStream(3),
+      contentType: 'text/html',
+    }));
+
+    await mirrorWhatsmiauMedia({
+      ...baseArgs,
+      storage,
+      mimeType: 'text/html',
+      mediaUrl: 'https://cdn.test/x.html',
+      download,
+    } as MirrorWhatsmiauMediaArgs);
+
+    expect(uploads[0]?.contentType).toBe('application/octet-stream');
   });
 
   it('falls back to the base64 payload when there is no url', async () => {
@@ -93,7 +146,37 @@ describe('downloadWhatsmiauMedia', () => {
       'fetch',
       vi.fn(async () => ({ ok: false, status: 404 })),
     );
-    await expect(downloadWhatsmiauMedia('https://cdn.test/x')).rejects.toThrow(/404/);
+    await expect(downloadWhatsmiauMedia('https://cdn.test/x', 1024)).rejects.toThrow(/404/);
+    vi.unstubAllGlobals();
+  });
+
+  it('cuts the stream once the bytes pass the limit', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/pdf' }),
+        body: (() => {
+          let sent = false;
+          return {
+            getReader: () => ({
+              read: async () => {
+                if (sent) return { done: true, value: undefined };
+                sent = true;
+                return { done: false, value: new Uint8Array(100) };
+              },
+              cancel: async () => {},
+            }),
+          };
+        })(),
+      })),
+    );
+
+    const { stream } = await downloadWhatsmiauMedia('https://cdn.test/x', 50);
+    await expect(
+      new Response(stream).arrayBuffer(),
+    ).rejects.toThrow(/exceeds/);
     vi.unstubAllGlobals();
   });
 });

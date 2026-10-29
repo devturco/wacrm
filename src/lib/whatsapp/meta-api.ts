@@ -1260,3 +1260,61 @@ export async function downloadMedia(
   const buffer = Buffer.from(await response.arrayBuffer())
   return { buffer, contentType }
 }
+
+export interface DownloadMediaStreamArgs {
+  downloadUrl: string
+  accessToken: string
+  /** Cuts the stream once the bytes go past this limit. */
+  maxBytes: number
+}
+
+/**
+ * The media bytes, as a stream.
+ *
+ * `downloadMedia` loads the whole file into memory — with the ceiling
+ * now at 100 MB that is 100 MB per concurrent download. Here the bytes
+ * are counted as they arrive and the stream is aborted the moment the
+ * limit is passed, so an oversized file never materialises.
+ */
+export async function downloadMediaStream(
+  args: DownloadMediaStreamArgs
+): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string }> {
+  const { downloadUrl, accessToken, maxBytes } = args
+  const response = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    throw new Error(`Media download failed: ${response.status}`)
+  }
+  const contentType =
+    response.headers.get('content-type') || 'application/octet-stream'
+  if (!response.body) {
+    throw new Error('Media download returned no body')
+  }
+
+  const reader = response.body.getReader()
+  let seen = 0
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read()
+      if (done) {
+        controller.close()
+        return
+      }
+      seen += value.byteLength
+      if (seen > maxBytes) {
+        await reader.cancel()
+        controller.error(
+          new Error(`Media exceeds the ${maxBytes}-byte limit`)
+        )
+        return
+      }
+      controller.enqueue(value)
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
+  })
+
+  return { stream, contentType }
+}

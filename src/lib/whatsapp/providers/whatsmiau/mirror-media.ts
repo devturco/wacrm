@@ -19,20 +19,24 @@
 
 import {
   MIRROR_BUCKET,
-  MIRROR_FOLDER,
   mirrorFileName,
+  mirrorObjectPath,
   normalizeMimeType,
   type MirrorStorage,
 } from '@/lib/whatsapp/mirror-inbound-media';
-import { MEDIA_MAX_BYTES, buildMediaPath } from '@/lib/storage/upload-media';
+import { normalizeContentType } from '@/lib/media/content-type';
+import { CHAT_MEDIA_MAX_BYTES } from '@/lib/storage/upload-media';
 
 export interface WhatsmiauMediaDownload {
-  buffer: Uint8Array;
+  stream: ReadableStream<Uint8Array>;
   contentType: string | null;
 }
 
 /** Injected in tests; defaults to a plain GET of the public url. */
-export type WhatsmiauMediaDownloader = (url: string) => Promise<WhatsmiauMediaDownload>;
+export type WhatsmiauMediaDownloader = (
+  url: string,
+  maxBytes: number,
+) => Promise<WhatsmiauMediaDownload>;
 
 export interface MirrorWhatsmiauMediaArgs {
   storage: MirrorStorage;
@@ -46,6 +50,8 @@ export interface MirrorWhatsmiauMediaArgs {
   mimeType?: string | null;
   fileName?: string | null;
   messageTimestamp?: number | null;
+  /** Ceiling in bytes — the account's, capped by the bucket's 100 MB. */
+  maxBytes?: number;
   download?: WhatsmiauMediaDownloader;
 }
 
@@ -61,15 +67,48 @@ function decodeBase64(value: string): Uint8Array | null {
   }
 }
 
-/** Default downloader: a plain GET of the public url. */
-export const downloadWhatsmiauMedia: WhatsmiauMediaDownloader = async (url) => {
+/**
+ * Default downloader: a plain GET of the public url.
+ *
+ * The bytes are counted as they arrive and the stream is cut at the
+ * limit, so a 100 MB attachment never lands in memory whole.
+ */
+export const downloadWhatsmiauMedia: WhatsmiauMediaDownloader = async (
+  url,
+  maxBytes,
+) => {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`WhatsMiau media download failed with ${response.status}`);
   }
   const contentType = response.headers.get('content-type');
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  return { buffer, contentType };
+  if (!response.body) {
+    throw new Error('WhatsMiau media download returned no body');
+  }
+
+  const reader = response.body.getReader();
+  let seen = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        controller.close();
+        return;
+      }
+      seen += value.byteLength;
+      if (seen > maxBytes) {
+        await reader.cancel();
+        controller.error(new Error(`Media exceeds the ${maxBytes}-byte limit`));
+        return;
+      }
+      controller.enqueue(value);
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+
+  return { stream, contentType };
 };
 
 /**
@@ -91,59 +130,58 @@ export async function mirrorWhatsmiauMedia(
     mimeType,
     fileName,
     messageTimestamp,
+    maxBytes = CHAT_MEDIA_MAX_BYTES,
     download = downloadWhatsmiauMedia,
   } = args;
 
   const normalizedMime = normalizeMimeType(mimeType);
 
-  let bytes: Uint8Array | null = null;
+  let body: ReadableStream<Uint8Array> | Uint8Array | null = null;
   let contentType: string | null = null;
 
   if (mediaUrl) {
     try {
-      const downloaded = await download(mediaUrl);
-      bytes = downloaded.buffer;
+      const downloaded = await download(mediaUrl, maxBytes);
+      body = downloaded.stream;
       contentType = downloaded.contentType;
     } catch (error) {
       console.warn('[whatsmiau-mirror] download failed for', mediaId, error);
       return null;
     }
   } else if (mediaBase64) {
-    bytes = decodeBase64(mediaBase64);
+    const bytes = decodeBase64(mediaBase64);
     if (!bytes) {
       console.warn('[whatsmiau-mirror] could not decode the base64 media for', mediaId);
       return null;
     }
+    if (bytes.byteLength > maxBytes) {
+      console.warn(
+        `[whatsmiau-mirror] skipping ${mediaId}: ${bytes.byteLength} bytes exceeds the ${maxBytes}-byte limit`,
+      );
+      return null;
+    }
+    body = bytes;
   } else {
-    return null;
-  }
-
-  if (bytes.byteLength > MEDIA_MAX_BYTES) {
-    console.warn(
-      `[whatsmiau-mirror] skipping ${mediaId}: ${bytes.byteLength} bytes exceeds the ${MEDIA_MAX_BYTES}-byte bucket limit`,
-    );
     return null;
   }
 
   // The metadata MIME wins over the response header: it is what the
   // message row records, so the stored object and `media_type` describe
-  // the same thing.
-  const uploadType =
-    normalizedMime ?? normalizeMimeType(contentType) ?? 'application/octet-stream';
+  // the same thing. The type we DECLARE is normalised — the bucket only
+  // accepts a known list, and anything unknown is stored as
+  // `application/octet-stream` so the browser downloads it.
+  const sourceMime = normalizedMime ?? normalizeMimeType(contentType);
+  const uploadType = normalizeContentType(sourceMime);
 
   try {
     const objectName = mirrorFileName({
-      mediaId,
-      mimeType: uploadType,
+      mimeType: sourceMime,
       fileName,
       messageTimestamp,
     });
-    // `null` suppresses buildMediaPath's wall-clock stamp: the media id
-    // already makes the path unique AND stable, and the stability is
-    // what makes a redelivery idempotent instead of duplicative.
-    const path = buildMediaPath(accountId, objectName, null, MIRROR_FOLDER);
+    const path = mirrorObjectPath(accountId, mediaId, objectName);
 
-    const { error } = await storage.from(MIRROR_BUCKET).upload(path, bytes, {
+    const { error } = await storage.from(MIRROR_BUCKET).upload(path, body, {
       contentType: uploadType,
       cacheControl: '3600',
       upsert: true,

@@ -241,7 +241,7 @@ vi.mock('@/lib/whatsapp/encryption', () => ({
 }))
 vi.mock('@/lib/whatsapp/meta-api', () => ({
   getMediaUrl: vi.fn(),
-  downloadMedia: vi.fn(),
+  downloadMediaStream: vi.fn(),
 }))
 vi.mock('@/lib/contacts/dedupe', () => ({
   findExistingContact: vi.fn(async () => ({
@@ -278,13 +278,13 @@ vi.mock('@/lib/whatsapp/message-status-sync', () => ({
 }))
 
 import { POST } from './route'
-import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
+import { getMediaUrl, downloadMediaStream } from '@/lib/whatsapp/meta-api'
 import { findExistingContact } from '@/lib/contacts/dedupe'
 import { handleTemplateWebhookChange } from '@/lib/whatsapp/template-webhook'
 import { MAX_WEBHOOK_BODY_BYTES } from '@/lib/whatsapp/webhook-body'
 
 const mockGetMediaUrl = vi.mocked(getMediaUrl)
-const mockDownloadMedia = vi.mocked(downloadMedia)
+const mockDownloadMedia = vi.mocked(downloadMediaStream)
 const mockFindExistingContact = vi.mocked(findExistingContact)
 
 const TEXT_MESSAGE = {
@@ -392,7 +392,12 @@ beforeEach(() => {
     fileSize: 2048,
   })
   mockDownloadMedia.mockResolvedValue({
-    buffer: Buffer.alloc(2048),
+    stream: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(2048))
+        controller.close()
+      },
+    }),
     contentType: 'image/jpeg',
   })
   h.dispatchInboundToFlows.mockResolvedValue({ consumed: false })
@@ -533,11 +538,11 @@ describe('inbound webhook: inbound media is mirrored (#466)', () => {
     expect(h.state.storageUploads).toHaveLength(1)
     expect(h.state.storageUploads[0].bucket).toBe('chat-media')
     expect(h.state.storageUploads[0].path).toBe(
-      'account-acc-1/inbound/1234567890123456-image-1700000000.jpg',
+      'account-acc-1/inbound/1234567890123456/image-1700000000.jpg',
     )
     expect(h.state.upsertCalls[0].row).toMatchObject({
       media_url:
-        'https://cdn.test/chat-media/account-acc-1/inbound/1234567890123456-image-1700000000.jpg',
+        'https://cdn.test/chat-media/account-acc-1/inbound/1234567890123456/image-1700000000.jpg',
       // Meta's MIME type used to be discarded outright (`void mediaType`).
       media_type: 'image/jpeg',
     })
@@ -571,7 +576,7 @@ describe('inbound webhook: inbound media is mirrored (#466)', () => {
     mockGetMediaUrl.mockResolvedValue({
       url: 'https://lookaside.fbsbx.com/whatsapp/big',
       mimeType: 'application/pdf',
-      fileSize: 40 * 1024 * 1024,
+      fileSize: 101 * 1024 * 1024,
     })
 
     await runWebhook({
@@ -601,7 +606,12 @@ describe('inbound webhook: inbound media is mirrored (#466)', () => {
       fileSize: 4096,
     })
     mockDownloadMedia.mockResolvedValue({
-      buffer: Buffer.alloc(4096),
+      stream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(4096))
+          controller.close()
+        },
+      }),
       contentType: 'application/pdf',
     })
 
@@ -619,7 +629,7 @@ describe('inbound webhook: inbound media is mirrored (#466)', () => {
     })
 
     expect(h.state.storageUploads[0].path).toBe(
-      'account-acc-1/inbound/1234567890123456-invoice.pdf',
+      'account-acc-1/inbound/1234567890123456/invoice.pdf',
     )
   })
 

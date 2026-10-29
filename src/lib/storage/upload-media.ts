@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { getT } from "@/lib/i18n/translate";
+import { normalizeContentType } from "@/lib/media/content-type";
 
 const t = getT("LibErrors");
 
@@ -17,23 +18,28 @@ const t = getT("LibErrors");
  * composer call this so the logic lives in exactly one place.
  */
 
-/** 16 MB — matches the `file_size_limit` on both buckets (migrations 016/020/023). */
+/** 16 MB — the `flow-media` bucket's `file_size_limit` (migration 016). */
 export const MEDIA_MAX_BYTES = 16 * 1024 * 1024;
 
 /**
+ * 100 MB — the `chat-media` bucket's `file_size_limit` (migration 066),
+ * and the same ceiling the provider applies to documents.
+ */
+export const CHAT_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
+
+/**
  * Per-kind upload ceilings that mirror Meta's WhatsApp Cloud API caps so
- * a file that the bucket would accept (≤16 MB) but Meta would reject is
- * caught client-side BEFORE upload — otherwise it lands in storage as an
+ * a file that the bucket would accept but Meta would reject is caught
+ * client-side BEFORE upload — otherwise it lands in storage as an
  * orphan and the send fails with a confusing 400. Images are Meta's
- * tightest cap at 5 MB; documents are held at the 16 MB bucket limit
- * (Meta allows 100 MB, but the bucket — and shared-hosting upload UX —
- * caps lower).
+ * tightest cap at 5 MB; documents get Meta's full 100 MB, which the
+ * `chat-media` bucket now allows too.
  */
 export const MEDIA_MAX_BYTES_BY_KIND = {
   image: 5 * 1024 * 1024,
   video: 16 * 1024 * 1024,
   audio: 16 * 1024 * 1024,
-  document: 16 * 1024 * 1024,
+  document: 100 * 1024 * 1024,
 } as const;
 
 /**
@@ -124,7 +130,11 @@ export async function uploadAccountMedia(
   const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
     cacheControl: "3600",
     upsert: false,
-    contentType: file.type,
+    // The bucket carries an allow-list and refuses anything outside it,
+    // so the type we declare has to be one it accepts. An unknown
+    // format becomes `application/octet-stream` — the browser downloads
+    // it instead of rendering it.
+    contentType: normalizeContentType(file.type),
   });
   if (upErr) throw new Error(upErr.message);
 
