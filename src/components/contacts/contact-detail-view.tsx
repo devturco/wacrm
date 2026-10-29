@@ -20,6 +20,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ContactMediaPanel } from '@/components/media/contact-media-panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,12 +60,19 @@ export function ContactDetailView({
   onUpdated,
 }: ContactDetailViewProps) {
   const t = useTranslations('Contacts.detailView');
+  const tMediaTabs = useTranslations('Media.tabs');
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
 
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
+
+  // What the media panel calls this contact — the name when we have
+  // one, the handle when we don't.
+  const contactLabel = contact
+    ? contact.name || contactHandle(contact) || t('unnamed')
+    : t('unnamed');
 
   // Send template — lets the business initiate (or re-open) a conversation
   // with this contact by sending an approved template. The send route
@@ -508,6 +516,24 @@ export function ContactDetailView({
                 >
                   {t('tabs.deals')}
                 </TabsTrigger>
+                <TabsTrigger
+                  value="media"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                >
+                  {tMediaTabs('media')}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="documents"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                >
+                  {tMediaTabs('documents')}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="links"
+                  className="flex-none data-active:bg-muted data-active:text-primary text-muted-foreground"
+                >
+                  {tMediaTabs('links')}
+                </TabsTrigger>
               </TabsList>
 
               {/* Details Tab */}
@@ -769,6 +795,33 @@ export function ContactDetailView({
                     ))}
                   </div>
                 )}
+              </TabsContent>
+
+              {/* Media Tab */}
+              <TabsContent value="media" className="flex-1 overflow-y-auto px-4 py-3">
+                <ContactMediaPanel
+                  contactId={contactId ?? ''}
+                  kind="media"
+                  contactLabel={contactLabel}
+                />
+              </TabsContent>
+
+              {/* Documents Tab */}
+              <TabsContent value="documents" className="flex-1 overflow-y-auto px-4 py-3">
+                <ContactMediaPanel
+                  contactId={contactId ?? ''}
+                  kind="documents"
+                  contactLabel={contactLabel}
+                />
+              </TabsContent>
+
+              {/* Links Tab */}
+              <TabsContent value="links" className="flex-1 overflow-y-auto px-4 py-3">
+                <ContactMediaPanel
+                  contactId={contactId ?? ''}
+                  kind="links"
+                  contactLabel={contactLabel}
+                />
               </TabsContent>
             </Tabs>
           </div>
