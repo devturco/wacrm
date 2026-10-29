@@ -62,6 +62,7 @@ function row() {
       msgCall: '',
       groupsIgnore: true,
       saveMedia: true,
+      channelsEnabled: false,
       webhook: {
         enabled: true,
         url: 'https://app.test/api/whatsmiau/webhook',

@@ -102,6 +102,7 @@ function configRow() {
       msgCall: '',
       groupsIgnore: true,
       saveMedia: true,
+      channelsEnabled: false,
       webhook: {
         enabled: true,
         url: '',

@@ -59,6 +59,7 @@ function row(overrides: Record<string, unknown> = {}) {
       msgCall: '',
       groupsIgnore: true,
       saveMedia: true,
+      channelsEnabled: false,
       webhook: { enabled: true, url: '', headers: {}, events: [], base64: false },
     },
     connected_at: null,

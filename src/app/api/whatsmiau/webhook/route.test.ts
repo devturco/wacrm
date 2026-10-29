@@ -13,6 +13,7 @@ interface FakeConfig {
     msgCall: string;
     groupsIgnore: boolean;
     saveMedia: boolean;
+    channelsEnabled: boolean;
     webhook: {
       enabled: boolean;
       url: string;
@@ -101,6 +102,7 @@ function config(): FakeConfig {
       msgCall: '',
       groupsIgnore: true,
       saveMedia: true,
+      channelsEnabled: false,
       webhook: { enabled: true, url: '', headers: {}, events: [], base64: false },
     },
   };

@@ -26,6 +26,16 @@ export interface WhatsmiauInstanceSettings {
   msgCall: string;
   groupsIgnore: boolean;
   saveMedia: boolean;
+  /**
+   * Whether the messages of the WhatsApp CHANNELS the number follows
+   * reach the inbox.
+   *
+   * This one is OURS, not the provider's: the provider has no flag for
+   * channels, so the filter lives in our inbound pipeline. Off by
+   * default — a channel has an id, not a phone number, so its messages
+   * would create a contact nobody can ever answer.
+   */
+  channelsEnabled: boolean;
   webhook: WhatsmiauWebhookConfig;
 }
 
@@ -34,7 +44,9 @@ export interface WhatsmiauInstanceSettings {
  *
  * `readMessages` is OFF on purpose: marking an inbound message as read
  * is an action the operator has to ask for, never one the app does on
- * its own. Everything else mirrors the provider's own defaults.
+ * its own. `channelsEnabled` is OFF for the same reason — a broadcast
+ * feed is not a customer, and the operator has to ask for it.
+ * Everything else mirrors the provider's own defaults.
  */
 export const DEFAULT_INSTANCE_SETTINGS: WhatsmiauInstanceSettings = {
   alwaysOnline: false,
@@ -43,6 +55,7 @@ export const DEFAULT_INSTANCE_SETTINGS: WhatsmiauInstanceSettings = {
   msgCall: '',
   groupsIgnore: true,
   saveMedia: true,
+  channelsEnabled: false,
   webhook: {
     enabled: true,
     url: '',
@@ -84,6 +97,7 @@ export function isSameSettings(
     a.rejectCall !== b.rejectCall ||
     a.groupsIgnore !== b.groupsIgnore ||
     a.saveMedia !== b.saveMedia ||
+    a.channelsEnabled !== b.channelsEnabled ||
     a.msgCall !== b.msgCall
   ) {
     return false;

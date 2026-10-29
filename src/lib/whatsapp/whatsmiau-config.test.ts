@@ -100,6 +100,9 @@ describe('whatsmiau config — defaults', () => {
     expect(DEFAULT_INSTANCE_SETTINGS.rejectCall).toBe(true);
     expect(DEFAULT_INSTANCE_SETTINGS.saveMedia).toBe(true);
     expect(DEFAULT_INSTANCE_SETTINGS.webhook.base64).toBe(false);
+    // A channel is a broadcast feed, not a customer — it stays out of
+    // the inbox until the account asks for it.
+    expect(DEFAULT_INSTANCE_SETTINGS.channelsEnabled).toBe(false);
   });
 
   it('merges a patch over the defaults without dropping untouched keys', () => {

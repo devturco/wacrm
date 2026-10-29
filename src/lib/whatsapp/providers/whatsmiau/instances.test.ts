@@ -82,6 +82,7 @@ describe('whatsmiau instances — requests', () => {
         msgCall: '',
         groupsIgnore: true,
         saveMedia: true,
+        channelsEnabled: false,
         webhook: {
           enabled: true,
           url: 'https://app.example/api/whatsmiau/webhook',
@@ -144,6 +145,7 @@ describe('whatsmiau instances — requests', () => {
       msgCall: 'nao podemos agora',
       groupsIgnore: false,
       saveMedia: true,
+      channelsEnabled: false,
       webhook: {
         enabled: true,
         url: 'https://app.example/api/whatsmiau/webhook',

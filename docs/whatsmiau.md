@@ -48,10 +48,61 @@ curl -X GET 'https://api.whatsmiau.dev/v2/instance/fetchInstances' \
 | `number` | Número do WhatsApp com DDI + DDD, sem pontuação; em endpoints específicos também é permitido JID. |
 | JID individual | Exemplo: `5511999988888@s.whatsapp.net`. |
 | JID de grupo/comunidade | Exemplo: `120363001234567890@g.us`. |
+| JID de canal (newsletter) | Exemplo: `120363025246005890@newsletter` — fluxo de transmissão, **não** é uma pessoa. |
+| JID de status (broadcast) | Exemplo: `status@broadcast`. |
 | LID | Identificador alternativo do WhatsApp, eventualmente no formato `...@lid`. |
 | `quoted` | Referência a mensagem anterior; `key.id` é indispensável e `key.participant` é necessário para citação adequada em grupos. |
 | `delay` | Em rotas de envio que o oferecem, representa milissegundos, com limite de **110.000 ms**. |
 | Credenciais | Nunca armazenar chaves em código frontend ou em repositórios públicos. |
+
+### O que o wacrm faz com o que chega
+
+O provedor entrega tudo pelo mesmo webhook: conversa de pessoa, grupo, canal e
+status. O wacrm separa os casos pelo **sufixo do JID** e aplica duas regras
+que são **do app**, não do provedor — o provedor não tem flag para nenhuma
+delas.
+
+#### Canais (`channelsEnabled`, padrão **desligado**)
+
+Um canal é um fluxo de transmissão: ele tem **id**, não número de telefone, e
+ninguém consegue responder. Deixá-lo passar criaria um "contato" cujo telefone
+é um id de 18 dígitos — um contato que nunca vai receber nada.
+
+O provedor **não tem** flag de canal (`groupsIgnore` cobre só grupos), então o
+filtro mora no app: `src/lib/whatsapp/providers/whatsmiau/channels.ts`. O
+interruptor fica em **Configurações → API CRMBR → Comportamentos da instância
+→ "Receber mensagens de canais"**, e é salvo junto com o resto das flags da
+instância, na coluna `instance_settings` (JSONB). **Não é uma flag do
+provedor**: ela nunca é enviada para ele.
+
+> Como o valor mora no JSONB, **nenhuma migration é necessária** — as
+> instâncias já existentes passam a ignorar os canais assim que a coluna for
+> lida, porque o default se completa na leitura.
+
+#### Mensagens enviadas pelo celular (`data.key.fromMe`)
+
+O provedor devolve as nossas próprias mensagens pelo webhook. O wacrm
+distingue dois casos:
+
+| Caso | Como é reconhecido | O que o wacrm faz |
+|---|---|---|
+| O **CRM** enviou a mensagem | Já existe uma linha em `messages` com aquele `message_id` | Reconcilia só o **status** (a linha já foi gravada pelo caminho de envio) |
+| O **agente enviou pelo celular** | Não existe linha — ninguém no app escreveu nada | **Grava a mensagem** na conversa, como `sender_type: 'agent'` |
+
+O segundo caso é o que fazia a conversa mostrar só o lado do cliente: a
+mensagem do agente simplesmente sumia. Gravá-la não é "receber uma mensagem" —
+por isso ela **não** aumenta o contador de não lidas, **não** reabre a
+conversa fechada, **não** dispara automação, fluxo nem a resposta da IA. A
+mídia é espelhada no nosso bucket como qualquer outra.
+
+Só entra na conversa quando o **contato já existe** na conta: uma mensagem
+enviada para um número que nunca nos escreveu não cria um cliente.
+
+> **Corrida.** O eco do provedor pode chegar antes de o envio do CRM gravar a
+> linha. Nesse caso a linha é gravada pelo caminho do eco, e o `insert` do
+> CRM esbarra no índice único `(conversation_id, message_id)` — o envio trata a
+> violação reusando a linha existente em vez de dar a mensagem por perdida
+> (`src/lib/whatsapp/send-message.ts`).
 
 ### Como o wacrm usa esta API (credencial da plataforma)
 

@@ -86,6 +86,7 @@ import {
   handleWhatsmiauInboundMessage,
   type WhatsmiauInboundContext,
 } from './inbound';
+import { findExistingContact } from '@/lib/contacts/dedupe';
 import type { NormalizedInboundMessage } from './normalize';
 
 type Row = Record<string, unknown>;
@@ -161,6 +162,7 @@ function context(db: SupabaseClient): WhatsmiauInboundContext {
       msgCall: '',
       groupsIgnore: true,
       saveMedia: true,
+      channelsEnabled: false,
       webhook: {
         enabled: true,
         url: 'https://app.test/api/whatsmiau/webhook',
@@ -225,6 +227,94 @@ describe('handleWhatsmiauInboundMessage', () => {
     expect(outcome.disposition).toBe('skipped');
     expect(calls.filter((c) => c.table === 'contacts')).toHaveLength(0);
     expect(calls.filter((c) => c.table === 'conversations')).toHaveLength(0);
+  });
+
+  it('drops a channel message by default', async () => {
+    const { db, calls } = scriptedDb({});
+    const outcome = await handleWhatsmiauInboundMessage(
+      context(db),
+      textMessage({
+        remoteJid: '120363025246005890@newsletter',
+        phone: '120363025246005890',
+      }),
+    );
+
+    expect(outcome.disposition).toBe('skipped');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('lets a channel message through when the instance asks for it', async () => {
+    const { db } = scriptedDb({
+      contacts: [{ data: { id: 'contact-1', phone: '120363025246005890' } }],
+      conversations: [{ data: [] }, { data: { id: 'conv-1', status: 'open' } }],
+      messages: [{ data: [{ id: 'msg-1' }] }],
+    });
+
+    const ctx = context(db);
+    ctx.instanceSettings = { ...ctx.instanceSettings, channelsEnabled: true };
+
+    const outcome = await handleWhatsmiauInboundMessage(
+      ctx,
+      textMessage({
+        remoteJid: '120363025246005890@newsletter',
+        phone: '120363025246005890',
+      }),
+    );
+
+    expect(outcome.disposition).toBe('inserted');
+  });
+
+  it('stores a message we sent from the phone, without fanning it out', async () => {
+    vi.mocked(findExistingContact).mockResolvedValueOnce({
+      id: 'contact-1',
+      phone: '5511999988888',
+    });
+
+    const { db, calls } = scriptedDb({
+      // The lookup of our own message finds nothing — the CRM never
+      // wrote a row for a message typed on the phone.
+      messages: [{ data: null }, { data: [{ id: 'msg-1' }] }],
+      conversations: [{ data: [{ id: 'conv-1', status: 'open', last_message_at: null }] }],
+    });
+
+    const outcome = await handleWhatsmiauInboundMessage(
+      context(db),
+      textMessage({ fromMe: true, text: 'Já te respondi pelo celular.' }),
+    );
+
+    expect(outcome.disposition).toBe('inserted');
+    expect(outcome.conversationId).toBe('conv-1');
+
+    const stored = calls.find((c) => c.table === 'messages' && c.op === 'upsert');
+    expect(stored?.payload).toMatchObject({
+      conversation_id: 'conv-1',
+      sender_type: 'agent',
+      status: 'sent',
+      message_id: 'MSG_001',
+      content_text: 'Já te respondi pelo celular.',
+    });
+
+    // It is OUR message: no unread bump, no automation, no AI reply and
+    // no inbound webhook event.
+    expect(calls.some((c) => c.table.startsWith('rpc:'))).toBe(false);
+    expect(h.automations).toHaveLength(0);
+    expect(h.aiReplies).toHaveLength(0);
+    expect(h.events.map((e) => e.event)).not.toContain('message.received');
+  });
+
+  it('only reconciles the status when the CRM already stored the message', async () => {
+    const { db, calls } = scriptedDb({
+      messages: [{ data: { id: 'msg-1' } }],
+    });
+
+    const outcome = await handleWhatsmiauInboundMessage(
+      context(db),
+      textMessage({ fromMe: true }),
+    );
+
+    expect(outcome.disposition).toBe('skipped');
+    expect(h.statusUpdates).toEqual([{ wamid: 'MSG_001', status: 'sent' }]);
+    expect(calls.filter((c) => c.table === 'messages' && c.op === 'upsert')).toHaveLength(0);
   });
 
   it('creates the contact and the conversation, stores the message and fans out', async () => {

@@ -49,6 +49,17 @@ describe('whatsmiau settings — isSameSettings', () => {
     expect(isSameSettings(a, b)).toBe(false);
   });
 
+  it('ships the channels off', () => {
+    expect(DEFAULT_INSTANCE_SETTINGS.channelsEnabled).toBe(false);
+  });
+
+  it('spots a different channel switch', () => {
+    const a = settings();
+    const b = settings({ channelsEnabled: true });
+
+    expect(isSameSettings(a, b)).toBe(false);
+  });
+
   it('spots a different event list', () => {
     const a = settings();
     const b = settings();

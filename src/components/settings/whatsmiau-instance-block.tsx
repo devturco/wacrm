@@ -347,6 +347,12 @@ export function WhatsmiauInstanceBlock({
               onChange={(next) => patch({ groupsIgnore: next })}
             />
             <Toggle
+              label={t('channelsEnabled')}
+              description={t('channelsEnabledDesc')}
+              checked={draft.channelsEnabled}
+              onChange={(next) => patch({ channelsEnabled: next })}
+            />
+            <Toggle
               label={t('rejectCall')}
               description={t('rejectCallDesc')}
               checked={draft.rejectCall}

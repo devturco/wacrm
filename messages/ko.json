@@ -2077,6 +2077,8 @@
       "alwaysOnlineDesc": "번호를 온라인 상태로 유지합니다.",
       "groupsIgnore": "그룹 무시",
       "groupsIgnoreDesc": "웹훅의 그룹 이벤트를 차단합니다.",
+      "channelsEnabled": "채널 메시지 수신",
+      "channelsEnabledDesc": "연결된 번호가 구독한 WhatsApp 채널의 메시지를 받은함으로 가져옵니다. 기본값은 꺼짐입니다. 채널은 고객이 아닌 방송 피드입니다.",
       "rejectCall": "통화 거절",
       "rejectCallDesc": "수신 통화를 자동으로 거절합니다.",
       "readMessages": "읽음 처리",

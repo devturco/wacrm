@@ -2077,6 +2077,8 @@
       "alwaysOnlineDesc": "Mantém o número marcado como online.",
       "groupsIgnore": "Ignorar grupos",
       "groupsIgnoreDesc": "Suprime os eventos de grupo no webhook.",
+      "channelsEnabled": "Receber mensagens de canais",
+      "channelsEnabledDesc": "Deixa as mensagens dos canais do WhatsApp que o número acompanha chegarem à caixa de entrada. Desativado por padrão — um canal é um fluxo de transmissão, não um cliente.",
       "rejectCall": "Rejeitar ligações",
       "rejectCallDesc": "Rejeita automaticamente as ligações recebidas.",
       "readMessages": "Marcar como lida",

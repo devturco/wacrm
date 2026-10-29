@@ -47,6 +47,7 @@ import {
 } from '@/lib/whatsapp/phone-utils';
 import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity';
 import { applyPendingMessageStatuses } from '@/lib/whatsapp/message-status-sync';
+import { isUniqueViolation } from '@/lib/contacts/dedupe';
 import type { MessageTemplate } from '@/types';
 import {
   resolveTemplateRow,
@@ -466,33 +467,60 @@ export async function sendMessageToConversation(
           )
         : (contentText ?? null);
 
-  const { data: messageRecord, error: msgError } = await db
+  const insertPayload = {
+    conversation_id: conversationId,
+    sender_type: 'agent' as const,
+    sender_id: senderId ?? null,
+    content_type: messageType,
+    content_text: persistedText,
+    media_url:
+      messageType === 'template'
+        ? templateHeaderMediaUrl(templateRow, templateMessageParams)
+        : mediaUrl || null,
+    template_name: templateName || null,
+    interactive_payload:
+      messageType === 'interactive' ? interactivePayload : null,
+    message_id: waMessageId,
+    status: 'sent',
+    reply_to_message_id: replyToMessageId || null,
+  };
+
+  const { data: inserted, error: insertError } = await db
     .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_type: 'agent',
-      sender_id: senderId ?? null,
-      content_type: messageType,
-      content_text: persistedText,
-      media_url:
-        messageType === 'template'
-          ? templateHeaderMediaUrl(templateRow, templateMessageParams)
-          : mediaUrl || null,
-      template_name: templateName || null,
-      interactive_payload:
-        messageType === 'interactive' ? interactivePayload : null,
-      message_id: waMessageId,
-      status: 'sent',
-      reply_to_message_id: replyToMessageId || null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
 
-  if (msgError) {
+  let messageRecord: { id: string } | null = inserted;
+  let msgError: { message: string } | null = insertError;
+
+  if (insertError && isUniqueViolation(insertError)) {
+    // The provider echoed our own message back before this insert
+    // landed, and the inbound pipeline stored it (it is our message,
+    // but nobody in the app had written a row for it yet). The row is
+    // already there — the message was NOT lost, so we take it instead
+    // of failing the send.
+    const { data: raced } = await db
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('message_id', waMessageId)
+      .maybeSingle();
+
+    if (raced) {
+      console.info(
+        '[send-message] our own message was already stored by the inbound pipeline; reusing the row.'
+      );
+      messageRecord = raced as { id: string };
+      msgError = null;
+    }
+  }
+
+  if (msgError || !messageRecord) {
     console.error('[send-message] error inserting sent message:', msgError);
     throw new SendMessageError(
       'db_error',
-      `Message sent to Meta but failed to save to DB: ${msgError.message}`,
+      `Message sent to Meta but failed to save to DB: ${msgError?.message ?? 'unknown error'}`,
       500
     );
   }

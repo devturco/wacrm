@@ -42,6 +42,7 @@ import {
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 
 import { refreshContactAvatar } from './avatar';
+import { isChannelJid, isGroupJid } from './channels';
 import { mirrorWhatsmiauMedia } from './mirror-media';
 import type { NormalizedInboundMessage } from './normalize';
 import { platformCredential, isPlatformConfigured } from './platform-credential';
@@ -131,6 +132,7 @@ interface ConversationOutcome {
     id: string;
     status?: string | null;
     first_inbound_at?: string | null;
+    last_message_at?: string | null;
   };
   created: boolean;
 }
@@ -329,24 +331,43 @@ export async function handleWhatsmiauInboundMessage(
   // the provider side, but if one still arrives we drop it: our contact
   // model is phone-based, and a group JID would create a contact nobody
   // can ever answer.
-  if (message.remoteJid.endsWith('@g.us')) {
+  if (isGroupJid(message.remoteJid)) {
+    return { disposition: 'skipped' };
+  }
+
+  // A channel is a broadcast feed, not a person: its id is not a phone
+  // number, so letting one through creates a contact nobody can ever
+  // answer. The provider has no flag for it — the account decides, per
+  // instance, and it is OFF by default.
+  if (!ctx.instanceSettings.channelsEnabled && isChannelJid(message.remoteJid)) {
     return { disposition: 'skipped' };
   }
 
   const phone = normalizePhone(message.phone);
   if (!phone) return { disposition: 'skipped' };
 
-  // Our own outbound message echoed back. We never create a thread for
-  // it — the outbound path owns that — we only reconcile the status of
-  // the row we already wrote.
+  // Our own message, echoed back by the provider. Two very different
+  // things share this branch:
+  //
+  //   1. The CRM sent it — the row is already in `messages` and the
+  //      echo only tells us the provider accepted it. We reconcile the
+  //      status of the row we wrote and stop.
+  //   2. It was sent from the PHONE — the agent typed it in WhatsApp,
+  //      not in the CRM. Nobody wrote a row, so nobody is going to:
+  //      without this, the conversation shows only what the other side
+  //      said and the customer looks like they are talking to nobody.
   if (message.fromMe) {
-    await applyMessageStatus(db, accountId, {
-      wamid: message.messageId,
-      status: 'sent',
-      failure: null,
-      statusAt: new Date(message.timestamp * 1000).toISOString(),
-    });
-    return { disposition: 'skipped' };
+    const stored = await findMessageIdInAccount(ctx, message.messageId);
+    if (stored) {
+      await applyMessageStatus(db, accountId, {
+        wamid: message.messageId,
+        status: 'sent',
+        failure: null,
+        statusAt: new Date(message.timestamp * 1000).toISOString(),
+      });
+      return { disposition: 'skipped' };
+    }
+    return storeOwnPhoneMessage(ctx, message);
   }
 
   const contactOutcome = await findOrCreateContact(ctx, phone, message.pushName ?? null);
@@ -595,6 +616,192 @@ export async function handleWhatsmiauInboundMessage(
     conversationId: conversation.id,
     contactId: contactOutcome.contact.id,
   };
+}
+
+/**
+ * Store a message the agent sent from the PHONE (not from the CRM).
+ *
+ * The provider echoes our own messages back through the webhook, and
+ * this is where the echo of a phone-typed message is written down. It
+ * is NOT a customer message: it does not bump the unread counter, does
+ * not re-open a closed conversation, and does not fire an automation,
+ * a flow or the AI reply. It is a line in the conversation — the same
+ * one the person on the other side sees in their WhatsApp.
+ *
+ * The contact has to exist already. A message we sent to a number
+ * nobody wrote to us from does not make a customer; that one stays on
+ * the phone.
+ */
+async function storeOwnPhoneMessage(
+  ctx: WhatsmiauInboundContext,
+  message: NormalizedInboundMessage,
+): Promise<InboundOutcome> {
+  const { db, accountId } = ctx;
+
+  const phone = normalizePhone(message.phone);
+  if (!phone) return { disposition: 'skipped' };
+
+  const contact = await findExistingContact(db, accountId, phone);
+  if (!contact) return { disposition: 'skipped' };
+
+  const conversationOutcome = await findOrCreateConversation(ctx, contact.id);
+  if (!conversationOutcome) return { disposition: 'skipped' };
+  const conversation = conversationOutcome.conversation;
+
+  // A thread opened by our own message still announces itself — the
+  // same rule the inbound path follows.
+  if (conversationOutcome.created) {
+    await dispatchWebhookEvent(db, accountId, 'conversation.created', {
+      conversation_id: conversation.id,
+      contact_id: contact.id,
+    });
+  }
+
+  // The provider's copy of the media is temporary — the same mirror
+  // the inbound path does, so the attachment is ours too.
+  let mediaUrl: string | null = message.mediaUrl ?? null;
+  const mediaType: string | null = message.mimeType ?? null;
+  if (message.kind !== 'text' && message.kind !== 'interactive') {
+    const mirrored = await mirrorWhatsmiauMedia({
+      storage: ctx.storage,
+      accountId,
+      mediaId: message.messageId,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaBase64: message.mediaBase64 ?? null,
+      mimeType: message.mimeType ?? null,
+      fileName: message.fileName ?? null,
+      messageTimestamp: message.timestamp,
+    });
+    if (mirrored) mediaUrl = mirrored;
+  }
+
+  const contentType = contentTypeFor(message.kind);
+  const contentText =
+    message.kind === 'interactive'
+      ? (message.buttonReplyTitle ?? message.listReplyTitle ?? '')
+      : (message.text ?? message.caption ?? null);
+
+  const sentAt = new Date(message.timestamp * 1000).toISOString();
+
+  // Idempotent: the provider redelivers, and the CRM's own insert may
+  // have landed in the meantime. The unique index on
+  // (conversation_id, message_id) turns the replay into a no-op.
+  const { data: insertedRows, error } = await db
+    .from('messages')
+    .upsert(
+      {
+        conversation_id: conversation.id,
+        sender_type: 'agent',
+        // The phone has no app user behind it — the agent is whoever
+        // holds the device.
+        sender_id: null,
+        content_type: contentType,
+        content_text: contentText,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        message_id: message.messageId,
+        status: 'sent',
+        created_at: sentAt,
+      },
+      { onConflict: 'conversation_id,message_id', ignoreDuplicates: true },
+    )
+    .select('id');
+
+  if (error) {
+    console.error('[whatsmiau] could not store our own message:', error.message);
+    return {
+      disposition: 'skipped',
+      conversationId: conversation.id,
+      contactId: contact.id,
+    };
+  }
+
+  if (!insertedRows || insertedRows.length === 0) {
+    console.info('[whatsmiau] duplicate own message ignored (replay):', message.messageId);
+    return {
+      disposition: 'replay',
+      conversationId: conversation.id,
+      contactId: contact.id,
+    };
+  }
+
+  await updateConversationPreview(ctx, conversation, contentText, message.kind, sentAt);
+
+  // A human is handling this conversation from the phone — the app
+  // must stop talking over them, exactly as it does when the message
+  // is sent from the CRM.
+  await pauseActiveFlow(ctx, contact.id);
+
+  return {
+    disposition: 'inserted',
+    conversationId: conversation.id,
+    contactId: contact.id,
+  };
+}
+
+/**
+ * Move the conversation's preview to our own message.
+ *
+ * Only when it IS the last message: a delivery that arrives late (the
+ * phone was offline and the provider caught up) must not overwrite
+ * the preview of a newer message.
+ */
+async function updateConversationPreview(
+  ctx: WhatsmiauInboundContext,
+  conversation: { id: string; last_message_at?: string | null },
+  contentText: string | null,
+  kind: NormalizedInboundMessage['kind'],
+  sentAt: string,
+): Promise<void> {
+  const lastAt = conversation.last_message_at;
+  if (lastAt && new Date(lastAt).getTime() > new Date(sentAt).getTime()) return;
+
+  const { error } = await ctx.db
+    .from('conversations')
+    .update({
+      last_message_text: contentText || `[${kind}]`,
+      last_message_at: sentAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', conversation.id);
+
+  if (error) {
+    console.error('[whatsmiau] could not update the conversation preview:', error.message);
+  }
+}
+
+/**
+ * Pause the flow that is running for this contact.
+ *
+ * The agent stepping in — from the app or from the phone — is the
+ * strongest "yield, a human is here" signal there is. Best-effort:
+ * a flow that keeps running is annoying, but it must not cost us the
+ * message.
+ */
+async function pauseActiveFlow(
+  ctx: WhatsmiauInboundContext,
+  contactId: string,
+): Promise<void> {
+  try {
+    const { error } = await ctx.db
+      .from('flow_runs')
+      .update({
+        status: 'paused_by_agent',
+        ended_at: new Date().toISOString(),
+        end_reason: 'agent_replied',
+      })
+      .eq('account_id', ctx.accountId)
+      .eq('contact_id', contactId)
+      .eq('status', 'active');
+    if (error) {
+      console.error('[whatsmiau] pause-on-agent-send failed:', error.message);
+    }
+  } catch (err) {
+    console.error(
+      '[whatsmiau] pause-on-agent-send threw:',
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /**
