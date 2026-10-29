@@ -23,7 +23,8 @@ import {
 import { Skeleton } from '@/components/dashboard/skeleton';
 import { BarChart } from '@/components/tremor/bar-chart';
 import { formatCompactNumber } from '@/lib/currency';
-import { format, parseISO } from 'date-fns';
+import { formatDate } from '@/lib/i18n/format';
+import { parseISO } from 'date-fns';
 
 interface UsageResponse {
   window_days: number;
@@ -105,7 +106,7 @@ export function AiUsageCard() {
   const tokensLabel = t('tokens');
   const chartData =
     data?.daily.map((d) => ({
-      day: format(parseISO(d.date), 'MMM d'),
+      day: formatDate(parseISO(d.date), { month: 'short', day: 'numeric' }),
       [tokensLabel]: d.tokens,
     })) ?? [];
   const hasSpend = (data?.totals.total_tokens ?? 0) > 0;

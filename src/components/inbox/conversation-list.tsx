@@ -11,8 +11,7 @@ import { applyInboxFilter, type InboxFilter } from "@/lib/inbox/inbox-filters";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
 import { Search, ChevronDown, X } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -54,7 +53,14 @@ export function ConversationList({
   initialFilter = "all",
 }: ConversationListProps) {
   const t = useTranslations("Inbox.conversationList");
-  
+  /**
+   * The relative time ("há 5 minutos"). `Intl.RelativeTimeFormat`
+   * renders it in the app's language — the deployment's locale, the
+   * same one the message catalogue uses. The previous
+   * `formatDistanceToNow` from date-fns always answered in English.
+   */
+  const format = useFormatter();
+
   const FILTER_OPTIONS: { label: string; value: InboxFilter }[] = useMemo(() => [
     { label: t("filterAll"), value: "all" },
     { label: t("filterUnread"), value: "unread" },
@@ -417,6 +423,8 @@ export function ConversationList({
                 isActive={conv.id === activeConversationId}
                 onSelect={handleSelect}
                 t={t}
+                format={format}
+                now={now}
               />
             ))}
           </div>
@@ -431,6 +439,9 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: (conversation: Conversation) => void;
   t: ReturnType<typeof useTranslations>;
+  format: ReturnType<typeof useFormatter>;
+  /** The clock the list ticks on — one value for every row. */
+  now: number;
 }
 
 function ConversationItem({
@@ -438,6 +449,8 @@ function ConversationItem({
   isActive,
   onSelect,
   t,
+  format,
+  now,
 }: ConversationItemProps) {
   const contact = conversation.contact;
   const displayName = contact?.name || contact?.phone || t("unknown");
@@ -448,9 +461,7 @@ function ConversationItem({
   }, [onSelect, conversation]);
 
   const timeAgo = conversation.last_message_at
-    ? formatDistanceToNow(new Date(conversation.last_message_at), {
-        addSuffix: false,
-      })
+    ? format.relativeTime(new Date(conversation.last_message_at), { now })
     : "";
 
   return (

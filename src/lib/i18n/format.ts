@@ -41,3 +41,41 @@ export function formatDateTime(
 export function formatNumber(value: number): string {
   return value.toLocaleString(APP_LOCALE);
 }
+
+/** The units a duration can be rendered in, coarsest last. */
+type DurationUnit = "second" | "minute" | "hour" | "day";
+
+/**
+ * Elapsed time — "2 minutos" in pt, "2 minutes" in en.
+ *
+ * `Intl.NumberFormat` in the "unit" style renders the number and its
+ * unit together ("2 minutos"), which is what a duration needs: the
+ * unit travels with the number instead of being glued on as a word.
+ */
+export function formatDuration(milliseconds: number): string {
+  const seconds = Math.round(Math.abs(milliseconds) / 1000);
+  const minutes = Math.round(seconds / 60);
+  const hours = Math.round(minutes / 60);
+  const days = Math.round(hours / 24);
+
+  let value = seconds;
+  let unit: DurationUnit = "second";
+  if (seconds >= 60) {
+    value = minutes;
+    unit = "minute";
+    if (minutes >= 60) {
+      value = hours;
+      unit = "hour";
+      if (hours >= 24) {
+        value = days;
+        unit = "day";
+      }
+    }
+  }
+
+  return value.toLocaleString(APP_LOCALE, {
+    style: "unit",
+    unit,
+    unitDisplay: "long",
+  });
+}

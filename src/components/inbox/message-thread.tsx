@@ -8,6 +8,7 @@ import { usePresence } from "@/hooks/use-presence";
 import { PresenceDot } from "@/components/presence/presence-dot";
 import { presenceLabel } from "@/lib/presence";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/i18n/format";
 import type {
   Conversation,
   Message,
@@ -29,7 +30,7 @@ import {
   PanelRightOpen,
   PanelRightClose,
 } from "lucide-react";
-import { format, isToday, isYesterday, differenceInHours } from "date-fns";
+import { isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -133,7 +134,20 @@ function formatDateSeparator(dateStr: string, t: ReturnType<typeof useTranslatio
   const date = new Date(dateStr);
   if (isToday(date)) return t("today");
   if (isYesterday(date)) return t("yesterday");
-  return format(date, "MMMM d, yyyy");
+  return formatDate(date, { day: "numeric", month: "long", year: "numeric" });
+}
+
+/**
+ * The local calendar day of a timestamp as `YYYY-MM-DD` — the key the
+ * messages of one day are grouped under. It is built from the local
+ * date parts so a message sent at 23:30 stays on the day its reader
+ * sees it (a UTC key would move it to the next day).
+ */
+function localDateKey(value: string | number | Date): string {
+  const date = new Date(value);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function groupMessagesByDate(messages: Message[]) {
@@ -141,7 +155,7 @@ function groupMessagesByDate(messages: Message[]) {
   let currentDate = "";
 
   for (const msg of messages) {
-    const day = format(new Date(msg.created_at), "yyyy-MM-dd");
+    const day = localDateKey(msg.created_at);
     if (day !== currentDate) {
       currentDate = day;
       groups.push({ date: msg.created_at, messages: [msg] });

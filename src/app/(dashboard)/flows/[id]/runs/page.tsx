@@ -16,12 +16,12 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import { format, formatDistanceToNow } from "date-fns";
 
 import { useTranslations } from "next-intl";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatDateTime, formatDuration } from "@/lib/i18n/format";
 
 /**
  * Run history viewer.
@@ -107,6 +107,14 @@ export default function FlowRunsPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [notFound, setNotFound] = useState(false);
+  // The clock the durations are measured against — one value for every
+  // row, refreshed once a minute.
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!params.id) return;
@@ -202,6 +210,7 @@ export default function FlowRunsPage() {
               events={events.filter((e) => e.flow_run_id === run.id)}
               expanded={expanded.has(run.id)}
               onToggle={() => toggle(run.id)}
+              now={now}
               t={t}
             />
           ))}
@@ -216,12 +225,15 @@ function RunCard({
   events,
   expanded,
   onToggle,
+  now,
   t,
 }: {
   run: RunRow;
   events: EventRow[];
   expanded: boolean;
   onToggle: () => void;
+  /** The clock the duration is measured against. */
+  now: number;
   t: ReturnType<typeof useTranslations>;
 }) {
   const meta = STATUS_META[run.status];
@@ -229,9 +241,7 @@ function RunCard({
   const contactLabel =
     run.contact?.name?.trim() || run.contact?.phone || t("unknownContact");
   const duration = run.ended_at
-    ? formatDistanceToNow(new Date(run.ended_at), {
-        addSuffix: false,
-      })
+    ? formatDuration(now - new Date(run.ended_at).getTime())
     : null;
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -275,7 +285,14 @@ function RunCard({
             )}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span>{t("started", { time: format(new Date(run.started_at), "PP p") })}</span>
+            <span>
+              {t("started", {
+                time: formatDateTime(run.started_at, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }),
+              })}
+            </span>
             {run.reprompt_count > 0 && (
               <span>· {t("reprompts", { count: run.reprompt_count })}</span>
             )}
@@ -327,7 +344,12 @@ function EventLine({ ev }: { ev: EventRow }) {
   return (
     <div className="flex items-start gap-2 rounded-md px-2 py-1 text-xs">
       <span className="w-32 shrink-0 text-[10px] text-muted-foreground">
-        {format(new Date(ev.created_at), "HH:mm:ss")}
+        {formatDateTime(ev.created_at, {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23",
+        })}
       </span>
       <span className={cn("w-32 shrink-0 font-mono text-[10px]", cls)}>
         {ev.event_type}
