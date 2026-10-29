@@ -1,15 +1,18 @@
 # Origem do Lead — Implementation Plan
 
 > **Status (2026-10-29): as 7 tasks estão implementadas e commitadas.** A
-> migration `supabase/migrations/067_lead_origin.sql` ainda precisa ser
-> rodada no Supabase — sem ela, `lead_settings` e `lead_origins` não
-> existem e o módulo inteiro falha em runtime (a suíte passa, porque os
-> testes rodam contra o SQL em disco).
+> migration `supabase/migrations/067_lead_origin.sql` já foi rodada no
+> Supabase e as duas tabelas existem.
 >
 > **Correção pós-implementação:** o script e o endpoint público foram
 > ajustados para o caso cross-origin — o script roda no site do
 > cliente, não no CRM. Três defeitos que só apareceriam com um
 > navegador de verdade (ver o Step 6b da Task 3).
+>
+> **Correção pós-implementação (2):** o primeiro `/r/<code>` rodando
+> contra o banco de verdade devolveu 500 — o filtro do link de campanha
+> usava `.contains()` com array, que vira `cs.{[object Object]}`, e o
+> Postgres não entende isso numa coluna JSONB (ver o Step 4b da Task 4).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -2236,13 +2239,19 @@ export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
 
     async findByLinkCode(code) {
       // JSONB containment: an array contains an object when one of its
-      // elements contains that object. `[{ "code": "a7x9" }]` is
-      // contained by the links array exactly when one link has that
-      // code.
+      // elements contains that object. `{"code":"a7x9"}` is contained
+      // by the links array exactly when one link has that code.
+      //
+      // The value MUST be an object, not an array. supabase-js
+      // serializes an array as `cs.{a,b}` — a Postgres ARRAY filter —
+      // and `[{}].join(',')` is the string "[object Object]", which
+      // Postgres rejects with "invalid input syntax for type json".
+      // An object goes out as `cs.{"code":"a7x9"}`, the containment
+      // Postgres understands on a JSONB column.
       const { data, error } = await db
         .from('lead_settings')
         .select('*')
-        .contains('links', [{ code }])
+        .contains('links', { code })
         .limit(1)
       if (error) throw error
       const row = data?.[0] as Record<string, unknown> | undefined
@@ -3278,6 +3287,145 @@ export async function GET(
 Run: `npx vitest run "src/app/r/[code]/route.test.ts"`
 
 Expected: PASS.
+
+- [x] **Step 4b: Corrija o filtro do link de campanha — `.contains()` com objeto, não com array**
+
+O primeiro `/r/<code>` rodando de verdade contra o banco devolveu 500.
+A causa não estava na rota: estava em `findByLinkCode`, em
+`src/lib/leads/store.ts`.
+
+supabase-js serializa `.contains()` de três jeitos, conforme o valor:
+
+| Valor | Vai para a URL | Serve para |
+|---|---|---|
+| string | `cs.<texto>` | array de texto |
+| array | `cs.{a,b}` | array do Postgres |
+| objeto | `cs.{"code":"..."}` | **JSONB** |
+
+Com `[{ code }]` a query saía como `cs.{[object Object]}` — um array de
+um objeto vira a string "[object Object]" — e o Postgres respondia
+`invalid input syntax for type json`. Com objeto, a query sai como
+`cs.{"code":"a7x9"}`, que é a contenção que o Postgres entende numa
+coluna JSONB.
+
+Escreva o teste que trava o formato — `src/lib/leads/store.test.ts`:
+
+```ts
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { describe, expect, it } from "vitest";
+
+import { createLeadSettingsStore } from "./store";
+
+/** What the store asked the database for. */
+interface ContainsCall {
+  column: string;
+  value: unknown;
+}
+
+/**
+ * A database that answers the two questions the campaign link asks —
+ * "which account owns this code?" and "which account owns this
+ * capture key?" — and remembers how it was asked.
+ */
+function makeDb(rows: Record<string, unknown>[] | null) {
+  const contains: ContainsCall[] = [];
+  const eq: { column: string; value: unknown }[] = [];
+
+  const db = {
+    from(_table: string) {
+      return {
+        select(_columns: string) {
+          const answer = {
+            limit: () => Promise.resolve({ data: rows, error: null }),
+          };
+          return {
+            eq(column: string, value: unknown) {
+              eq.push({ column, value });
+              return answer;
+            },
+            contains(column: string, value: unknown) {
+              contains.push({ column, value });
+              return answer;
+            },
+          };
+        },
+      };
+    },
+  };
+
+  return { db: db as unknown as SupabaseClient, contains, eq };
+}
+
+/**
+ * How the filter really goes out on the wire.
+ *
+ * supabase-js serializes `.contains()` three different ways depending
+ * on the value: a string becomes `cs.<text>`, an array becomes
+ * `cs.{a,b}` — a Postgres ARRAY filter — and an object becomes
+ * `cs.{"code":"..."}`, the JSONB containment. On a JSONB column only
+ * the last one parses, so the SHAPE of the value IS the query.
+ */
+function wireFilter(value: unknown): string {
+  const client = createClient("https://example.supabase.co", "test-key");
+  const builder = client
+    .from("lead_settings")
+    .select("*")
+    .contains("links", value as Record<string, unknown>);
+  const url = (builder as unknown as { url: URL }).url;
+  return url.searchParams.get("links") ?? "";
+}
+
+describe("findByLinkCode", () => {
+  it("asks for the code with a filter Postgres can parse", async () => {
+    // The value MUST be an object. An array is serialized as
+    // `cs.{[object Object]}` — the string "[object Object]" — and
+    // Postgres rejects it with "invalid input syntax for type json".
+    const { db, contains } = makeDb(null);
+    await createLeadSettingsStore(db).findByLinkCode("abcdefgh");
+
+    expect(contains).toEqual([
+      { column: "links", value: { code: "abcdefgh" } },
+    ]);
+    expect(wireFilter(contains[0]?.value)).toBe('cs.{"code":"abcdefgh"}');
+  });
+
+  it("the array form would be a filter Postgres cannot parse", () => {
+    // The trap, pinned: this is what the query looked like when the
+    // link code was looked up with an array.
+    expect(wireFilter([{ code: "abcdefgh" }])).toBe("cs.{[object Object]}");
+  });
+});
+```
+
+Aplique a correção em `src/lib/leads/store.ts`:
+
+```ts
+    async findByLinkCode(code) {
+      // JSONB containment: an array contains an object when one of its
+      // elements contains that object. `{"code":"a7x9"}` is contained
+      // by the links array exactly when one link has that code.
+      //
+      // The value MUST be an object, not an array. supabase-js
+      // serializes an array as `cs.{a,b}` — a Postgres ARRAY filter —
+      // and `[{}].join(',')` is the string "[object Object]", which
+      // Postgres rejects with "invalid input syntax for type json".
+      // An object goes out as `cs.{"code":"a7x9"}`, the containment
+      // Postgres understands on a JSONB column.
+      const { data, error } = await db
+        .from('lead_settings')
+        .select('*')
+        .contains('links', { code })
+        .limit(1)
+      if (error) throw error
+      const row = data?.[0] as Record<string, unknown> | undefined
+      return row ? toSettings(row) : null
+    },
+```
+
+Run: `npx vitest run src/lib/leads/store.test.ts`
+
+Expected: PASS — e, com a correção de volta, o `/r/<code>` responde 404
+para um código que não existe, em vez de 500.
 
 - [x] **Step 5: Commit**
 

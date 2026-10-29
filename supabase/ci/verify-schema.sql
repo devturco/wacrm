@@ -163,6 +163,59 @@ BEGIN
     RAISE EXCEPTION 'anon can execute dashboard_overview — migration 059 grants are wrong';
   END IF;
 
+  -- 067 -- the lead origin tables. The campaign link looks a code up
+  -- with a JSONB containment (`links @> '{"code":"..."}'`), so `links`
+  -- has to be jsonb: with `json` the containment operator does not
+  -- exist and every /r/<code> request fails at runtime.
+  IF to_regclass('public.lead_settings') IS NULL THEN
+    RAISE EXCEPTION 'public.lead_settings is missing — migration 067 did not apply';
+  END IF;
+  IF to_regclass('public.lead_origins') IS NULL THEN
+    RAISE EXCEPTION 'public.lead_origins is missing — migration 067 did not apply';
+  END IF;
+  IF (
+    SELECT data_type FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'lead_settings'
+      AND column_name = 'links'
+  ) IS DISTINCT FROM 'jsonb' THEN
+    RAISE EXCEPTION
+      'lead_settings.links is not jsonb — the campaign link lookup needs the JSONB containment';
+  END IF;
+
+  -- The capture endpoint finds the account by the capture key. Two
+  -- accounts sharing one key would make the capture ambiguous.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.lead_settings'::regclass
+      AND contype = 'u'
+      AND pg_get_constraintdef(oid) LIKE '%capture_key%'
+  ) THEN
+    RAISE EXCEPTION 'lead_settings.capture_key is not unique — migration 067 did not apply';
+  END IF;
+
+  -- The token is the bridge between the click and the first message.
+  -- Without the UNIQUE index a collision would be a silent
+  -- misattribution instead of a visible error.
+  IF to_regclass('public.idx_lead_origins_unique_token') IS NULL THEN
+    RAISE EXCEPTION 'idx_lead_origins_unique_token is missing — migration 067 did not apply';
+  END IF;
+
+  -- ONE origin primary per contact, guaranteed by the database.
+  IF to_regclass('public.idx_lead_origins_primary_contact') IS NULL THEN
+    RAISE EXCEPTION 'idx_lead_origins_primary_contact is missing — migration 067 did not apply';
+  END IF;
+
+  -- redeem_invitation was recreated with the two lead tables in the
+  -- "does the old account still hold data" guard. A typo there would
+  -- delete a client's lead history along with the account.
+  IF pg_get_functiondef('public.redeem_invitation(text)'::regprocedure)
+       NOT LIKE '%lead_settings%'
+     OR pg_get_functiondef('public.redeem_invitation(text)'::regprocedure)
+       NOT LIKE '%lead_origins%' THEN
+    RAISE EXCEPTION
+      'redeem_invitation does not guard the lead tables — migration 067 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;

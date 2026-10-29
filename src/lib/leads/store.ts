@@ -191,13 +191,19 @@ export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
 
     async findByLinkCode(code) {
       // JSONB containment: an array contains an object when one of its
-      // elements contains that object. `[{ "code": "a7x9" }]` is
-      // contained by the links array exactly when one link has that
-      // code.
+      // elements contains that object. `{"code":"a7x9"}` is contained
+      // by the links array exactly when one link has that code.
+      //
+      // The value MUST be an object, not an array. supabase-js
+      // serializes an array as `cs.{a,b}` — a Postgres ARRAY filter —
+      // and `[{}].join(',')` is the string "[object Object]", which
+      // Postgres rejects with "invalid input syntax for type json".
+      // An object goes out as `cs.{"code":"a7x9"}`, the containment
+      // Postgres understands on a JSONB column.
       const { data, error } = await db
         .from('lead_settings')
         .select('*')
-        .contains('links', [{ code }])
+        .contains('links', { code })
         .limit(1);
       if (error) throw error;
       const row = data?.[0] as Record<string, unknown> | undefined;
