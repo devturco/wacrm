@@ -2165,7 +2165,8 @@
       "inbox": "Bandeja de entrada",
       "members": "Miembros del equipo",
       "api": "Claves de API",
-      "media": "Almacenamiento de archivos"
+      "media": "Almacenamiento de archivos",
+      "leads": "Origen de los leads"
     },
     "groups": {
       "account": "Cuenta",
@@ -2429,6 +2430,44 @@
       "cancel": "Cancelar",
       "save": "Guardar"
     },
+    "leads": {
+      "title": "Origen de los leads",
+      "description": "De dónde vienen tus leads: la campaña que los trajo, el anuncio que vieron y la página donde aterrizaron.",
+      "captureTitle": "Captura",
+      "captureDescription": "Activa la captura para empezar a registrar de dónde viene cada lead.",
+      "enabled": "Registrar el origen de cada lead",
+      "scriptTitle": "Script para tu sitio",
+      "scriptDescription": "Pega al final de las páginas por donde llegan las personas. Registra los parámetros de campaña y recuerda la primera visita.",
+      "captureKey": "Clave de captura",
+      "keyHint": "La clave es pública — identifica tu cuenta y no da acceso a nada. Es seguro publicarla.",
+      "notConfigured": "Guarda una vez para generar tu clave",
+      "script": "Etiqueta",
+      "copyKey": "Copiar la clave de captura",
+      "copyScript": "Copiar la etiqueta",
+      "linksTitle": "Enlaces de campaña",
+      "linksDescription": "Un enlace corto que lleva el clic hasta el primer mensaje. El destino es un número de WhatsApp (wa:5511999999999) o una URL (url:https://tu.site/oferta).",
+      "noLinks": "Todavía no hay enlaces de campaña.",
+      "addLink": "Añadir enlace",
+      "linkLabel": "Etiqueta",
+      "linkLabelPlaceholder": "Anuncio de verano",
+      "linkDestination": "Destino",
+      "linkDestinationHint": "Solo se aceptan los destinos wa: y url: — un número de WhatsApp o un enlace https.",
+      "copyLink": "Copiar el enlace",
+      "removeLink": "Quitar el enlace",
+      "hostsTitle": "Dominios permitidos",
+      "hostsDescription": "Qué sitios pueden reportar un clic. Vacío acepta cualquier sitio.",
+      "noHosts": "Cualquier sitio puede reportar un clic.",
+      "addHost": "Añadir dominio",
+      "removeHost": "Eliminar el dominio",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saveSuccess": "Configuración de origen de leads actualizada",
+      "saveFailed": "No se pudo guardar la configuración de origen de leads",
+      "loadFailed": "No se pudo cargar la configuración de origen de leads",
+      "copied": "Copiado",
+      "copyFailed": "No se pudo copiar",
+      "adminOnlyHint": "Solo los administradores de la cuenta pueden cambiar la configuración de origen de los leads."
+    },
     "media": {
       "title": "Almacenamiento de archivos",
       "description": "Dónde acaban los archivos que envían tus clientes. Todo lo que entra se copia aquí, así que sigue disponible aunque el servicio de mensajería lo olvide.",
@@ -2618,6 +2657,33 @@
     "addRow": "Agregar fila",
     "addSection": "Agregar sección",
     "defaultListButton": "Menú"
+  },
+  "Leads": {
+    "origin": "Origen",
+    "primary": "Primer toque",
+    "journey": "recorrido ({count})",
+    "journeyTitle": "Recorrido del lead",
+    "journeyDescription": "Cada contacto que este lead tuvo contigo, desde el primer clic hasta el último mensaje.",
+    "channel": {
+      "whatsapp": "WhatsApp",
+      "instagram_dm": "DM de Instagram",
+      "instagram_comment": "Comentario de Instagram",
+      "tiktok_dm": "DM de TikTok",
+      "tiktok_lead": "Lead de TikTok",
+      "web": "Web",
+      "direct": "Directo"
+    },
+    "fields": {
+      "campaign": "Campaña",
+      "ad": "Anuncio",
+      "post": "Publicación",
+      "utmSource": "Origen",
+      "utmMedium": "Medio",
+      "utmContent": "Contenido",
+      "landingPath": "Página",
+      "referrer": "Referente",
+      "link": "Enlace"
+    }
   },
   "DashboardShell": {
     "loading": "Cargando..."

@@ -2165,7 +2165,8 @@
       "inbox": "인박스",
       "members": "팀원",
       "api": "API 키",
-      "media": "미디어 저장소"
+      "media": "미디어 저장소",
+      "leads": "리드 유입 경로"
     },
     "groups": {
       "account": "계정",
@@ -2429,6 +2430,44 @@
       "cancel": "취소",
       "save": "저장"
     },
+    "leads": {
+      "title": "리드 유입 경로",
+      "description": "리드가 어디에서 왔는지 확인하세요: 유입된 캠페인, 본 광고, 도착한 페이지.",
+      "captureTitle": "캡처",
+      "captureDescription": "캡처를 켜면 각 리드의 유입 경로를 기록합니다.",
+      "enabled": "모든 리드의 유입 경로 기록",
+      "scriptTitle": "사이트에 넣을 스크립트",
+      "scriptDescription": "방문자가 도착하는 페이지의 맨 아래에 붙여넣으세요. 캠페인 매개변수를 기록하고 첫 방문을 기억합니다.",
+      "captureKey": "캡처 키",
+      "keyHint": "키는 공개 정보입니다 — 계정을 식별할 뿐 접근 권한을 주지 않습니다. 공개해도 안전합니다.",
+      "notConfigured": "한 번 저장하면 키가 생성됩니다",
+      "script": "태그",
+      "copyKey": "캡처 키 복사",
+      "copyScript": "태그 복사",
+      "linksTitle": "캠페인 링크",
+      "linksDescription": "클릭을 첫 메시지까지 이어주는 짧은 링크입니다. 목적지는 WhatsApp 번호(wa:5511999999999) 또는 URL(url:https://your.site/offer)입니다.",
+      "noLinks": "아직 캠페인 링크가 없습니다.",
+      "addLink": "링크 추가",
+      "linkLabel": "라벨",
+      "linkLabelPlaceholder": "여름 광고",
+      "linkDestination": "목적지",
+      "linkDestinationHint": "wa:와 url: 목적지만 허용됩니다 — WhatsApp 번호 또는 https 링크.",
+      "copyLink": "링크 복사",
+      "removeLink": "링크 삭제",
+      "hostsTitle": "허용 도메인",
+      "hostsDescription": "클릭을 보고할 수 있는 사이트입니다. 비워 두면 모든 사이트가 허용됩니다.",
+      "noHosts": "모든 사이트가 클릭을 보고할 수 있습니다.",
+      "addHost": "도메인 추가",
+      "removeHost": "도메인 삭제",
+      "save": "저장",
+      "saving": "저장 중...",
+      "saveSuccess": "리드 유입 경로 설정이 업데이트되었습니다",
+      "saveFailed": "리드 유입 경로 설정을 저장하지 못했습니다",
+      "loadFailed": "리드 유입 경로 설정을 불러오지 못했습니다",
+      "copied": "복사됨",
+      "copyFailed": "복사하지 못했습니다",
+      "adminOnlyHint": "계정 관리자만 리드 유입 경로 설정을 변경할 수 있습니다."
+    },
     "media": {
       "title": "미디어 저장소",
       "description": "고객이 보낸 파일이 어디로 저장되는지입니다. 들어오는 모든 파일이 여기에 복사되므로, 메시징 서비스가 잊어버려도 계속 사용할 수 있습니다.",
@@ -2618,6 +2657,33 @@
     "addRow": "행 추가",
     "addSection": "섹션 추가",
     "defaultListButton": "메뉴"
+  },
+  "Leads": {
+    "origin": "유입 경로",
+    "primary": "첫 접촉",
+    "journey": "여정 ({count})",
+    "journeyTitle": "리드 여정",
+    "journeyDescription": "이 리드가 처음 클릭한 것부터 마지막 메시지까지의 모든 접촉입니다.",
+    "channel": {
+      "whatsapp": "WhatsApp",
+      "instagram_dm": "인스타그램 DM",
+      "instagram_comment": "인스타그램 댓글",
+      "tiktok_dm": "틱톡 DM",
+      "tiktok_lead": "틱톡 리드",
+      "web": "웹",
+      "direct": "직접 유입"
+    },
+    "fields": {
+      "campaign": "캠페인",
+      "ad": "광고",
+      "post": "게시물",
+      "utmSource": "소스",
+      "utmMedium": "미디어",
+      "utmContent": "콘텐츠",
+      "landingPath": "랜딩 페이지",
+      "referrer": "리퍼러",
+      "link": "링크"
+    }
   },
   "DashboardShell": {
     "loading": "불러오는 중..."

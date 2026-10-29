@@ -150,15 +150,18 @@ export function createLeadSettingsStore(db: SupabaseClient): LeadSettingsStore {
 
     async update(accountId, patch) {
       const current = await read(accountId);
-      if (!current) throw new Error('Lead settings not found');
+
+      // `capture_key` is NOT NULL with no default and Postgres
+      // validates it BEFORE the ON CONFLICT branch runs — an upsert
+      // that omits it fails even when the row already exists. The
+      // current value always travels with the update; on the first
+      // save there is no current value, so the patch has to bring one.
+      const captureKey = patch.capture_key ?? current?.capture_key;
+      if (!captureKey) throw new Error('Lead settings not found');
 
       const body: Record<string, unknown> = {
         account_id: accountId,
-        // `capture_key` is NOT NULL with no default and Postgres
-        // validates it BEFORE the ON CONFLICT branch runs — an upsert
-        // that omits it fails even when the row already exists. The
-        // current value always travels with the update.
-        capture_key: patch.capture_key ?? current.capture_key,
+        capture_key: captureKey,
         updated_at: new Date().toISOString(),
       };
       if (patch.enabled !== undefined) body.enabled = patch.enabled;

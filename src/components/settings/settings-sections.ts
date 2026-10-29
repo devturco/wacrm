@@ -9,6 +9,7 @@ import {
   PlugZap,
   Shield,
   Tags,
+  Target,
   User,
   UsersRound,
   Zap,
@@ -35,6 +36,7 @@ export const SETTINGS_SECTIONS = [
   'fields',
   'deals',
   'media',
+  'leads',
   'members',
   'api',
 ] as const;
@@ -75,6 +77,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
   media: { id: 'media', label: 'Media storage', icon: HardDrive, group: 'workspace' },
+  leads: { id: 'leads', label: 'Lead origin', icon: Target, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
 };

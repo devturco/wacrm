@@ -37,6 +37,22 @@ export function generateLeadToken(random: () => number = Math.random): string {
   return token;
 }
 
+/**
+ * The public capture key.
+ *
+ * It says WHICH account a click belongs to — it does NOT authenticate
+ * against anything. The capture endpoint is public by design (the
+ * customer's own website calls it from the visitor's browser), so the
+ * key has to sit in a `<script data-key="...">` tag.
+ *
+ * `crypto.randomUUID()` is the Web Crypto API: it works in Node and
+ * in the browser, so no `node:crypto` import drags a server-only
+ * module into a client bundle.
+ */
+export function generateCaptureKey(): string {
+  return `pk_${crypto.randomUUID().replace(/-/g, '')}`;
+}
+
 /** Is this a well-formed code? */
 export function isLeadToken(value: string): boolean {
   return new RegExp(`^[${TOKEN_ALPHABET}]{${LEAD_TOKEN_LENGTH}}$`).test(value);

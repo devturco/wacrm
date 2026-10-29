@@ -2165,7 +2165,8 @@
       "inbox": "Inbox",
       "members": "Team members",
       "api": "API keys",
-      "media": "Media storage"
+      "media": "Media storage",
+      "leads": "Lead origin"
     },
     "groups": {
       "account": "Account",
@@ -2429,6 +2430,44 @@
       "cancel": "Cancel",
       "save": "Save"
     },
+    "leads": {
+      "title": "Lead origin",
+      "description": "Where your leads come from: the campaign that brought them, the ad they saw and the page they landed on.",
+      "captureTitle": "Capture",
+      "captureDescription": "Turn the capture on to start recording where each lead came from.",
+      "enabled": "Record the origin of every lead",
+      "scriptTitle": "Script for your site",
+      "scriptDescription": "Paste this at the end of the pages where people arrive. It records the campaign parameters and remembers the first visit.",
+      "captureKey": "Capture key",
+      "keyHint": "The key is public — it identifies your account and grants no access. It is safe to publish.",
+      "notConfigured": "Save once to generate your key",
+      "script": "Tag",
+      "copyKey": "Copy the capture key",
+      "copyScript": "Copy the tag",
+      "linksTitle": "Campaign links",
+      "linksDescription": "A short link that carries the click all the way to the first message. The destination is a WhatsApp number (wa:5511999999999) or a URL (url:https://your.site/offer).",
+      "noLinks": "No campaign links yet.",
+      "addLink": "Add link",
+      "linkLabel": "Label",
+      "linkLabelPlaceholder": "Summer ad",
+      "linkDestination": "Destination",
+      "linkDestinationHint": "Only the wa: and url: destinations are accepted — a WhatsApp number or an https link.",
+      "copyLink": "Copy the link",
+      "removeLink": "Remove the link",
+      "hostsTitle": "Allowed domains",
+      "hostsDescription": "Which sites may report a click. Empty accepts any site.",
+      "noHosts": "Any site can report a click.",
+      "addHost": "Add domain",
+      "removeHost": "Remove the domain",
+      "save": "Save",
+      "saving": "Saving...",
+      "saveSuccess": "Lead origin settings updated",
+      "saveFailed": "Couldn't save the lead origin settings",
+      "loadFailed": "Couldn't load the lead origin settings",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy",
+      "adminOnlyHint": "Only account admins can change the lead origin settings."
+    },
     "media": {
       "title": "Media storage",
       "description": "Where the files your customers send end up. Everything you receive is copied here, so it stays available even after the messaging service forgets about it.",
@@ -2618,6 +2657,33 @@
     "addRow": "Add row",
     "addSection": "Add section",
     "defaultListButton": "Menu"
+  },
+  "Leads": {
+    "origin": "Origin",
+    "primary": "First touch",
+    "journey": "journey ({count})",
+    "journeyTitle": "Lead journey",
+    "journeyDescription": "Every touch this lead had with you, from the first click to the last message.",
+    "channel": {
+      "whatsapp": "WhatsApp",
+      "instagram_dm": "Instagram DM",
+      "instagram_comment": "Instagram comment",
+      "tiktok_dm": "TikTok DM",
+      "tiktok_lead": "TikTok lead",
+      "web": "Web",
+      "direct": "Direct"
+    },
+    "fields": {
+      "campaign": "Campaign",
+      "ad": "Ad",
+      "post": "Post",
+      "utmSource": "Source",
+      "utmMedium": "Medium",
+      "utmContent": "Content",
+      "landingPath": "Landing page",
+      "referrer": "Referrer",
+      "link": "Link"
+    }
   },
   "DashboardShell": {
     "loading": "Loading..."

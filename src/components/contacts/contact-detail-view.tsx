@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ContactMediaPanel } from '@/components/media/contact-media-panel';
+import { LeadOriginBadge } from '@/components/leads/lead-origin-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -469,6 +470,12 @@ export function ContactDetailView({
                 </Button>
               </div>
             </SheetHeader>
+
+            {/* Where this lead came from. It says nothing when the
+                contact has no origin — most of them do not. */}
+            <div className="px-4 pt-3">
+              <LeadOriginBadge contactId={contact.id} />
+            </div>
 
             {/* Tabs */}
             <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">

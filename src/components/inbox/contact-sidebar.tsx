@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContactMediaPanel } from "@/components/media/contact-media-panel";
+import { LeadOriginBadge } from "@/components/leads/lead-origin-badge";
 import { useTranslations } from "next-intl";
 import { contactHandle } from "@/lib/whatsapp/wa-identity";
 
@@ -162,6 +163,12 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           {contact.company && (
             <p className="text-xs text-muted-foreground">{contact.company}</p>
           )}
+
+          {/* Where this lead came from. It says nothing when the
+              contact has no origin — most of them do not. */}
+          <div className="mt-2 flex justify-center px-1">
+            <LeadOriginBadge contactId={contact.id} compact />
+          </div>
         </div>
 
         {/* Phone */}

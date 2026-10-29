@@ -14,6 +14,7 @@ import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel'
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { InboxSettings } from '@/components/settings/inbox-settings';
 import { MediaSettings } from '@/components/settings/media-settings';
+import { LeadOriginSettings } from '@/components/settings/lead-origin-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { SettingsShell } from '@/components/settings/settings-shell';
@@ -53,6 +54,7 @@ export function SettingsPageClient({ tab }: { tab: string | null }) {
     inbox: <InboxSettings />,
     deals: <DealsSettings />,
     media: <MediaSettings />,
+    leads: <LeadOriginSettings />,
     members: <MembersTab />,
     api: <ApiKeysSettings />,
   };
