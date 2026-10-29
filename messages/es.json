@@ -536,6 +536,33 @@
       "networkError": "No se pudo conectar con el servidor."
     }
   },
+  "Media": {
+    "tabs": {
+      "about": "Info",
+      "media": "Multimedia",
+      "documents": "Docs",
+      "links": "Links"
+    },
+    "panel": {
+      "emptyMedia": "Todavía no hay fotos, vídeos ni audios",
+      "emptyDocuments": "Todavía no hay documentos",
+      "emptyLinks": "Todavía no hay enlaces",
+      "error": "No se pudo cargar",
+      "retry": "Reintentar",
+      "loadMore": "Cargar más",
+      "openMedia": "Abrir archivo",
+      "notDurable": "Todavía no está guardado en nuestro bucket",
+      "download": "Descargar",
+      "downloadFailed": "No se pudo descargar el archivo",
+      "downloadAudio": "Descargar audio",
+      "restore": "Restaurar en nuestro almacenamiento",
+      "restored": "Adjunto restaurado y guardado",
+      "restoreFailed": "No se pudo restaurar este adjunto",
+      "nothingToRepair": "Este mensaje no tiene adjunto que restaurar",
+      "providerMissing": "Este adjunto ya no está disponible",
+      "tooLarge": "Este adjunto supera el límite permitido"
+    }
+  },
   "Contacts": {
     "page": {
       "title": "Contactos",

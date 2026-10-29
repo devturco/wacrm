@@ -536,6 +536,33 @@
       "networkError": "Couldn’t reach the server."
     }
   },
+  "Media": {
+    "tabs": {
+      "about": "About",
+      "media": "Media",
+      "documents": "Docs",
+      "links": "Links"
+    },
+    "panel": {
+      "emptyMedia": "No photos, videos or voice notes yet",
+      "emptyDocuments": "No documents yet",
+      "emptyLinks": "No links yet",
+      "error": "Couldn't load",
+      "retry": "Try again",
+      "loadMore": "Load more",
+      "openMedia": "Open media",
+      "notDurable": "Not stored in our bucket yet",
+      "download": "Download",
+      "downloadFailed": "Couldn't download the file",
+      "downloadAudio": "Download audio",
+      "restore": "Restore to our storage",
+      "restored": "Attachment restored and saved",
+      "restoreFailed": "Couldn't restore this attachment",
+      "nothingToRepair": "This message has no attachment to restore",
+      "providerMissing": "This attachment is no longer available",
+      "tooLarge": "This attachment is bigger than the allowed limit"
+    }
+  },
   "Contacts": {
     "page": {
       "title": "Contacts",

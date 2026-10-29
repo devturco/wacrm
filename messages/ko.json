@@ -536,6 +536,33 @@
       "networkError": "서버에 연결할 수 없습니다."
     }
   },
+  "Media": {
+    "tabs": {
+      "about": "정보",
+      "media": "미디어",
+      "documents": "문서",
+      "links": "링크"
+    },
+    "panel": {
+      "emptyMedia": "아직 사진, 동영상, 음성이 없습니다",
+      "emptyDocuments": "아직 문서가 없습니다",
+      "emptyLinks": "아직 링크가 없습니다",
+      "error": "불러오지 못했습니다",
+      "retry": "다시 시도",
+      "loadMore": "더 불러오기",
+      "openMedia": "미디어 열기",
+      "notDurable": "아직 버킷에 저장되지 않았습니다",
+      "download": "다운로드",
+      "downloadFailed": "파일을 다운로드하지 못했습니다",
+      "downloadAudio": "오디오 다운로드",
+      "restore": "우리 저장소로 복원",
+      "restored": "첨부 파일을 복원하고 저장했습니다",
+      "restoreFailed": "첨부 파일을 복원하지 못했습니다",
+      "nothingToRepair": "복원할 첨부 파일이 없습니다",
+      "providerMissing": "이 첨부 파일은 더 이상 사용할 수 없습니다",
+      "tooLarge": "이 첨부 파일은 허용 한도를 초과합니다"
+    }
+  },
   "Contacts": {
     "page": {
       "title": "연락처",
