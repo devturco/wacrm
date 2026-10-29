@@ -2480,6 +2480,7 @@
       "r2Ready": "R2 is ready — the credentials are set on the server.",
       "r2MissingTitle": "R2 is missing some environment variables",
       "r2MissingHint": "These are set by whoever runs the server. The names are safe to share; the values never leave the server.",
+      "serverOwned": "From the server:",
       "bucket": "Bucket",
       "bucketHint": "The bucket the files are written to. Lowercase, no spaces.",
       "maxSize": "Maximum file size",

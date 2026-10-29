@@ -10,9 +10,10 @@ export {
   DEFAULT_MEDIA_SETTINGS,
   MEDIA_SIZE_OPTIONS,
   isAllowedMediaSize,
+  mediaFieldVisibility,
   readMediaSettings,
 } from "./settings";
-export type { MediaSettings } from "./settings";
+export type { MediaFieldVisibility, MediaSettings } from "./settings";
 export { R2MediaStorage, r2ConfigFromEnv, r2Endpoint, r2MissingFromEnv } from "./r2";
 export { SupabaseMediaStorage } from "./supabase";
 
@@ -49,10 +50,14 @@ export function mediaStorageFor(
   env: Record<string, string | undefined> = process.env,
   bucket?: string,
 ): MediaStorage {
-  const targetBucket = bucket || settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
   const configuredBucket = settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
+  // The caller named a bucket other than the account's own: it wants a
+  // DIFFERENT Supabase bucket — the Flows builder writes to
+  // `flow-media`, which has its own RLS. R2 has one bucket per
+  // deployment, so that request stays on Supabase.
+  const wantsOwnBucket = !bucket || bucket === configuredBucket;
 
-  if (settings.backend === "r2" && targetBucket === configuredBucket) {
+  if (settings.backend === "r2" && wantsOwnBucket) {
     const config = r2ConfigFromEnv(env, {
       publicBaseUrl: settings.publicBaseUrl,
     });
@@ -61,7 +66,10 @@ export function mediaStorageFor(
         accountId: config.accountId,
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
-        bucket: targetBucket,
+        // The R2 bucket belongs to the SERVER — `R2_BUCKET`. The
+        // account's `bucket` column names the SUPABASE bucket and has
+        // no say here.
+        bucket: config.bucket,
         publicBaseUrl: config.publicBaseUrl,
         maxFileBytes: settings.maxFileBytes,
       });
@@ -69,7 +77,7 @@ export function mediaStorageFor(
   }
 
   return new SupabaseMediaStorage({
-    bucket: targetBucket,
+    bucket: bucket || configuredBucket,
     publicBaseUrl: settings.publicBaseUrl,
     client: db as SupabaseClient,
     maxFileBytes: settings.maxFileBytes,

@@ -2480,6 +2480,7 @@
       "r2Ready": "R2 está listo — las credenciales están en el servidor.",
       "r2MissingTitle": "A R2 le faltan variables de entorno",
       "r2MissingHint": "Las define quien administra el servidor. Los nombres se pueden compartir; los valores nunca salen del servidor.",
+      "serverOwned": "Del servidor:",
       "bucket": "Bucket",
       "bucketHint": "El bucket donde se escriben los archivos. En minúsculas, sin espacios.",
       "maxSize": "Tamaño máximo",

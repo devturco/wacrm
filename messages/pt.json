@@ -2480,6 +2480,7 @@
       "r2Ready": "R2 pronto — as credenciais estão no servidor.",
       "r2MissingTitle": "Faltam variáveis de ambiente para o R2",
       "r2MissingHint": "Quem roda o servidor define isso. Os nomes podem ser compartilhados; os valores nunca saem do servidor.",
+      "serverOwned": "Do servidor:",
       "bucket": "Bucket",
       "bucketHint": "O bucket onde os arquivos são gravados. Minúsculas, sem espaços.",
       "maxSize": "Tamanho máximo",

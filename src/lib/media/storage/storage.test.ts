@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { mediaStorageFor } from "./index";
 import { R2MediaStorage, r2ConfigFromEnv } from "./r2";
 import { SupabaseMediaStorage } from "./supabase";
-import { DEFAULT_MEDIA_SETTINGS, readMediaSettings } from "./settings";
+import {
+  DEFAULT_MEDIA_SETTINGS,
+  mediaFieldVisibility,
+  readMediaSettings,
+} from "./settings";
 
 /** A Supabase client stub good enough for the storage surface. */
 function fakeSupabase(publicBase = "https://cdn.test/storage/v1/object/public") {
@@ -260,5 +264,100 @@ describe("mediaStorageFor", () => {
     );
 
     expect(storage.backend).toBe("supabase");
+  });
+});
+
+describe("mediaStorageFor — whose bucket is it", () => {
+  const R2_ENV = {
+    R2_ACCOUNT_ID: "r2-account",
+    R2_ACCESS_KEY_ID: "AKIA_TEST",
+    R2_SECRET_ACCESS_KEY: "secret",
+    R2_BUCKET: "crmbr-bucket",
+    MEDIA_PUBLIC_BASE_URL: "https://media.test",
+  };
+
+  it("writes to the bucket the SERVER names, not the account's", () => {
+    const { client } = fakeSupabase();
+    const storage = mediaStorageFor(
+      {
+        backend: "r2",
+        // The account's column is the SUPABASE bucket — it has no say
+        // over where R2 writes.
+        bucket: "chat-media",
+        maxFileBytes: 104857600,
+        publicBaseUrl: null,
+      },
+      client,
+      R2_ENV,
+    );
+
+    expect(storage.backend).toBe("r2");
+    expect(storage.bucket).toBe("crmbr-bucket");
+  });
+
+  it("keeps a bucket other than the account's own on Supabase", () => {
+    const { client } = fakeSupabase();
+    const storage = mediaStorageFor(
+      {
+        backend: "r2",
+        bucket: "chat-media",
+        maxFileBytes: 104857600,
+        publicBaseUrl: null,
+      },
+      client,
+      R2_ENV,
+      "flow-media",
+    );
+
+    expect(storage.backend).toBe("supabase");
+    expect(storage.bucket).toBe("flow-media");
+  });
+});
+
+describe("mediaFieldVisibility", () => {
+  it("shows both fields on Supabase", () => {
+    expect(
+      mediaFieldVisibility("supabase", { publicBaseUrl: null, r2Missing: [] }),
+    ).toEqual({ bucket: true, publicBaseUrl: true, serverOwned: [] });
+  });
+
+  it("hides the R2 bucket — the server names it", () => {
+    const visibility = mediaFieldVisibility("r2", {
+      publicBaseUrl: null,
+      r2Missing: [],
+    });
+
+    expect(visibility.bucket).toBe(false);
+    expect(visibility.serverOwned).toContain("R2_BUCKET");
+  });
+
+  it("hides the public URL when the server provides it", () => {
+    const visibility = mediaFieldVisibility("r2", {
+      publicBaseUrl: null,
+      r2Missing: [],
+    });
+
+    expect(visibility.publicBaseUrl).toBe(false);
+    expect(visibility.serverOwned).toContain("MEDIA_PUBLIC_BASE_URL");
+  });
+
+  it("shows the public URL when the server does not have one", () => {
+    // The account has to paste it — that is how an account runs R2
+    // without touching the environment.
+    const visibility = mediaFieldVisibility("r2", {
+      publicBaseUrl: null,
+      r2Missing: ["MEDIA_PUBLIC_BASE_URL"],
+    });
+
+    expect(visibility.publicBaseUrl).toBe(true);
+  });
+
+  it("shows the public URL when the account has its own", () => {
+    const visibility = mediaFieldVisibility("r2", {
+      publicBaseUrl: "https://cdn.acme.com",
+      r2Missing: [],
+    });
+
+    expect(visibility.publicBaseUrl).toBe(true);
   });
 });

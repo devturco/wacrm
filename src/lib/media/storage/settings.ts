@@ -38,6 +38,55 @@ export function isAllowedMediaSize(size: number): boolean {
   return (MEDIA_SIZE_OPTIONS as readonly number[]).includes(size);
 }
 
+/** Which fields the settings screen shows, and what the server owns. */
+export interface MediaFieldVisibility {
+  /** Is the account's own bucket shown? */
+  bucket: boolean;
+  /** Is the account's own public base URL shown? */
+  publicBaseUrl: boolean;
+  /** The server variables that own whatever is not shown. */
+  serverOwned: string[];
+}
+
+/**
+ * Which settings belong to the account, and which to the server.
+ *
+ * The two backends do NOT share the same settings. `bucket` and
+ * `public_base_url` are the account's SUPABASE configuration; the R2
+ * bucket and the R2 public URL belong to the server's environment
+ * (`R2_BUCKET`, `MEDIA_PUBLIC_BASE_URL`). The screen does not pretend
+ * otherwise — an input the customer fills in that the server ignores is
+ * a lie.
+ *
+ * The public base URL is the one exception: an account owns it when it
+ * has one saved, or when the server does not provide one — that is how
+ * an account runs R2 without touching the environment.
+ */
+export function mediaFieldVisibility(
+  backend: MediaBackend,
+  options: { publicBaseUrl: string | null; r2Missing: string[] },
+): MediaFieldVisibility {
+  if (backend !== "r2") {
+    return { bucket: true, publicBaseUrl: true, serverOwned: [] };
+  }
+
+  // The R2 bucket is the server's — `R2_BUCKET`. The account's `bucket`
+  // column names the Supabase bucket.
+  const serverOwned = ["R2_BUCKET"];
+
+  // The public base URL belongs to the account when it has one saved, or
+  // when the server does not provide one — then the account has to paste
+  // it. Only when the server provides it AND the account has none is it
+  // the server's business alone.
+  const own = Boolean(options.publicBaseUrl);
+  const serverHas =
+    !options.r2Missing.includes("MEDIA_PUBLIC_BASE_URL") && !own;
+  const publicBaseUrl = !serverHas;
+  if (!publicBaseUrl) serverOwned.push("MEDIA_PUBLIC_BASE_URL");
+
+  return { bucket: false, publicBaseUrl, serverOwned };
+}
+
 /**
  * Reads an account's storage configuration.
  *

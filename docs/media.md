@@ -127,14 +127,20 @@ chegam ao navegador:
 | `R2_ACCESS_KEY_ID` | O identificador da chave |
 | `R2_SECRET_ACCESS_KEY` | **A chave em si** — nunca sai do servidor |
 | `R2_BUCKET` | O bucket (padrão: `crmbr-media`) |
-| `MEDIA_PUBLIC_BASE_URL` | A URL pública base — a conta pode sobrescrever na tela |
+| `MEDIA_PUBLIC_BASE_URL` | A URL pública base |
 
 A tela de configurações mostra **quais** variáveis faltam, pelo nome.
 Os valores nunca aparecem em lugar nenhum.
 
-> A URL pública base configurada por conta **substitui** a
-> `MEDIA_PUBLIC_BASE_URL` do servidor. Quem tiver as três credenciais
-> da R2 pode colar a URL na tela e não precisa mexer no ambiente.
+> **O bucket e a URL pública do R2 são do servidor.** Quando a R2 está
+> escolhida, o campo "Bucket" some da tela — o bucket do R2 é o
+> `R2_BUCKET` do ambiente, e o bucket da conta (`media_settings.bucket`)
+> é o do **Supabase**. A URL pública some pelo mesmo motivo, quando o
+> servidor já define `MEDIA_PUBLIC_BASE_URL`.
+>
+> Se o servidor **não** definir `MEDIA_PUBLIC_BASE_URL`, o campo da URL
+> aparece: a conta cola a sua e passa a valer no lugar da variável.
+> Quem tem as três credenciais da R2 não precisa mexer no ambiente.
 
 Quando a R2 está escolhida mas falta alguma variável, o app **continua
 no Supabase** em vez de quebrar. Uma configuração incompleta nunca

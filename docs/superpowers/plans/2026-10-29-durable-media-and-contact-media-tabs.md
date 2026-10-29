@@ -1,5 +1,13 @@
 # Mídia durável em bucket + abas Mídia / Documentos / Links — Implementation Plan
 
+> **Correção pós-implementação:** o bucket do R2 é o `R2_BUCKET` do
+> servidor — o `bucket` da conta é o bucket do **Supabase** e não tem
+> dizer no R2. A implementação tinha deixado o bucket da conta
+> sobrescrever o do ambiente (aqui já está `bucket: config.bucket`, que
+> é o certo); a tela também passou a esconder o campo "Bucket" quando
+> o R2 está escolhido, e o "Tamanho máximo" a mostrar `100 MB` em vez
+> do número de bytes. Ver o Step 8b da Task 3.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Persistir toda mídia trocada em conversa em bucket (qualquer formato, até 100 MB) e exibi-la por contato em abas Mídia / Documentos / Links, na caixa de entrada e na aba Contatos.
@@ -949,6 +957,90 @@ export function mediaStorageFor(
 
 Run: `npx vitest run src/lib/media/storage/storage.test.ts`
 Expected: PASS.
+
+- [ ] **Step 8b: O bucket do R2 é o do servidor — e a tela mostra o que é de quem**
+
+Duas correções que só apareceriam com o R2 ligado de verdade.
+
+**1. O bucket.** `media_settings.bucket` é o bucket do **Supabase**. O
+bucket do R2 é o `R2_BUCKET` do ambiente. A implementação estava
+passando o bucket da conta para o `R2MediaStorage`, que gravava em
+`https://<account>.r2.cloudflarestorage.com/chat-media/…` — um bucket
+que não existe na conta Cloudflare.
+
+Em `src/lib/media/storage/index.ts`:
+
+```ts
+  const configuredBucket = settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
+  // The caller named a bucket other than the account's own: it wants a
+  // DIFFERENT Supabase bucket — the Flows builder writes to
+  // `flow-media`, which has its own RLS. R2 has one bucket per
+  // deployment, so that request stays on Supabase.
+  const wantsOwnBucket = !bucket || bucket === configuredBucket;
+
+  if (settings.backend === "r2" && wantsOwnBucket) {
+    const config = r2ConfigFromEnv(env, {
+      publicBaseUrl: settings.publicBaseUrl,
+    });
+    if (config) {
+      return new R2MediaStorage({
+        accountId: config.accountId,
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+        // The R2 bucket belongs to the SERVER — `R2_BUCKET`. The
+        // account's `bucket` column names the SUPABASE bucket and has
+        // no say here.
+        bucket: config.bucket,
+        publicBaseUrl: config.publicBaseUrl,
+        maxFileBytes: settings.maxFileBytes,
+      });
+    }
+  }
+```
+
+**2. A tela.** Quando o R2 está escolhido, o campo "Bucket" é do
+armazenamento do próprio app e o campo "URL pública base" é do servidor
+(quando o `MEDIA_PUBLIC_BASE_URL` existe). Um input que o servidor
+ignora é uma mentira — some com os dois.
+
+A regra mora numa função pura, para ser testável sem browser, em
+`src/lib/media/storage/settings.ts`:
+
+```ts
+export function mediaFieldVisibility(
+  backend: MediaBackend,
+  options: { publicBaseUrl: string | null; r2Missing: string[] },
+): MediaFieldVisibility {
+  if (backend !== "r2") {
+    return { bucket: true, publicBaseUrl: true, serverOwned: [] };
+  }
+
+  // The R2 bucket is the server's — `R2_BUCKET`. The account's `bucket`
+  // column names the Supabase bucket.
+  const serverOwned = ["R2_BUCKET"];
+
+  // The public base URL belongs to the account when it has one saved, or
+  // when the server does not provide one — then the account has to paste
+  // it. Only when the server provides it AND the account has none is it
+  // the server's business alone.
+  const own = Boolean(options.publicBaseUrl);
+  const serverHas =
+    !options.r2Missing.includes("MEDIA_PUBLIC_BASE_URL") && !own;
+  const publicBaseUrl = !serverHas;
+  if (!publicBaseUrl) serverOwned.push("MEDIA_PUBLIC_BASE_URL");
+
+  return { bucket: false, publicBaseUrl, serverOwned };
+}
+```
+
+E o "Tamanho máximo" passa a mostrar `100 MB` em vez de `104857600` —
+o `<SelectValue />` sem filho mostra o valor cru:
+
+```tsx
+  <SelectTrigger className="w-full">
+    <SelectValue>{sizeLabel(maxFileBytes)}</SelectValue>
+  </SelectTrigger>
+```
 
 - [ ] **Step 9: Commit**
 

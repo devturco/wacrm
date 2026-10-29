@@ -12,7 +12,7 @@ import {
 import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/hooks/use-auth";
-import { MEDIA_SIZE_OPTIONS } from "@/lib/media/storage";
+import { MEDIA_SIZE_OPTIONS, mediaFieldVisibility } from "@/lib/media/storage";
 import type { MediaBackend } from "@/lib/media/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +144,18 @@ export function MediaSettings() {
 
   const disabled = !canEditSettings || profileLoading || state === null;
   const r2Missing = backend === "r2" ? (state?.r2Missing ?? []) : [];
+  // What the customer owns and what the server owns. The R2 bucket and
+  // the R2 public URL are the server's — the screen does not offer an
+  // input the server would ignore.
+  const visibility = mediaFieldVisibility(backend, {
+    publicBaseUrl: state?.publicBaseUrl ?? null,
+    r2Missing,
+  });
+
+  // The ceiling in the unit a human reads. The raw byte count in a
+  // closed dropdown helps nobody.
+  const sizeLabel = (bytes: number) =>
+    t("sizeOption", { mb: Math.round((bytes / 1048576) * 10) / 10 });
 
   return (
     <section className="max-w-2xl animate-in fade-in-50 duration-200">
@@ -224,19 +236,30 @@ export function MediaSettings() {
             </div>
           )}
 
-          <div className="grid gap-2 sm:max-w-xs">
-            <Label htmlFor="media-bucket" className="text-muted-foreground">
-              {t("bucket")}
-            </Label>
-            <Input
-              id="media-bucket"
-              value={bucket}
-              onChange={(e) => setBucket(e.target.value)}
-              disabled={disabled}
-              spellCheck={false}
-            />
-            <p className="text-xs text-muted-foreground">{t("bucketHint")}</p>
-          </div>
+          {visibility.serverOwned.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t("serverOwned")}{" "}
+              <span className="font-mono text-[11px]">
+                {visibility.serverOwned.join(", ")}
+              </span>
+            </p>
+          )}
+
+          {visibility.bucket && (
+            <div className="grid gap-2 sm:max-w-xs">
+              <Label htmlFor="media-bucket" className="text-muted-foreground">
+                {t("bucket")}
+              </Label>
+              <Input
+                id="media-bucket"
+                value={bucket}
+                onChange={(e) => setBucket(e.target.value)}
+                disabled={disabled}
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">{t("bucketHint")}</p>
+            </div>
+          )}
 
           <div className="grid gap-2 sm:max-w-xs">
             <Label className="text-muted-foreground">{t("maxSize")}</Label>
@@ -246,12 +269,12 @@ export function MediaSettings() {
               disabled={disabled}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>{sizeLabel(maxFileBytes)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {MEDIA_SIZE_OPTIONS.map((size) => (
                   <SelectItem key={size} value={String(size)}>
-                    {t("sizeOption", { mb: size / 1048576 })}
+                    {sizeLabel(size)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -259,22 +282,24 @@ export function MediaSettings() {
             <p className="text-xs text-muted-foreground">{t("maxSizeHint")}</p>
           </div>
 
-          <div className="grid gap-2 sm:max-w-xs">
-            <Label htmlFor="media-public-url" className="text-muted-foreground">
-              {t("publicBaseUrl")}
-            </Label>
-            <Input
-              id="media-public-url"
-              value={publicBaseUrl}
-              onChange={(e) => setPublicBaseUrl(e.target.value)}
-              placeholder="https://media.suaempresa.com"
-              disabled={disabled}
-              spellCheck={false}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("publicBaseUrlHint")}
-            </p>
-          </div>
+          {visibility.publicBaseUrl && (
+            <div className="grid gap-2 sm:max-w-xs">
+              <Label htmlFor="media-public-url" className="text-muted-foreground">
+                {t("publicBaseUrl")}
+              </Label>
+              <Input
+                id="media-public-url"
+                value={publicBaseUrl}
+                onChange={(e) => setPublicBaseUrl(e.target.value)}
+                placeholder="https://media.suaempresa.com"
+                disabled={disabled}
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("publicBaseUrlHint")}
+              </p>
+            </div>
+          )}
 
           {!canEditSettings && (
             <p className="text-xs text-muted-foreground">{t("adminOnlyHint")}</p>
