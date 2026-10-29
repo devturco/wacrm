@@ -90,10 +90,23 @@ Do lado do cliente há **dois nomes**, e eles nunca se cruzam:
 | `instance_name` | `whatsmiau_config.instance_name` | o cliente (é o nome que ele deu) |
 | `provider_instance_name` | `whatsmiau_config.provider_instance_name` | só o servidor — é o nome no provedor |
 
-O envelope do webhook traz o nome **do provedor** (`provider_instance_name`), e é
-com ele que a rota cruza o evento com a linha da conta. O `Authorization: Bearer
-<webhook_secret>` é o que identifica a conta de verdade: o segredo é gerado por
-instância e exclusivo dela.
+O `Authorization: Bearer <webhook_secret>` é o que identifica a conta de verdade:
+o segredo é gerado por instância e exclusivo dela. O nome da instância é apenas
+uma **conferência** — e o provedor o escreve de mais de uma forma:
+
+| Onde | O que aparece |
+|---|---|
+| `instance` (envelope) | o nome da sessão — no formato compatível com Evolution, o **apelido** `<nome>_<id>` |
+| `data.instanceId` (§7.1, "instância de origem") | o mesmo nome/apelido |
+
+Por isso a rota compara **todos** os nomes que o payload carrega: basta um
+deles bater com o `provider_instance_name` (aceitando o apelido) para a
+entrega ser aceita. Um payload que não nomeia nenhuma instância nossa é 404.
+
+> **Formatos de entrega.** O `messages.upsert` documentado (§7.1) chega como
+> **lote** (`data.messages` é um array, `data.type` é `"notify"`); a entrega
+> compatível com Evolution traz a mensagem solta em `data`. O wacrm lê as
+> duas formas.
 
 ### O endereço público do webhook
 
@@ -139,6 +152,17 @@ Para inspecionar o que existe na conta do provedor (sem expor a chave):
 ```bash
 node scripts/check-provider-instances.mjs
 ```
+
+Para perguntar à aplicação **publicada** se ela já está aceitando o envelope do
+provedor (o alvo é obrigatório — nada é enviado para lugar nenhum por padrão):
+
+```bash
+node scripts/probe-webhook-deploy.mjs https://app.crmbr.com/api/whatsmiau/webhook
+```
+
+A sonda lê o `webhook_secret` da linha da conta e o usa **apenas** no cabeçalho
+`Authorization`; imprime apenas o status e o corpo da resposta. O esperado é
+`200` no nome canônico e no apelido.
 
 
 ## 2. Instâncias

@@ -191,6 +191,75 @@ describe('POST /api/whatsmiau/webhook', () => {
     expect(h.inbound).toHaveLength(1);
   });
 
+  it('accepts an instance named only in the payload', async () => {
+    // The provider names the instance in `data.instanceId` too, and in
+    // the Evolution-compatible format THAT is where the alias lives.
+    // A payload that names no instance we know is another instance.
+    const res = await POST(
+      request(
+        {
+          ...textEvent(),
+          instance: '',
+          data: { ...textEvent().data, instanceId: `${PROVIDER_NAME}_4cca4ba2` },
+        },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    await drain();
+    expect(h.inbound).toHaveLength(1);
+  });
+
+  it('answers 404 when the payload names no instance we know', async () => {
+    const res = await POST(
+      request(
+        {
+          ...textEvent(),
+          instance: 'outra_empresa_atendimento',
+          data: { ...textEvent().data, instanceId: 'outra_empresa_atendimento_4cca4ba2' },
+        },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('processes every message of a notify batch', async () => {
+    // The documented shape of `messages.upsert`: `data.messages` is an
+    // ARRAY. A batch read as a single message would drop the others.
+    const res = await POST(
+      request(
+        {
+          event: 'messages.upsert',
+          instance: PROVIDER_NAME,
+          data: {
+            type: 'notify',
+            messages: [
+              {
+                key: { remoteJid: '5511999988888@s.whatsapp.net', id: 'MSG_1', fromMe: false },
+                pushName: 'Pedro',
+                message: { conversation: 'primeira' },
+                messageTimestamp: 1708123456,
+              },
+              {
+                key: { remoteJid: '5511999988888@s.whatsapp.net', id: 'MSG_2', fromMe: false },
+                pushName: 'Pedro',
+                message: { conversation: 'segunda' },
+                messageTimestamp: 1708123457,
+              },
+            ],
+          },
+        },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    await drain();
+    expect(h.inbound).toHaveLength(2);
+  });
+
   it('answers 404 for an alias of another instance', async () => {
     const res = await POST(
       request(

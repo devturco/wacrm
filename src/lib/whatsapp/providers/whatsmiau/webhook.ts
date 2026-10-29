@@ -7,10 +7,18 @@
 // `instance` is the public instance name. It is NOT the routing key —
 // the account is resolved by the webhook secret (see the route);
 // the instance name is only a cross-check.
+//
+// The provider names the instance in MORE THAN ONE place: in the
+// envelope AND in `data.instanceId` ("instância de origem" — see
+// `docs/whatsmiau.md` §7.1). In the Evolution-compatible format both
+// carry the compatibility alias (`<nome>_<id>`) rather than the name
+// we gave the provider. So every name the payload carries is
+// compared, and one match is enough.
 // ============================================================
 
 export interface WhatsmiauWebhookEnvelope {
   event: string;
+  /** The instance name in the envelope — empty when the payload omits it. */
   instance: string;
   date_time?: string;
   sender?: string;
@@ -34,17 +42,40 @@ export function isSupportedWebhookEvent(event: string): boolean {
 }
 
 /**
+ * Every name the payload uses for the instance.
+ *
+ * The envelope's `instance` and the payload's `data.instanceId` are
+ * both provider-chosen spellings of the same session. The secret is
+ * the routing key — these names are only a cross-check — so reading
+ * both costs nothing and leaves no room for a delivery to be refused
+ * over a name the provider spelled its own way.
+ */
+export function instanceNames(envelope: WhatsmiauWebhookEnvelope): string[] {
+  const names = new Set<string>();
+  if (envelope.instance) names.add(envelope.instance);
+  const fromData = envelope.data.instanceId;
+  if (typeof fromData === 'string' && fromData) names.add(fromData);
+  return [...names];
+}
+
+/**
  * Parse an incoming payload into the envelope. Returns null when the
- * payload isn't a WhatsMiau envelope (missing event, missing instance,
- * or not an object) — the caller answers 400 and logs.
+ * payload isn't a WhatsMiau envelope (no event, or not an object) —
+ * the caller answers 400 and logs.
+ *
+ * The instance name is NOT required to parse: it is only a cross-check,
+ * and the provider names the instance in `data.instanceId` as well. A
+ * payload that names no instance at all is refused later, by the
+ * cross-check itself.
  */
 export function parseWhatsmiauWebhook(payload: unknown): WhatsmiauWebhookEnvelope | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const record = payload as Record<string, unknown>;
 
   const event = typeof record.event === 'string' ? record.event : '';
+  if (!event) return null;
+
   const instance = typeof record.instance === 'string' ? record.instance : '';
-  if (!event || !instance) return null;
 
   const data =
     record.data && typeof record.data === 'object' && !Array.isArray(record.data)

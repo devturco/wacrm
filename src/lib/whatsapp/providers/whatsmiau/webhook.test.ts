@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { isSupportedWebhookEvent, parseWhatsmiauWebhook } from './webhook';
+import { instanceNames, isSupportedWebhookEvent, parseWhatsmiauWebhook } from './webhook';
 import {
   normalizeConnectionUpdate,
   normalizeDeletedMessage,
   normalizeEditedMessage,
   normalizeInboundMessage,
+  normalizeInboundMessages,
   normalizeStatusUpdate,
 } from './normalize';
 
@@ -22,9 +23,8 @@ describe('parseWhatsmiauWebhook', () => {
     expect(parsed?.data.key).toEqual({ id: 'MSG_1' });
   });
 
-  it('rejects a payload with no event or instance', () => {
+  it('rejects a payload with no event', () => {
     expect(parseWhatsmiauWebhook({ data: {} })).toBeNull();
-    expect(parseWhatsmiauWebhook({ event: 'messages.upsert' })).toBeNull();
     expect(parseWhatsmiauWebhook('nope')).toBeNull();
     expect(parseWhatsmiauWebhook(null)).toBeNull();
   });
@@ -35,6 +35,36 @@ describe('parseWhatsmiauWebhook', () => {
     expect(isSupportedWebhookEvent('connection.update')).toBe(true);
     expect(isSupportedWebhookEvent('group-participants.update')).toBe(false);
     expect(isSupportedWebhookEvent('call')).toBe(false);
+  });
+});
+
+describe('instanceNames', () => {
+  it('reads the instance of the envelope', () => {
+    const parsed = parseWhatsmiauWebhook({
+      event: 'messages.upsert',
+      instance: 'Atendimento01',
+      data: { key: { id: 'MSG_1' } },
+    });
+    expect(instanceNames(parsed!)).toEqual(['Atendimento01']);
+  });
+
+  it('reads the instance the payload names in data.instanceId', () => {
+    // The provider names the instance in the payload too — and in the
+    // Evolution-compatible format THAT is where the alias lives.
+    const parsed = parseWhatsmiauWebhook({
+      event: 'messages.upsert',
+      data: { instanceId: 'Atendimento01_4cca4ba2', key: { id: 'MSG_1' } },
+    });
+    expect(instanceNames(parsed!)).toEqual(['Atendimento01_4cca4ba2']);
+  });
+
+  it('reads both names when the payload carries both', () => {
+    const parsed = parseWhatsmiauWebhook({
+      event: 'messages.upsert',
+      instance: 'Atendimento01',
+      data: { instanceId: 'Atendimento01_4cca4ba2' },
+    });
+    expect(instanceNames(parsed!)).toEqual(['Atendimento01', 'Atendimento01_4cca4ba2']);
   });
 });
 
@@ -145,6 +175,57 @@ describe('normalizeInboundMessage', () => {
 
   it('returns null without a message id', () => {
     expect(normalizeInboundMessage({ key: { remoteJid: 'x@s.whatsapp.net' } })).toBeNull();
+  });
+});
+
+describe('normalizeInboundMessages', () => {
+  it('reads the single message of the Evolution-compatible delivery', () => {
+    const messages = normalizeInboundMessages({
+      key: { remoteJid: '5511999988888@s.whatsapp.net', id: 'MSG_1', fromMe: false },
+      message: { conversation: 'olá' },
+      messageType: 'conversation',
+    });
+    expect(messages).toHaveLength(1);
+    expect(messages?.[0]?.text).toBe('olá');
+  });
+
+  it('reads every message of a notify batch', () => {
+    // The documented shape of `messages.upsert`: `data` holds an array.
+    const messages = normalizeInboundMessages({
+      type: 'notify',
+      messages: [
+        {
+          key: { remoteJid: '5511999988888@s.whatsapp.net', id: 'MSG_1', fromMe: false },
+          pushName: 'Pedro',
+          message: { conversation: 'primeira' },
+          messageTimestamp: 1708123456,
+        },
+        {
+          key: { remoteJid: '5511999988888@s.whatsapp.net', id: 'MSG_2', fromMe: false },
+          pushName: 'Pedro',
+          message: { conversation: 'segunda' },
+          messageTimestamp: 1708123457,
+        },
+      ],
+    });
+    expect(messages?.map((message) => message.text)).toEqual(['primeira', 'segunda']);
+    expect(messages?.map((message) => message.messageId)).toEqual(['MSG_1', 'MSG_2']);
+  });
+
+  it('skips the unreadable entries of a batch', () => {
+    const messages = normalizeInboundMessages({
+      type: 'notify',
+      messages: [
+        { key: { id: 'MSG_1' }, message: { conversation: 'ok' } },
+        { message: { conversation: 'sem id' } },
+      ],
+    });
+    expect(messages).toHaveLength(1);
+    expect(messages?.[0]?.messageId).toBe('MSG_1');
+  });
+
+  it('returns null when the payload carries no message at all', () => {
+    expect(normalizeInboundMessages({ instanceId: 'Atendimento01' })).toBeNull();
   });
 });
 

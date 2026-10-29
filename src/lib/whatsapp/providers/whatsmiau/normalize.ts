@@ -139,7 +139,8 @@ export function normalizeInboundMessage(
     return normalized;
   }
 
-  const conversation = asString(message.conversation);
+  const conversation =
+    asString(message.conversation) ?? asString(message.text) ?? asString(message.body);
   if (conversation !== undefined) {
     normalized.kind = 'text';
     normalized.text = conversation;
@@ -155,6 +156,32 @@ export function normalizeInboundMessage(
   }
 
   return normalized;
+}
+
+/**
+ * The messages an event carries.
+ *
+ * The documented shape of `messages.upsert` is a NOTIFY batch: `data`
+ * holds a `messages` ARRAY (`data.type` is `"notify"`). The
+ * Evolution-compatible delivery puts ONE message straight in `data`.
+ * Both are read — refusing the batch would silently drop every
+ * message of a notify.
+ *
+ * Null when the payload is not a message payload at all (no batch and
+ * no readable id) — the caller logs the shape so the next delivery
+ * says what to support.
+ */
+export function normalizeInboundMessages(
+  data: Record<string, unknown>,
+): NormalizedInboundMessage[] | null {
+  if (Array.isArray(data.messages)) {
+    return data.messages
+      .map((item) => normalizeInboundMessage(asRecord(item)))
+      .filter((message): message is NormalizedInboundMessage => message !== null);
+  }
+  const single = normalizeInboundMessage(data);
+  if (!single) return null;
+  return [single];
 }
 
 /**

@@ -16,14 +16,18 @@
 // Account routing: the webhook secret is the routing key. It is 32
 // random bytes, generated once per instance row, and the provider
 // sends it back on every call — so it identifies the instance exactly.
-// The instance name in the envelope is only a cross-check, and it is
-// the PROVIDER's name: the customer picks a name of their own, and
-// the instance carries a namespaced one on the provider side
+// The instance name is only a cross-check, and it is the PROVIDER's
+// name: the customer picks a name of their own, and the instance
+// carries a namespaced one on the provider side
 // (`<empresa>_<instancia>`). Two accounts may well pick the same
 // customer-side name, which would make a name-only lookup ambiguous.
-// The provider may also address the instance by its compatibility
-// alias (`<empresa>_<instancia>_<id>`) — the same instance under
-// another name, which `isSameProviderInstance` recognises.
+//
+// The provider names the session in more than one place — in the
+// envelope AND in `data.instanceId` — and in the Evolution-compatible
+// format it spells them with the compatibility alias
+// (`<empresa>_<instancia>_<id>`), the same instance under another
+// name. `isSameProviderInstance` recognises the alias, and every name
+// the payload carries is compared: one match is enough.
 // An instance we do not know is a 404.
 // ============================================================
 
@@ -54,11 +58,12 @@ import {
   normalizeConnectionUpdate,
   normalizeDeletedMessage,
   normalizeEditedMessage,
-  normalizeInboundMessage,
+  normalizeInboundMessages,
   normalizeStatusUpdate,
 } from '@/lib/whatsapp/providers/whatsmiau/normalize';
 import { isSameProviderInstance } from '@/lib/whatsapp/providers/whatsmiau/naming';
 import {
+  instanceNames,
   isSupportedWebhookEvent,
   parseWhatsmiauWebhook,
   type WhatsmiauWebhookEnvelope,
@@ -128,16 +133,19 @@ export async function POST(request: Request) {
   }
 
   // The envelope must belong to the instance the secret is bound to.
-  // The envelope carries the PROVIDER's name for the instance: the
-  // canonical one, or the compatibility alias the Evolution-compatible
-  // format uses (`<nome>_<id>`) — both name the SAME instance, and the
-  // provider resolves the alias back to the canonical one on its own
-  // routes. A name that is neither belongs to another instance: 404,
-  // so the operator knows the instance is not wired here.
-  if (!isSameProviderInstance(config.provider_instance_name, envelope.instance)) {
+  // The provider names the instance in more than one place — in the
+  // envelope AND in `data.instanceId` — and in the Evolution-compatible
+  // format it spells both with the compatibility ALIAS (`<nome>_<id>`)
+  // instead of the name we gave it. The secret is the routing key; these
+  // names are only a cross-check, so every name the payload carries is
+  // compared and one match is enough. A payload that names no instance
+  // we know belongs to another one: 404, so the operator knows the
+  // instance is not wired here.
+  const named = instanceNames(envelope);
+  if (!named.some((name) => isSameProviderInstance(config.provider_instance_name, name))) {
     console.warn(
-      '[whatsmiau-webhook] the envelope names an instance this secret is not bound to:',
-      envelope.instance,
+      '[whatsmiau-webhook] the payload names an instance this secret is not bound to:',
+      named.join(', ') || '(no instance name at all)',
     );
     return NextResponse.json({ error: 'unknown_instance' }, { status: 404 });
   }
@@ -199,9 +207,22 @@ async function processWhatsmiauEvent(
           await handleWhatsmiauEditedMessage(ctx, edit);
           return;
         }
-        const message = normalizeInboundMessage(envelope.data);
-        if (!message) return;
-        await handleWhatsmiauInboundMessage(ctx, message);
+        // The documented shape is a NOTIFY batch (`data.messages`); the
+        // Evolution-compatible delivery puts ONE message straight in
+        // `data`. Both are read.
+        const messages = normalizeInboundMessages(envelope.data);
+        if (!messages) {
+          // Nothing we could read. Log the SHAPE — the KEYS only, never
+          // the content — so the next delivery says what to support.
+          console.warn(
+            '[whatsmiau-webhook] a message arrived without a readable id; data keys:',
+            Object.keys(envelope.data).join(', '),
+          );
+          return;
+        }
+        for (const message of messages) {
+          await handleWhatsmiauInboundMessage(ctx, message);
+        }
         return;
       }
       case 'messages.update': {
