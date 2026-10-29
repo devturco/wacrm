@@ -577,6 +577,8 @@
       "clearAll": "Limpiar todo",
       "noTagsYet": "Aún no hay etiquetas.",
       "selectedCount": "{count} seleccionados",
+      "selectAllMatching": "Seleccionar los {count} contactos",
+      "toastFailedSelectAll": "Error al seleccionar los contactos",
       "clearSelection": "Limpiar",
       "deleteSelected": "Eliminar seleccionados",
       "tableColumns": {

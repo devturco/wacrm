@@ -577,6 +577,8 @@
       "clearAll": "모두 지우기",
       "noTagsYet": "아직 태그가 없습니다.",
       "selectedCount": "{count}개 선택됨",
+      "selectAllMatching": "{count}개 연락처 모두 선택",
+      "toastFailedSelectAll": "연락처를 선택하지 못했습니다",
       "clearSelection": "지우기",
       "deleteSelected": "선택 항목 삭제",
       "tableColumns": {

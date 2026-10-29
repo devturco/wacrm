@@ -92,9 +92,13 @@ export default function ContactsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Bulk selection (page-scoped — only the loaded rows are selectable)
+  // Bulk selection. It spans the WHOLE filtered list, not just the
+  // page on screen: paging through the list to tick 300 contacts one
+  // screen at a time is exactly the chore this feature is meant to
+  // remove.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   // All tags for display
   const [tagsMap, setTagsMap] = useState<Record<string, Tag>>({});
@@ -123,10 +127,6 @@ export default function ContactsPage() {
   const fetchContacts = useCallback(async () => {
     const seq = ++fetchSeq.current;
     setLoading(true);
-    // The visible rows are about to change — drop any selection that
-    // referred to the old page/search results so the bulk bar can't
-    // act on rows the user can no longer see.
-    setSelected(new Set());
 
     const from = page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
@@ -210,6 +210,77 @@ export default function ContactsPage() {
     setContacts(enriched);
     setLoading(false);
   }, [supabase, page, search, selectedTagIds, tagsMap, t]);
+
+  /**
+   * The ids of EVERY contact matching the current filter.
+   *
+   * "Select all" needs the whole list, not the 25 rows on screen, so
+   * the query is replayed in windows. The window size keeps each
+   * request small — a single `.in('id', …)` with thousands of ids
+   * would blow the request URL apart.
+   */
+  const fetchMatchingIds = useCallback(async (): Promise<string[]> => {
+    const term = search.trim();
+    const ids: string[] = [];
+    const WINDOW = 500;
+
+    if (selectedTagIds.length > 0) {
+      let offset = 0;
+      for (;;) {
+        const { data, error } = await supabase.rpc('filter_contacts_by_tags', {
+          p_tag_ids: selectedTagIds,
+          p_search: term || null,
+          p_limit: WINDOW,
+          p_offset: offset,
+        });
+        if (error) throw error;
+        const rows = (data ?? []) as { contact: Contact }[];
+        ids.push(...rows.map((row) => row.contact.id));
+        if (rows.length < WINDOW) break;
+        offset += WINDOW;
+      }
+      return ids;
+    }
+
+    let from = 0;
+    for (;;) {
+      let query = supabase
+        .from('contacts')
+        .select('id')
+        .order('created_at', { ascending: false })
+        // The tie-break keeps the order stable across the windows —
+        // without it two contacts with the same creation time could
+        // land on two pages at once.
+        .order('id', { ascending: true })
+        .range(from, from + WINDOW - 1);
+
+      if (term) {
+        const like = `%${term}%`;
+        query = query.or(`name.ilike.${like},phone.ilike.${like},email.ilike.${like}`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      const rows = (data ?? []) as { id: string }[];
+      ids.push(...rows.map((row) => row.id));
+      if (rows.length < WINDOW) break;
+      from += WINDOW;
+    }
+    return ids;
+  }, [supabase, search, selectedTagIds]);
+
+  // The filter (search + tags) decides WHICH contacts the selection
+  // refers to. When it changes, the selection is dropped — the rows
+  // the user ticked are no longer the ones on screen. A page change
+  // does NOT drop it: the selection spans the whole filtered list.
+  const filterKey = `${search.trim()}|${[...selectedTagIds].sort().join(',')}`;
+  const lastFilterKey = useRef(filterKey);
+  useEffect(() => {
+    if (lastFilterKey.current === filterKey) return;
+    lastFilterKey.current = filterKey;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelected(new Set());
+  }, [filterKey]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -297,14 +368,43 @@ export default function ContactsPage() {
     });
   }
 
+  /**
+   * Tick every contact the current filter matches — the 25 rows on
+   * screen are not the whole list, and deleting 300 contacts one page
+   * at a time is the chore this is meant to end.
+   */
+  async function handleSelectAllMatching() {
+    setSelectingAll(true);
+    try {
+      const ids = await fetchMatchingIds();
+      setSelected(new Set(ids));
+    } catch {
+      toast.error(t('toastFailedSelectAll'));
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
   async function handleBulkDelete() {
     const ids = [...selected];
     if (ids.length === 0) return;
     setDeleting(true);
 
-    const { error } = await supabase.from('contacts').delete().in('id', ids);
+    // In batches: one `.in('id', …)` with thousands of ids would blow
+    // the request URL apart, and a single failure would take the
+    // whole list down with it.
+    const BATCH = 100;
+    let failed = false;
+    for (let index = 0; index < ids.length; index += BATCH) {
+      const batch = ids.slice(index, index + BATCH);
+      const { error } = await supabase.from('contacts').delete().in('id', batch);
+      if (error) {
+        failed = true;
+        break;
+      }
+    }
 
-    if (error) {
+    if (failed) {
       toast.error(t('toastBulkFailedDelete'));
     } else {
       toast.success(t('toastBulkDeleted', { count: ids.length }));
@@ -502,11 +602,25 @@ export default function ContactsPage() {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/40 px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-2">
           <p className="text-sm text-foreground">
             {t('selectedCount', { count: selected.size })}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {selected.size < totalCount && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={selectingAll}
+                onClick={() => void handleSelectAllMatching()}
+                className="text-primary hover:text-primary/80"
+              >
+                {selectingAll ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                {t('selectAllMatching', { count: totalCount })}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
