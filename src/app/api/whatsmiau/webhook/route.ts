@@ -19,9 +19,11 @@
 // The instance name in the envelope is only a cross-check, and it is
 // the PROVIDER's name: the customer picks a name of their own, and
 // the instance carries a namespaced one on the provider side
-// (`<empresa>_<instancia>`) — the two never match, and two accounts
-// may well pick the same customer-side name, which would make a
-// name-only lookup ambiguous.
+// (`<empresa>_<instancia>`). Two accounts may well pick the same
+// customer-side name, which would make a name-only lookup ambiguous.
+// The provider may also address the instance by its compatibility
+// alias (`<empresa>_<instancia>_<id>`) — the same instance under
+// another name, which `isSameProviderInstance` recognises.
 // An instance we do not know is a 404.
 // ============================================================
 
@@ -55,6 +57,7 @@ import {
   normalizeInboundMessage,
   normalizeStatusUpdate,
 } from '@/lib/whatsapp/providers/whatsmiau/normalize';
+import { isSameProviderInstance } from '@/lib/whatsapp/providers/whatsmiau/naming';
 import {
   isSupportedWebhookEvent,
   parseWhatsmiauWebhook,
@@ -125,11 +128,17 @@ export async function POST(request: Request) {
   }
 
   // The envelope must belong to the instance the secret is bound to.
-  // The envelope carries the PROVIDER's name for the instance, which
-  // is the namespaced one — so this is the comparison that holds.
-  // An instance we do not know is a 404: the operator needs to know
-  // the instance is not wired here.
-  if (config.provider_instance_name !== envelope.instance) {
+  // The envelope carries the PROVIDER's name for the instance: the
+  // canonical one, or the compatibility alias the Evolution-compatible
+  // format uses (`<nome>_<id>`) — both name the SAME instance, and the
+  // provider resolves the alias back to the canonical one on its own
+  // routes. A name that is neither belongs to another instance: 404,
+  // so the operator knows the instance is not wired here.
+  if (!isSameProviderInstance(config.provider_instance_name, envelope.instance)) {
+    console.warn(
+      '[whatsmiau-webhook] the envelope names an instance this secret is not bound to:',
+      envelope.instance,
+    );
     return NextResponse.json({ error: 'unknown_instance' }, { status: 404 });
   }
 
@@ -179,6 +188,17 @@ async function processWhatsmiauEvent(
 
     switch (envelope.event) {
       case 'messages.upsert': {
+        // Until the provider finishes its migration, an EDIT can still
+        // arrive as an upsert with `messageType: "editedMessage"`. It
+        // is not a new message — it is the new text of a message we
+        // already have — so it updates the row instead of inserting a
+        // second one.
+        if (envelope.data.messageType === 'editedMessage') {
+          const edit = normalizeEditedMessage(envelope.data);
+          if (!edit) return;
+          await handleWhatsmiauEditedMessage(ctx, edit);
+          return;
+        }
         const message = normalizeInboundMessage(envelope.data);
         if (!message) return;
         await handleWhatsmiauInboundMessage(ctx, message);

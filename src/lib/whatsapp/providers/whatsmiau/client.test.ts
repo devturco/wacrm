@@ -128,6 +128,41 @@ describe('whatsmiau client — errors', () => {
   });
 });
 
+describe('whatsmiau client — timeouts', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('gives up on a provider that never answers', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      (_url: string, init: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener('abort', () => reject(init.signal.reason));
+        }),
+    );
+
+    await whatsmiauRequest(conn, {
+      path: '/instance/connectionState/Atendimento01',
+      timeoutMs: 20,
+    }).catch((e: WhatsmiauApiError) => {
+      expect(e.code).toBe('whatsmiau_network');
+    });
+  });
+
+  it('never sends a call without a deadline', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue(jsonResponse({}));
+
+    await whatsmiauRequest(conn, { path: '/instance/connectionState/Atendimento01' });
+
+    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal.aborted).toBe(false);
+  });
+});
+
 describe('whatsmiau status mapping', () => {
   it('maps the documented statuses', () => {
     expect(mapWhatsmiauStatus(401)).toEqual({ code: 'whatsmiau_unauthorized', httpStatus: 401 });

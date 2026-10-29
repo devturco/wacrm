@@ -54,7 +54,8 @@ function InboxPageInner() {
   // Which WhatsApp API this account sends through — the "not
   // connected" banner has to follow the active provider, not the Meta
   // table (a CRMBR account has no `whatsapp_config` row).
-  const { provider: activeProvider } = useActiveProvider();
+  const { provider: activeProvider, loading: providerLoading } =
+    useActiveProvider();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] =
@@ -187,6 +188,11 @@ function InboxPageInner() {
 
   // Check WhatsApp connection status on mount
   useEffect(() => {
+    // While the active provider is still unknown, the banner waits:
+    // asking the Meta table first would flash "not connected" on an
+    // account that is connected through the CRMBR API.
+    if (providerLoading) return;
+
     const checkConnection = async () => {
       const supabase = createClient();
       const {
@@ -236,7 +242,7 @@ function InboxPageInner() {
     };
 
     checkConnection();
-  }, [activeProvider]);
+  }, [activeProvider, providerLoading]);
 
   // Handle realtime message events
   const handleMessageEvent = useCallback(

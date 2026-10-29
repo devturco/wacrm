@@ -175,6 +175,32 @@ describe('POST /api/whatsmiau/webhook', () => {
     expect(res.status).toBe(404);
   });
 
+  it('accepts the compatibility alias the provider addresses the instance by', async () => {
+    // The Evolution-compatible webhook format names the instance
+    // `<nome>_<id>` — the provider resolves the alias back to the same
+    // instance, so the delivery must not be refused.
+    const res = await POST(
+      request(
+        { ...textEvent(), instance: `${PROVIDER_NAME}_4cca4ba2` },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
+    expect(res.status).toBe(200);
+
+    await drain();
+    expect(h.inbound).toHaveLength(1);
+  });
+
+  it('answers 404 for an alias of another instance', async () => {
+    const res = await POST(
+      request(
+        { ...textEvent(), instance: 'outra_empresa_atendimento_4cca4ba2' },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
+    expect(res.status).toBe(404);
+  });
+
   it('answers 400 for a body that is not a WhatsMiau envelope', async () => {
     const res = await POST(
       request({ nope: true }, { authorization: `Bearer ${SECRET}` }),

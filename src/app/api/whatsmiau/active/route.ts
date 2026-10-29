@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server';
 
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
+import { syncWhatsmiauStatuses } from '@/lib/whatsapp/providers/whatsmiau/status-sync';
 import {
   clearActiveWhatsmiauConfig,
   loadActiveWhatsmiauConfig,
@@ -38,6 +39,16 @@ async function metaStatus(
 export async function GET() {
   try {
     const { supabase, accountId } = await requireRole('viewer');
+
+    // The provider is the truth about a connection and our row is only
+    // a mirror of it. A `connection.update` event that never reached
+    // us would leave the account with no active provider — and the
+    // inbox would claim the account is not connected while the
+    // customer's number is paired and waiting. So the state is checked
+    // with the provider before it is answered.
+    const rows = await loadWhatsmiauConfigs(supabase, accountId);
+    await syncWhatsmiauStatuses(supabase, rows);
+
     const whatsmiau = await loadActiveWhatsmiauConfig(supabase, accountId);
 
     if (whatsmiau) {

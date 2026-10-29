@@ -95,9 +95,11 @@ export async function createInstance(
 export async function getConnectionState(
   conn: WhatsmiauConnection,
   name: string,
+  options: { timeoutMs?: number } = {},
 ): Promise<WhatsmiauConnectionState> {
   const payload = await whatsmiauRequest<Record<string, unknown>>(conn, {
     path: `/instance/connectionState/${name}`,
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
   });
   const rawState = typeof payload?.state === 'string' ? payload.state : 'unknown';
   const state =

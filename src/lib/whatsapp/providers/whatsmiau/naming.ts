@@ -80,6 +80,43 @@ export function withCollisionSuffix(base: string, attempt: number): string {
 }
 
 /**
+ * The suffix the provider appends to an instance name when it addresses
+ * the instance through its Evolution-compatible layer: the canonical
+ * name plus the provider's own short id (`storm_thiago_4cca4ba2`).
+ *
+ * Lowercase letters and digits, at least six of them — long enough to
+ * never be confused with the numeric collision suffix WE add (`_2`,
+ * `_3`), which is one or two characters.
+ */
+const PROVIDER_ALIAS_SUFFIX_RE = /^[0-9a-z]{6,32}$/;
+
+/**
+ * Does the name in the webhook envelope name THIS instance?
+ *
+ * The provider answers its own routes with the canonical name
+ * (`storm_thiago`), but the Evolution-compatible webhook format
+ * addresses the instance by a COMPATIBILITY ALIAS: the canonical name
+ * plus the provider's short id (`storm_thiago_4cca4ba2`). The provider
+ * resolves the alias back to the canonical instance on its own routes —
+ * `GET /instance/connectionState/storm_thiago_4cca4ba2` answers with
+ * the canonical id — so the alias names the SAME instance, and a
+ * delivery that carries it must not be refused.
+ *
+ * The alias is anchored to the canonical name: a name that is neither
+ * the canonical one nor an alias of it belongs to another instance, and
+ * the caller answers 404 for it.
+ */
+export function isSameProviderInstance(canonical: string, presented: string): boolean {
+  const target = (canonical ?? '').trim();
+  const value = (presented ?? '').trim();
+  if (!target || !value) return false;
+  if (value === target) return true;
+  const prefix = `${target}_`;
+  if (!value.startsWith(prefix)) return false;
+  return PROVIDER_ALIAS_SUFFIX_RE.test(value.slice(prefix.length));
+}
+
+/**
  * Validate the name the CUSTOMER gives their instance.
  *
  * The customer-facing name is theirs: it may carry accents and spaces

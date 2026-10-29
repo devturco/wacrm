@@ -46,7 +46,23 @@ export interface WhatsmiauRequestOptions {
   /** Path relative to the base URL, e.g. `/message/sendText/:instance`. */
   path: string;
   body?: unknown;
+  /**
+   * Abort the call after this many milliseconds.
+   *
+   * The default is generous because a media upload is a big POST; the
+   * callers that only need a quick answer ask for less.
+   */
+  timeoutMs?: number;
 }
+
+/**
+ * How long a call may hang before it is given up on.
+ *
+ * A provider that never answers must not hold the request that asked
+ * it for ever: the screen would spin and the send worker would never
+ * come back.
+ */
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
  * Map an upstream HTTP status onto our machine code + the status the
@@ -113,6 +129,7 @@ export async function whatsmiauRequest<T = unknown>(
   const { method = 'GET', path, body } = options;
   const base = conn.baseUrl.replace(/\/+$/, '');
   const url = `${base}${path}`;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let response: Response;
   try {
@@ -123,6 +140,7 @@ export async function whatsmiauRequest<T = unknown>(
         apikey: conn.apiKey,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     throw new WhatsmiauApiError(

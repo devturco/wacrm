@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_PROVIDER_NAME,
   buildProviderInstanceName,
+  isSameProviderInstance,
   slugifyName,
   validateCustomerInstanceName,
   validateProviderInstanceName,
@@ -73,6 +74,35 @@ describe('withCollisionSuffix', () => {
     const name = withCollisionSuffix('a'.repeat(MAX_PROVIDER_NAME), 2);
     expect(name.length).toBeLessThanOrEqual(MAX_PROVIDER_NAME);
     expect(name.endsWith('_2')).toBe(true);
+  });
+});
+
+describe('isSameProviderInstance', () => {
+  it('accepts the canonical name', () => {
+    expect(isSameProviderInstance('storm_thiago', 'storm_thiago')).toBe(true);
+  });
+
+  it('accepts the compatibility alias the provider sends in the webhook', () => {
+    // The Evolution-compatible format addresses the instance by the
+    // canonical name plus the provider's short id. The provider
+    // resolves the alias back to the canonical instance.
+    expect(isSameProviderInstance('storm_thiago', 'storm_thiago_4cca4ba2')).toBe(true);
+  });
+
+  it('refuses the name of another instance', () => {
+    expect(isSameProviderInstance('storm_thiago', 'outra_empresa_atendimento')).toBe(false);
+    expect(isSameProviderInstance('storm_thiago', 'storm')).toBe(false);
+    expect(isSameProviderInstance('storm_thiago', 'storm_thiagoX')).toBe(false);
+  });
+
+  it('refuses our own collision suffix — a sibling connection is another instance', () => {
+    expect(isSameProviderInstance('storm_thiago', 'storm_thiago_2')).toBe(false);
+    expect(isSameProviderInstance('storm_thiago', 'storm_thiago_50')).toBe(false);
+  });
+
+  it('refuses an empty name', () => {
+    expect(isSameProviderInstance('', 'storm_thiago')).toBe(false);
+    expect(isSameProviderInstance('storm_thiago', '')).toBe(false);
   });
 });
 

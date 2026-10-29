@@ -23,6 +23,7 @@ import {
   withoutLockedHeaders,
 } from '@/lib/whatsapp/providers/whatsmiau/management';
 import { isPlatformConfigured } from '@/lib/whatsapp/providers/whatsmiau/platform-credential';
+import { syncWhatsmiauStatuses } from '@/lib/whatsapp/providers/whatsmiau/status-sync';
 import {
   loadWhatsmiauConfigs,
   type WhatsmiauConfigRow,
@@ -63,6 +64,12 @@ export async function GET(request: Request) {
 
     const rows = await loadWhatsmiauConfigs(supabase, accountId);
 
+    // The provider is the truth about a connection, and our row is
+    // only a mirror of it. A `connection.update` event that never
+    // reached us would leave the row stuck on "connecting" for ever —
+    // so the screen asks the provider before it draws the status.
+    const synced = await syncWhatsmiauStatuses(supabase, rows);
+
     return NextResponse.json(
       {
         // The platform credential lives in the environment. When it is
@@ -76,7 +83,7 @@ export async function GET(request: Request) {
         // development address in local testing. Showing the very same
         // string the server uses keeps the screen honest.
         webhook_url: webhookUrlFor(request),
-        instances: rows.map(publicInstance),
+        instances: synced.map(publicInstance),
       },
       { status: 200 },
     );

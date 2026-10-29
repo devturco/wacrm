@@ -197,13 +197,41 @@ export function normalizeDeletedMessage(
   };
 }
 
+/**
+ * The text of an edited message.
+ *
+ * The dedicated `messages.edited` event carries the new content under
+ * `editedMessage`; until the provider finishes its migration the same
+ * edit arrives as an upsert and carries it under `message`. Either way
+ * the content is a `Message`, so the text may be the conversation
+ * itself or the caption of a media message.
+ */
+function editedText(source: Record<string, unknown>): string | undefined {
+  return (
+    asString(source.conversation) ??
+    asString(asRecord(source.imageMessage).caption) ??
+    asString(asRecord(source.videoMessage).caption) ??
+    asString(asRecord(source.documentMessage).caption)
+  );
+}
+
+/**
+ * An edited message: the id of the message that changed and its new
+ * text.
+ *
+ * Null when the payload carries no text — an edit we cannot read is
+ * NOT an edit that erases the text we already have.
+ */
 export function normalizeEditedMessage(
   data: Record<string, unknown>,
 ): { messageId: string; text: string } | null {
   const key = asRecord(data.key);
   const messageId = asString(key.id);
   if (!messageId) return null;
-  const edited = asRecord(data.editedMessage);
-  const text = asString(edited.conversation) ?? '';
+
+  const dedicated = asRecord(data.editedMessage);
+  const source = Object.keys(dedicated).length > 0 ? dedicated : asRecord(data.message);
+  const text = editedText(source);
+  if (text === undefined) return null;
   return { messageId, text };
 }

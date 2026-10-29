@@ -43,6 +43,7 @@ import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 
 import { mirrorWhatsmiauMedia } from './mirror-media';
 import type { NormalizedInboundMessage } from './normalize';
+import { activateIfOnlyUsableConnection } from './status-sync';
 
 export interface WhatsmiauInboundContext {
   db: SupabaseClient;
@@ -593,12 +594,17 @@ export async function handleWhatsmiauConnectionUpdate(
   }
 
   if (update.state === 'open') {
-    await updateWhatsmiauConfigById(db, configId, {
+    const row = await updateWhatsmiauConfigById(db, configId, {
       status: 'connected',
       phone_number: update.wuid ? normalizePhone(update.wuid) || null : null,
       wuid: update.wuid ?? null,
       connected_at: new Date().toISOString(),
     });
+    // The number is paired: if this account has nothing else to send
+    // through, this connection becomes the one the app uses.
+    if (row) {
+      await activateIfOnlyUsableConnection(db, ctx.accountId, row);
+    }
     return;
   }
 

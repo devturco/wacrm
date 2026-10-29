@@ -31,6 +31,11 @@ import {
   withoutLockedHeaders,
 } from '@/lib/whatsapp/providers/whatsmiau/management';
 import {
+  activateIfOnlyUsableConnection,
+  applyWhatsmiauConnectionState,
+  CONNECTION_STATE_TIMEOUT_MS,
+} from '@/lib/whatsapp/providers/whatsmiau/status-sync';
+import {
   deleteWhatsmiauConfig,
   mergeInstanceSettings,
   updateWhatsmiauConfigById,
@@ -52,7 +57,16 @@ export async function GET(_request: Request, context: RouteContext) {
     const state = await getConnectionState(
       whatsmiauConnectionFromConfig(row),
       row.provider_instance_name,
+      { timeoutMs: CONNECTION_STATE_TIMEOUT_MS },
     );
+
+    // The provider is the truth about the connection and our row is
+    // only a mirror of it. The pairing poll is exactly when the mirror
+    // has to follow — and it is also when the connection becomes the
+    // one the app sends through.
+    const updated = await applyWhatsmiauConnectionState(supabase, row, state);
+    await activateIfOnlyUsableConnection(supabase, accountId, updated);
+
     return NextResponse.json(state, { status: 200 });
   } catch (error) {
     if (error instanceof Error && error.name === 'WhatsmiauApiError') {
