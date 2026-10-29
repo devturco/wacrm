@@ -64,3 +64,48 @@ export const DEFAULT_INSTANCE_SETTINGS: WhatsmiauInstanceSettings = {
  * that secret — so it can never be a user-defined header.
  */
 export const LOCKED_WEBHOOK_HEADER = 'Authorization';
+
+/**
+ * Deep-compare two settings objects.
+ *
+ * A plain `JSON.stringify` comparison is not enough: Postgres `jsonb`
+ * does NOT preserve key order, so the row that comes back from the
+ * server serialises its keys in a different order than the object the
+ * form holds — every page load would look "dirty" forever. The events
+ * and the headers are compared as sets for the same reason.
+ */
+export function isSameSettings(
+  a: WhatsmiauInstanceSettings,
+  b: WhatsmiauInstanceSettings,
+): boolean {
+  if (
+    a.alwaysOnline !== b.alwaysOnline ||
+    a.readMessages !== b.readMessages ||
+    a.rejectCall !== b.rejectCall ||
+    a.groupsIgnore !== b.groupsIgnore ||
+    a.saveMedia !== b.saveMedia ||
+    a.msgCall !== b.msgCall
+  ) {
+    return false;
+  }
+  if (
+    a.webhook.enabled !== b.webhook.enabled ||
+    a.webhook.base64 !== b.webhook.base64 ||
+    a.webhook.url !== b.webhook.url
+  ) {
+    return false;
+  }
+  if (a.webhook.events.length !== b.webhook.events.length) return false;
+  const savedEvents = new Set(b.webhook.events);
+  if (!a.webhook.events.every((event) => savedEvents.has(event))) return false;
+
+  const headers = (source: WhatsmiauInstanceSettings['webhook']['headers']) =>
+    Object.entries(source).sort(([x], [y]) => x.localeCompare(y));
+  const aHeaders = headers(a.webhook.headers);
+  const bHeaders = headers(b.webhook.headers);
+  if (aHeaders.length !== bHeaders.length) return false;
+  return aHeaders.every(
+    ([key, value], index) =>
+      bHeaders[index][0] === key && bHeaders[index][1] === value,
+  );
+}

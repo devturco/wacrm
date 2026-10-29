@@ -1,19 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { Copy, Lock, Plus, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -41,11 +34,14 @@ const MAX_HEADERS = 20;
  * shows: the integration type, the URL, the custom headers and the
  * event grid.
  *
+ * It is a SECTION, not a card: it lives inside the block of the
+ * connection it belongs to, and the block already draws the frame.
+ *
  * The `Authorization` header is OURS: it carries the account's
  * webhook secret, which the browser must never see. It is rendered
  * as a locked row, and the server rebuilds it on every push.
  */
-export function WhatsmiauWebhookCard({
+export function WhatsmiauWebhookSection({
   value,
   onChange,
   publicUrl,
@@ -56,10 +52,10 @@ export function WhatsmiauWebhookCard({
   /**
    * The public URL of this app + the webhook route.
    *
-   * It is derived from the CURRENT origin, never from the stored
-   * row: a URL baked into the database would be wrong the day the app
-   * moves to another host. The server rebuilds the same URL on every
-   * push (`webhookUrlFor(request)`), so what the user copies here is
+   * It comes from the SERVER, never from the stored row: a URL baked
+   * into the database would be wrong the day the app moves to another
+   * host. The server rebuilds the same URL on every push
+   * (`webhookUrlFor(request)`), so what the user copies here is
    * exactly what the provider receives.
    */
   publicUrl: string;
@@ -67,6 +63,9 @@ export function WhatsmiauWebhookCard({
 }) {
   const t = useTranslations('Settings.whatsmiau.webhook');
   const [sampleEvent, setSampleEvent] = useState<string | null>(null);
+  // One block per connection means one webhook URL field per block —
+  // the id is generated so two of them never collide in the DOM.
+  const urlId = useId();
 
   const headers = Object.entries(value.headers ?? {});
 
@@ -109,14 +108,8 @@ export function WhatsmiauWebhookCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-foreground">{t('title')}</CardTitle>
-        <CardDescription className="text-muted-foreground">
-          {t('description')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <>
+      <div className="space-y-5">
         {/* Integration type — fixed by the provider */}
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
           <div className="min-w-0">
@@ -132,12 +125,15 @@ export function WhatsmiauWebhookCard({
 
         {/* Webhook URL */}
         <div className="space-y-2">
-          <Label className="text-muted-foreground" htmlFor="whatsmiau-webhook-url">
+          <Label
+            className="text-muted-foreground"
+            htmlFor={urlId}
+          >
             {t('url')}
           </Label>
           <div className="flex gap-2">
             <Input
-              id="whatsmiau-webhook-url"
+              id={urlId}
               readOnly
               value={publicUrl}
               disabled={disabled}
@@ -285,7 +281,7 @@ export function WhatsmiauWebhookCard({
             />
           </div>
         </div>
-      </CardContent>
+      </div>
 
       <Dialog
         open={sampleEvent !== null}
@@ -316,6 +312,6 @@ export function WhatsmiauWebhookCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </>
   );
 }
