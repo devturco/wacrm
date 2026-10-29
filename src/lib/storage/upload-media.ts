@@ -70,9 +70,12 @@ export function buildMediaPath(
 ): string {
   // Only treat the trailing segment as an extension when there's a real
   // one — a bare name like "README" has no extension and falls back to
-  // "bin" rather than becoming "readme".
+  // "bin" rather than becoming "readme". The extension is whitelisted
+  // too: it comes from a client-supplied name, and a "/" or a ".."
+  // smuggled in there would reshape the object path.
   const hasExt = /\.[^.]+$/.test(fileName);
-  const ext = hasExt ? fileName.split(".").pop()!.toLowerCase() : "bin";
+  const rawExt = hasExt ? fileName.split(".").pop()!.toLowerCase() : "";
+  const ext = /^[a-z0-9]{1,12}$/.test(rawExt) ? rawExt : "bin";
   const safeBase =
     fileName
       .replace(/\.[^.]+$/, "")
@@ -92,6 +95,51 @@ export interface UploadAccountMediaResult {
   path: string;
 }
 
+/** What `/api/media/upload-url` answers with. */
+interface UploadTargetResponse {
+  mode: "supabase" | "presigned";
+  path: string;
+  bucket?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  publicUrl: string;
+}
+
+/**
+ * Ask the server where this file should go.
+ *
+ * The server owns the choice of backend (Supabase or R2) and builds
+ * the account-scoped path — the browser never gets to name a bucket
+ * or a path of its own.
+ */
+async function requestUploadTarget(
+  bucket: string,
+  file: File,
+): Promise<UploadTargetResponse> {
+  const response = await fetch("/api/media/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+      bucket,
+    }),
+  });
+
+  if (response.status === 401) {
+    throw new Error(t("upload.notSignedIn"));
+  }
+
+  const payload = (await response.json().catch(() => null)) as
+    | (UploadTargetResponse & { error?: string })
+    | null;
+  if (!response.ok || !payload) {
+    throw new Error(payload?.error || t("upload.failed"));
+  }
+  return payload;
+}
+
 /**
  * Upload a file to an account-scoped Storage bucket and return its public
  * URL. Throws with a user-facing message on auth / account-resolution /
@@ -104,53 +152,48 @@ export async function uploadAccountMedia(
   bucket: string,
   file: File,
 ): Promise<UploadAccountMediaResult> {
+  const target = await requestUploadTarget(bucket, file);
+  const contentType = normalizeContentType(file.type);
+
+  // Pre-signed backend: the bytes go straight to the object store and
+  // never pass through the Next server.
+  if (target.mode === "presigned" && target.url) {
+    const response = await fetch(target.url, {
+      method: "PUT",
+      headers: target.headers ?? { "Content-Type": contentType },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error(`Upload failed with status ${response.status}`);
+    }
+    return { publicUrl: target.publicUrl, path: target.path };
+  }
+
   const supabase = createClient();
-
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-  if (userErr || !user) {
-    throw new Error(t("upload.notSignedIn"));
-  }
-
-  // Resolve account_id so the path is account-scoped (matches the
-  // bucket's RLS write policy from migration 020/023). User-scoped
-  // paths would be rejected.
-  const { data: profile, error: profileErr } = await supabase
-    .from("profiles")
-    .select("account_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (profileErr || !profile?.account_id) {
-    throw new Error(t("upload.accountUnresolved"));
-  }
-
-  const path = buildMediaPath(profile.account_id as string, file.name);
-  const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
-    cacheControl: "3600",
-    upsert: false,
-    // The bucket carries an allow-list and refuses anything outside it,
-    // so the type we declare has to be one it accepts. An unknown
-    // format becomes `application/octet-stream` — the browser downloads
-    // it instead of rendering it.
-    contentType: normalizeContentType(file.type),
-  });
+  const { error: upErr } = await supabase.storage
+    .from(target.bucket ?? bucket)
+    .upload(target.path, file, {
+      cacheControl: "3600",
+      upsert: false,
+      // The bucket carries an allow-list and refuses anything outside
+      // it, so the type we declare has to be one it accepts. An
+      // unknown format becomes `application/octet-stream` — the
+      // browser downloads it instead of rendering it.
+      contentType,
+    });
   if (upErr) throw new Error(upErr.message);
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(bucket).getPublicUrl(path);
-
-  return { publicUrl, path };
+  return { publicUrl: target.publicUrl, path: target.path };
 }
 
 /**
  * Delete a previously-uploaded object. Used to GC media that was staged
  * (uploaded) but never sent — a cancelled draft or a failed Meta send —
- * so abandoned attachments don't accumulate in the public bucket. The
- * DELETE is gated by the same account-scoped RLS policy as the upload,
- * so a caller can only remove objects under their own account folder.
+ * so abandoned attachments don't accumulate in the public bucket.
+ *
+ * The delete goes through the server: the R2 backend needs a signed
+ * request, and the server is what guarantees the path belongs to the
+ * caller's own account.
  *
  * Best-effort: callers fire-and-forget and swallow errors (a missed
  * delete is a storage nit, not something to surface to the user).
@@ -159,7 +202,12 @@ export async function deleteAccountMedia(
   bucket: string,
   path: string,
 ): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) throw new Error(error.message);
+  const response = await fetch("/api/media/delete", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bucket, path }),
+  });
+  if (!response.ok) {
+    throw new Error(`Delete failed with status ${response.status}`);
+  }
 }

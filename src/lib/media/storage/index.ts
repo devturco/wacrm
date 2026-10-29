@@ -17,13 +17,19 @@ export { SupabaseMediaStorage } from "./supabase";
  * The choice comes from `media_settings`. With no configuration — or
  * with R2 selected but its credentials missing from the environment —
  * the account stays on Supabase, the backend that already works.
+ *
+ * `bucket` names the bucket the caller wants to write to. A bucket
+ * other than the account's configured one (the Flows builder writes to
+ * `flow-media`) always stays on Supabase: R2 has one bucket per
+ * account, and the extra Supabase buckets have their own RLS.
  */
 export async function getMediaStorage(
   accountId: string,
   db: Pick<SupabaseClient, "from">,
+  bucket?: string,
 ): Promise<MediaStorage> {
   const settings = await readMediaSettings(db, accountId);
-  return mediaStorageFor(settings, db);
+  return mediaStorageFor(settings, db, process.env, bucket);
 }
 
 /**
@@ -36,23 +42,29 @@ export function mediaStorageFor(
   settings: MediaSettings,
   db: Pick<SupabaseClient, "from">,
   env: Record<string, string | undefined> = process.env,
+  bucket?: string,
 ): MediaStorage {
-  if (settings.backend === "r2") {
+  const targetBucket = bucket || settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
+  const configuredBucket = settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
+
+  if (settings.backend === "r2" && targetBucket === configuredBucket) {
     const config = r2ConfigFromEnv(env);
     if (config) {
       return new R2MediaStorage({
         accountId: config.accountId,
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
-        bucket: settings.bucket || config.bucket,
+        bucket: targetBucket,
         publicBaseUrl: settings.publicBaseUrl ?? config.publicBaseUrl,
+        maxFileBytes: settings.maxFileBytes,
       });
     }
   }
 
   return new SupabaseMediaStorage({
-    bucket: settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket,
+    bucket: targetBucket,
     publicBaseUrl: settings.publicBaseUrl,
     client: db as SupabaseClient,
+    maxFileBytes: settings.maxFileBytes,
   });
 }

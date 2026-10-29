@@ -2684,7 +2684,8 @@
   "LibErrors": {
     "upload": {
       "notSignedIn": "Você não está conectado.",
-      "accountUnresolved": "Não foi possível identificar sua conta."
+      "accountUnresolved": "Não foi possível identificar sua conta.",
+      "failed": "Não foi possível enviar o arquivo."
     },
     "media": {
       "noAttachment": "Esta mensagem não tem anexo."

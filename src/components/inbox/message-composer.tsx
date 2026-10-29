@@ -89,15 +89,15 @@ interface ReplyDraft {
   preview: string;
 }
 
-// Mirrors the chat-media bucket's allowed_mime_types (migration 023) for
-// the file picker so unsupported files are rejected before upload rather
-// than failing with a confusing Storage error. Audio has no picker — it's
-// captured via the recorder.
+// The file picker filters, so unsupported files are rejected before
+// upload rather than failing with a confusing Storage error. Images and
+// videos are limited to what the provider accepts; a DOCUMENT can be
+// ANY format — the bucket stores it as a download, and the type it
+// declares is normalised server-side.
 const PICKER_ACCEPT: Record<"image" | "video" | "document", string> = {
   image: "image/png,image/jpeg,image/webp",
   video: "video/mp4,video/3gpp",
-  document:
-    "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain",
+  document: "*/*",
 };
 
 interface MediaDraft {

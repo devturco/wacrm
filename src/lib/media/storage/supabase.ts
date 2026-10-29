@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildMediaPath } from "@/lib/storage/upload-media";
+import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 import type { MediaStorage, UploadTarget } from "./types";
 
 export interface SupabaseMediaStorageOptions {
@@ -9,6 +9,8 @@ export interface SupabaseMediaStorageOptions {
   publicBaseUrl: string | null;
   /** The client the objects are written with. */
   client: SupabaseClient;
+  /** The account's ceiling, in bytes. */
+  maxFileBytes?: number;
 }
 
 /**
@@ -23,12 +25,14 @@ export interface SupabaseMediaStorageOptions {
 export class SupabaseMediaStorage implements MediaStorage {
   readonly backend = "supabase" as const;
   readonly bucket: string;
+  readonly maxFileBytes: number;
 
   private readonly options: SupabaseMediaStorageOptions;
 
   constructor(options: SupabaseMediaStorageOptions) {
     this.options = options;
     this.bucket = options.bucket;
+    this.maxFileBytes = options.maxFileBytes ?? CHAT_MEDIA_MAX_BYTES;
   }
 
   async prepareUpload(args: {

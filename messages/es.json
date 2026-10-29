@@ -2684,7 +2684,8 @@
   "LibErrors": {
     "upload": {
       "notSignedIn": "No has iniciado sesión.",
-      "accountUnresolved": "No se pudo identificar tu cuenta."
+      "accountUnresolved": "No se pudo identificar tu cuenta.",
+      "failed": "No se pudo subir el archivo."
     },
     "media": {
       "noAttachment": "Este mensaje no tiene archivo adjunto."

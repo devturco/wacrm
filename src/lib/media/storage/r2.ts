@@ -1,5 +1,5 @@
 import { AwsClient, AwsV4Signer } from "aws4fetch";
-import { buildMediaPath } from "@/lib/storage/upload-media";
+import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 import type { MediaStorage, UploadTarget } from "./types";
 
 export interface R2Config {
@@ -72,12 +72,14 @@ export function r2Endpoint(config: R2Config, key: string): string {
 export class R2MediaStorage implements MediaStorage {
   readonly backend = "r2" as const;
   readonly bucket: string;
+  readonly maxFileBytes: number;
 
   private readonly config: R2Config;
 
-  constructor(config: R2Config) {
+  constructor(config: R2Config & { maxFileBytes?: number }) {
     this.config = config;
     this.bucket = config.bucket;
+    this.maxFileBytes = config.maxFileBytes ?? CHAT_MEDIA_MAX_BYTES;
   }
 
   private endpoint(key: string): string {

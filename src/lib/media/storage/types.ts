@@ -25,6 +25,8 @@ export interface MediaStorage {
   readonly backend: MediaBackend;
   /** Bucket the objects live in. */
   readonly bucket: string;
+  /** The account's ceiling, in bytes. */
+  readonly maxFileBytes: number;
   /**
    * Where the browser should send the bytes.
    *

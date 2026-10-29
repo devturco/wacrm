@@ -2684,7 +2684,8 @@
   "LibErrors": {
     "upload": {
       "notSignedIn": "Not signed in.",
-      "accountUnresolved": "Could not resolve your account."
+      "accountUnresolved": "Could not resolve your account.",
+      "failed": "Could not upload the file."
     },
     "media": {
       "noAttachment": "This message has no attachment."

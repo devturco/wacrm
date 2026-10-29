@@ -46,6 +46,12 @@ describe("buildMediaPath", () => {
     expect(path).toBe(`account-${ACCOUNT}/inbound/photo.png`);
     expect(path.split("/")[0]).toBe(`account-${ACCOUNT}`);
   });
+
+  it("drops a separator smuggled into the extension", () => {
+    const path = buildMediaPath(ACCOUNT, "invoice.pdf/evil", 1700000000000);
+    expect(path).toBe(`account-${ACCOUNT}/1700000000000-invoice.bin`);
+    expect(path.split("/")).toHaveLength(2);
+  });
 });
 
 describe("MEDIA_MAX_BYTES_BY_KIND", () => {
