@@ -2760,25 +2760,50 @@ git commit -m "feat(leads): endpoint público de captura e o script track.js"
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const inserts: Array<Record<string, unknown>> = [];
-let settingsRow: Record<string, unknown> | null = null;
-let tokenCounter = 0;
+const fake = vi.hoisted(() => ({
+  inserts: [] as Array<Record<string, unknown>>,
+  settingsRow: null as Record<string, unknown> | null,
+}));
+
+/**
+ * The builder the store drives.
+ *
+ * It is thenable: every filter method returns the builder itself and
+ * the `await` at the end of the chain resolves to `{ data, error }`,
+ * exactly like the real PostgREST builder.
+ */
+interface FakeBuilder {
+  eq: () => FakeBuilder;
+  contains: () => FakeBuilder;
+  limit: () => FakeBuilder;
+  then: (
+    resolve: (value: { data: unknown[]; error: null }) => unknown
+  ) => unknown;
+}
 
 vi.mock("@/lib/leads/admin-client", () => ({
   supabaseAdmin: () => ({
     from: (table: string) => {
-      const builder: Record<string, unknown> = {};
-      builder.select = () => builder;
-      builder.eq = () => builder;
-      builder.contains = () => builder;
-      builder.limit = () => builder;
-      builder.maybeSingle = async () => (table === "lead_settings" ? settingsRow : null);
-      builder.single = async () => (table === "lead_settings" ? settingsRow : null);
-      builder.insert = (row: Record<string, unknown>) => {
-        inserts.push(row);
-        return { select: () => ({ single: async () => row }) };
+      const builder: FakeBuilder = {
+        eq: () => builder,
+        contains: () => builder,
+        limit: () => builder,
+        then: (resolve) =>
+          resolve({
+            data:
+              table === "lead_settings" && fake.settingsRow
+                ? [fake.settingsRow]
+                : [],
+            error: null,
+          }),
       };
-      return builder;
+      return {
+        select: () => builder,
+        insert: (row: Record<string, unknown>) => {
+          fake.inserts.push(row);
+          return { select: () => ({ single: async () => row }) };
+        },
+      };
     },
   }),
 }));
@@ -2786,9 +2811,8 @@ vi.mock("@/lib/leads/admin-client", () => ({
 import { GET } from "./route";
 
 beforeEach(() => {
-  inserts.length = 0;
-  tokenCounter = 0;
-  settingsRow = {
+  fake.inserts.length = 0;
+  fake.settingsRow = {
     account_id: "acc-1",
     capture_key: "key-1",
     enabled: true,
@@ -2811,23 +2835,23 @@ function request(url: string) {
 
 describe("GET /r/[code]", () => {
   it("answers 404 for an unknown code", async () => {
-    settingsRow = null;
+    fake.settingsRow = null;
     const res = await GET(request("https://crm.example.com/r/zzzzzzzz"), {
       params: Promise.resolve({ code: "zzzzzzzz" }),
     });
     expect(res.status).toBe(404);
-    expect(inserts).toHaveLength(0);
+    expect(fake.inserts).toHaveLength(0);
   });
 
   it("creates one pending origin per click", async () => {
     await GET(request("https://crm.example.com/r/a7x9k2m4?utm_source=instagram"), {
       params: Promise.resolve({ code: "a7x9k2m4" }),
     });
-    expect(inserts).toHaveLength(1);
-    expect(inserts[0].contact_id).toBeNull();
-    expect(inserts[0].link_code).toBe("a7x9k2m4");
-    expect(inserts[0].landing_path).toBe("/r/a7x9k2m4");
-    expect(inserts[0].utm_source).toBe("instagram");
+    expect(fake.inserts).toHaveLength(1);
+    expect(fake.inserts[0].contact_id).toBeNull();
+    expect(fake.inserts[0].link_code).toBe("a7x9k2m4");
+    expect(fake.inserts[0].landing_path).toBe("/r/a7x9k2m4");
+    expect(fake.inserts[0].utm_source).toBe("instagram");
   });
 
   it("gives every click its own token", async () => {
@@ -2837,7 +2861,7 @@ describe("GET /r/[code]", () => {
     await GET(request("https://crm.example.com/r/a7x9k2m4"), {
       params: Promise.resolve({ code: "a7x9k2m4" }),
     });
-    expect(inserts[0].lead_token).not.toBe(inserts[1].lead_token);
+    expect(fake.inserts[0].lead_token).not.toBe(fake.inserts[1].lead_token);
   });
 
   it("redirects to wa.me with the code in the message", async () => {
@@ -2848,7 +2872,7 @@ describe("GET /r/[code]", () => {
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("https://wa.me/5511999999999");
     expect(location).toContain("ref+");
-    expect(location).toContain(inserts[0].lead_token);
+    expect(location).toContain(fake.inserts[0].lead_token);
   });
 
   it("sets the first-touch cookie", async () => {
@@ -2858,12 +2882,14 @@ describe("GET /r/[code]", () => {
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("crmbr_oid=");
     expect(cookie).toContain("Max-Age=2592000");
-    expect(cookie).toContain("SameSite=Lax");
+    // Next.js serializes the attribute value in lower case; the
+    // attribute itself is case-insensitive on the wire.
+    expect(cookie.toLowerCase()).toContain("samesite=lax");
   });
 
   it("redirects to a url destination, keeping the utm parameters", async () => {
-    settingsRow = {
-      ...(settingsRow as Record<string, unknown>),
+    fake.settingsRow = {
+      ...(fake.settingsRow as Record<string, unknown>),
       links: [
         {
           code: "a7x9k2m4",
@@ -2886,8 +2912,8 @@ describe("GET /r/[code]", () => {
   });
 
   it("never redirects to an unknown destination scheme", async () => {
-    settingsRow = {
-      ...(settingsRow as Record<string, unknown>),
+    fake.settingsRow = {
+      ...(fake.settingsRow as Record<string, unknown>),
       links: [
         {
           code: "a7x9k2m4",
@@ -2956,7 +2982,11 @@ function whatsappUrl(destination: string, message: string, token: string): strin
   const number = destination.slice(3).replace(/\D/g, '')
   if (!number) return null
   const text = `${message} ref ${token}`.trim()
-  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`
+  // URLSearchParams encodes the space as "+", which is what wa.me
+  // expects for a prefilled message.
+  const params = new URLSearchParams()
+  params.set('text', text)
+  return `https://wa.me/${number}?${params.toString()}`
 }
 
 /** Where a `url:` link goes, with the utm parameters kept. */
