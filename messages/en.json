@@ -3138,6 +3138,12 @@
       "invalidMaxSize": "Invalid maximum file size",
       "invalidPublicBaseUrl": "Invalid public base URL"
     },
+    "leads": {
+      "notFound": "Not found",
+      "hostNotAllowed": "This domain is not allowed to report clicks",
+      "invalidPayload": "Invalid payload",
+      "captureFailed": "Could not record the origin"
+    },
     "react": {
       "idEmojiRequired": "message_id and emoji are required",
       "messageNotFound": "Message not found",

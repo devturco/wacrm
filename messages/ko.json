@@ -3138,6 +3138,12 @@
       "invalidMaxSize": "잘못된 최대 파일 크기입니다",
       "invalidPublicBaseUrl": "잘못된 공개 기본 URL입니다"
     },
+    "leads": {
+      "notFound": "찾을 수 없습니다",
+      "hostNotAllowed": "이 도메인은 클릭을 보고할 수 없습니다",
+      "invalidPayload": "잘못된 페이로드",
+      "captureFailed": "유입 경로를 기록할 수 없습니다"
+    },
     "react": {
       "idEmojiRequired": "message_id와 emoji는 필수입니다",
       "messageNotFound": "메시지를 찾을 수 없습니다",

@@ -195,6 +195,11 @@ export const RATE_LIMITS = {
   whatsappHealth: { limit: 30, windowMs: 60_000 },
   whatsappMedia: { limit: 240, windowMs: 60_000 },
   automationTrigger: { limit: 30, windowMs: 60_000 },
+  /** Public lead capture (`POST /api/leads/capture`). The bucket is
+   *  checked twice: once per IP and once per capture key. 30/min per
+   *  IP is generous for a site with a form on every page and still
+   *  bounds a script that loops the endpoint. */
+  leadCapture: { limit: 30, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't

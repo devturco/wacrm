@@ -3138,6 +3138,12 @@
       "invalidMaxSize": "Tamaño máximo no válido",
       "invalidPublicBaseUrl": "URL pública base no válida"
     },
+    "leads": {
+      "notFound": "No encontrado",
+      "hostNotAllowed": "Este dominio no puede reportar clics",
+      "invalidPayload": "Payload no válido",
+      "captureFailed": "No se pudo registrar el origen"
+    },
     "react": {
       "idEmojiRequired": "message_id y emoji son obligatorios",
       "messageNotFound": "Mensaje no encontrado",
