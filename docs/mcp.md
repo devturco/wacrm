@@ -1,6 +1,6 @@
 # MCP server
 
-wacrm ships a [Model Context Protocol](https://modelcontextprotocol.io)
+crmbr ships a [Model Context Protocol](https://modelcontextprotocol.io)
 server so you can drive your CRM from AI assistants — Claude Desktop,
 Claude Code, Cursor, and any other MCP client — in natural language:
 
@@ -24,12 +24,12 @@ other API call.
    ```jsonc
    {
      "mcpServers": {
-       "wacrm": {
+       "crmbr": {
          "command": "npx",
          "args": ["-y", "wacrm-mcp"],
          "env": {
            "WACRM_BASE_URL": "https://crm.example.com",
-           "WACRM_API_KEY": "wacrm_live_xxxxxxxxxxxxxxxxxxxxxxxx"
+           "WACRM_API_KEY": "crmbr_live_xxxxxxxxxxxxxxxxxxxxxxxx"
          }
        }
      }

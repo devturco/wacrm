@@ -155,7 +155,7 @@ JS puro, ~1 KB, sem dependência. O cliente cola no site:
 Comportamento:
 
 1. Na carga da página, lê da URL: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `gclid`, `fbclid`, `ttclid`, `wbraid`, `igshid`.
-2. Guarda o **primeiro toque** no cookie first-party `wacrm_oid` (30 dias, `SameSite=Lax`, `path=/`). **Write-once**: se o cookie já existe, ele **não** é sobrescrito — é essa a regra que garante que a origem é o primeiro toque (D2).
+2. Guarda o **primeiro toque** no cookie first-party `crmbr_oid` (30 dias, `SameSite=Lax`, `path=/`). **Write-once**: se o cookie já existe, ele **não** é sobrescrito — é essa a regra que garante que a origem é o primeiro toque (D2).
 3. Dispara `POST /api/leads/capture` em dois momentos:
    - `submit` do formulário (e `change`/`blur` de campo com nome `phone`/`telefone`/`whatsapp`, para pegar o telefone antes do envio);
    - clique em qualquer link `wa.me`, `api.whatsapp.com`, `instagram.com`, `tiktok.com` ou `wa:<numero>`.
@@ -201,7 +201,7 @@ Público. É o link que vai no anúncio.
 
 1. Acha o link em `lead_settings.links` pelo `code`. Não existe → 404.
 2. Cria uma linha nova em `lead_origins` com os UTMs da query, `link_code = a7x9k2m4`, `landing_path = '/r/a7x9k2m4'`, `contact_id = NULL`, e um **`lead_token` novo de 8 chars** (por clique).
-3. Grava o cookie `wacrm_oid` com esse toque como primeiro toque (se o cookie ainda não existir).
+3. Grava o cookie `crmbr_oid` com esse toque como primeiro toque (se o cookie ainda não existir).
 4. Redirect 302:
    - `wa:<numero>` → `https://wa.me/<numero>?text=<mensagem + " ref A7X9K2M4">`
    - `url:<https://...>` → a URL, com os UTMs que vieram na query acrescentados (`utm_*` da query são repassados).

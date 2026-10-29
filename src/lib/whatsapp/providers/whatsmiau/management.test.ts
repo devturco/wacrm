@@ -64,7 +64,7 @@ describe('isReachableWebhookUrl', () => {
     expect(isReachableWebhookUrl('https://127.0.0.1/api/whatsmiau/webhook')).toBe(false);
     expect(isReachableWebhookUrl('http://0.0.0.0:3000/api/whatsmiau/webhook')).toBe(false);
     expect(isReachableWebhookUrl('https://app.localhost/api/whatsmiau/webhook')).toBe(false);
-    expect(isReachableWebhookUrl('https://wacrm.local/api/whatsmiau/webhook')).toBe(false);
+    expect(isReachableWebhookUrl('https://crmbr.local/api/whatsmiau/webhook')).toBe(false);
   });
 
   it('refuses a plain HTTP address — the provider requires HTTPS', () => {

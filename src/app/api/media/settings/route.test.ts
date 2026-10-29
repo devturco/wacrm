@@ -85,7 +85,7 @@ describe("GET /api/media/settings", () => {
   it("returns the account's configuration", async () => {
     h.settings = {
       backend: "r2",
-      bucket: "wacrm-media",
+      bucket: "crmbr-media",
       max_file_bytes: 52428800,
       public_base_url: "https://media.test",
     };
@@ -93,7 +93,7 @@ describe("GET /api/media/settings", () => {
     const res = (await GET()) as unknown as Res;
 
     expect(res.body.backend).toBe("r2");
-    expect(res.body.bucket).toBe("wacrm-media");
+    expect(res.body.bucket).toBe("crmbr-media");
     expect(res.body.maxFileBytes).toBe(52428800);
     expect(res.body.publicBaseUrl).toBe("https://media.test");
   });
@@ -131,7 +131,7 @@ describe("GET /api/media/settings", () => {
     vi.stubEnv("R2_SECRET_ACCESS_KEY", "secret");
     h.settings = {
       backend: "r2",
-      bucket: "wacrm-media",
+      bucket: "crmbr-media",
       max_file_bytes: 104857600,
       public_base_url: "https://media.test",
     };
@@ -158,7 +158,7 @@ describe("PUT /api/media/settings", () => {
   it("saves the configuration", async () => {
     const res = await put({
       backend: "r2",
-      bucket: "wacrm-media",
+      bucket: "crmbr-media",
       maxFileBytes: 52428800,
       publicBaseUrl: "https://media.test",
     });
@@ -169,7 +169,7 @@ describe("PUT /api/media/settings", () => {
     expect(h.upserts[0]?.row).toMatchObject({
       account_id: "acc-1",
       backend: "r2",
-      bucket: "wacrm-media",
+      bucket: "crmbr-media",
       max_file_bytes: 52428800,
       public_base_url: "https://media.test",
     });
@@ -211,7 +211,7 @@ describe("PUT /api/media/settings", () => {
   it("refuses a public base url that is not http", async () => {
     const res = await put({
       backend: "r2",
-      bucket: "wacrm-media",
+      bucket: "crmbr-media",
       maxFileBytes: 104857600,
       publicBaseUrl: "javascript:alert(1)",
     });
@@ -223,7 +223,7 @@ describe("PUT /api/media/settings", () => {
   it("drops the trailing slash of the public base url", async () => {
     await put({
       backend: "r2",
-      bucket: "wacrm-media",
+      bucket: "crmbr-media",
       maxFileBytes: 104857600,
       publicBaseUrl: "https://media.test/",
     });

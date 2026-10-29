@@ -61,7 +61,7 @@ export function r2ConfigFromEnv(
     accountId: env.R2_ACCOUNT_ID!,
     accessKeyId: env.R2_ACCESS_KEY_ID!,
     secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
-    bucket: env.R2_BUCKET ?? "wacrm-media",
+    bucket: env.R2_BUCKET ?? "crmbr-media",
     publicBaseUrl: overrides.publicBaseUrl ?? env.MEDIA_PUBLIC_BASE_URL!,
     missing,
   };

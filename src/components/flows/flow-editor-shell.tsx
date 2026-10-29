@@ -26,6 +26,11 @@
 
 import { useEffect, useState } from "react";
 import { GitFork, List } from "lucide-react";
+import {
+  LEGACY_FLOW_EDITOR_VIEW_KEY,
+  readWithLegacy,
+  writeKey,
+} from "@/lib/storage-keys";
 
 import { FlowBuilder } from "./flow-builder";
 import { FlowCanvas } from "./flow-canvas";
@@ -47,7 +52,7 @@ const MOBILE_BREAKPOINT = "(max-width: 767px)";
 
 type View = "canvas" | "list";
 
-const STORAGE_KEY = "wacrm.flowEditor.view";
+const STORAGE_KEY = "crmbr.flowEditor.view";
 
 // Legend covers every node type, derived from NODE_META so a new type
 // can't silently go undocumented. NODE_META's key order already reads
@@ -68,12 +73,12 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
   // pass for this subtree, so no hydration mismatch to worry about.
   // Default to `canvas` (the new default) when nothing is saved.
   const [view, setView] = useState<View>(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === "canvas" || saved === "list") return saved;
-    } catch {
-      // Private browsing / disabled storage — fall through to default.
-    }
+    const saved = readWithLegacy(
+      window.localStorage,
+      STORAGE_KEY,
+      LEGACY_FLOW_EDITOR_VIEW_KEY,
+    );
+    if (saved === "canvas" || saved === "list") return saved;
     return "canvas";
   });
 
@@ -86,11 +91,12 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
 
   const choose = (next: View) => {
     setView(next);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
+    writeKey(
+      window.localStorage,
+      STORAGE_KEY,
+      LEGACY_FLOW_EDITOR_VIEW_KEY,
+      next,
+    );
   };
 
   return (

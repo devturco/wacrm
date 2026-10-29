@@ -1,4 +1,9 @@
 import type { ContentType, SenderType } from "@/types";
+import {
+  LEGACY_BROWSER_NOTIFY_KEY,
+  readWithLegacy,
+  writeKey,
+} from "@/lib/storage-keys";
 
 /**
  * Pure decision + formatting logic for desktop (Web Notifications API)
@@ -12,14 +17,14 @@ import type { ContentType, SenderType } from "@/types";
  */
 
 /** localStorage key for the device-scoped opt-in. */
-export const BROWSER_NOTIFY_STORAGE_KEY = "wacrm:browser-notifications";
+export const BROWSER_NOTIFY_STORAGE_KEY = "crmbr:browser-notifications";
 
 /**
  * Same-tab change signal. `storage` events only fire in *other* tabs,
  * so the settings toggle and the listener hook (both in this tab) sync
  * through this window event instead.
  */
-export const BROWSER_NOTIFY_CHANGE_EVENT = "wacrm:browser-notifications-change";
+export const BROWSER_NOTIFY_CHANGE_EVENT = "crmbr:browser-notifications-change";
 
 /** A duplicate INSERT for the same message id inside this window is ignored. */
 export const DEDUPE_WINDOW_MS = 30_000;
@@ -206,25 +211,23 @@ export function getNotificationPermission(): BrowserNotifyPermission {
 /** Device-scoped opt-in. Defaults to off; a bad/absent value reads as off. */
 export function readBrowserNotifyPref(): boolean {
   if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(BROWSER_NOTIFY_STORAGE_KEY) === "1";
-  } catch {
-    // localStorage can throw in private-browsing / sandboxed contexts.
-    return false;
-  }
+  return (
+    readWithLegacy(
+      window.localStorage,
+      BROWSER_NOTIFY_STORAGE_KEY,
+      LEGACY_BROWSER_NOTIFY_KEY,
+    ) === "1"
+  );
 }
 
 export function writeBrowserNotifyPref(enabled: boolean): void {
   if (typeof window === "undefined") return;
-  try {
-    if (enabled) {
-      window.localStorage.setItem(BROWSER_NOTIFY_STORAGE_KEY, "1");
-    } else {
-      window.localStorage.removeItem(BROWSER_NOTIFY_STORAGE_KEY);
-    }
-  } catch {
-    // Best-effort; the toggle still applies for this page's lifetime.
-  }
+  writeKey(
+    window.localStorage,
+    BROWSER_NOTIFY_STORAGE_KEY,
+    LEGACY_BROWSER_NOTIFY_KEY,
+    enabled ? "1" : null,
+  );
   window.dispatchEvent(new Event(BROWSER_NOTIFY_CHANGE_EVENT));
 }
 

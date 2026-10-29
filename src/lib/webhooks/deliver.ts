@@ -111,13 +111,21 @@ async function deliverOne(
   }
 
   try {
+    const signature = buildSignatureHeader(payload, secret, tsSeconds);
     const res = await fetch(row.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Crmbr-Event': event,
+        'X-Crmbr-Webhook-Id': row.id,
+        'X-Crmbr-Signature': signature,
+        // The pre-rebrand header names, carrying the same values. A
+        // receiver that hard-coded `X-Wacrm-Signature` keeps working
+        // without being touched — dropping the old name would break
+        // every integration that was already wired up.
         'X-Wacrm-Event': event,
         'X-Wacrm-Webhook-Id': row.id,
-        'X-Wacrm-Signature': buildSignatureHeader(payload, secret, tsSeconds),
+        'X-Wacrm-Signature': signature,
       },
       body: payload,
       // Do NOT follow redirects — a public URL could 3xx-bounce to an

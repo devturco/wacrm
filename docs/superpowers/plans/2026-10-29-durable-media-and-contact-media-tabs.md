@@ -533,7 +533,7 @@ describe('R2MediaStorage', () => {
       accountId: 'r2-account',
       accessKeyId: 'AKIA_TEST',
       secretAccessKey: 'secret',
-      bucket: 'wacrm-media',
+      bucket: 'crmbr-media',
       publicBaseUrl: 'https://media.test',
     });
     const target = await storage.prepareUpload({
@@ -543,7 +543,7 @@ describe('R2MediaStorage', () => {
       sizeBytes: 10,
     });
     expect(target.mode).toBe('presigned');
-    expect(target.url).toContain('https://r2-account.r2.cloudflarestorage.com/wacrm-media/');
+    expect(target.url).toContain('https://r2-account.r2.cloudflarestorage.com/crmbr-media/');
     expect(target.url).toContain('X-Amz-Signature=');
     expect(target.headers?.['Content-Type']).toBe('application/pdf');
     expect(target.publicUrl).toBe(
@@ -725,7 +725,7 @@ export function r2ConfigFromEnv(
   const accountId = env.R2_ACCOUNT_ID;
   const accessKeyId = env.R2_ACCESS_KEY_ID;
   const secretAccessKey = env.R2_SECRET_ACCESS_KEY;
-  const bucket = env.R2_BUCKET ?? 'wacrm-media';
+  const bucket = env.R2_BUCKET ?? 'crmbr-media';
   const publicBaseUrl = env.MEDIA_PUBLIC_BASE_URL;
   if (!accountId) missing.push('R2_ACCOUNT_ID');
   if (!accessKeyId) missing.push('R2_ACCESS_KEY_ID');

@@ -1,6 +1,6 @@
 # Changelog
 
-User-visible changes in `wacrm`. Self-hosters: when pulling an update,
+User-visible changes in `crmbr`. Self-hosters: when pulling an update,
 check this file for any **migration required** notes and apply the
 matching SQL files from `supabase/migrations/` against your Supabase
 project before restarting the app.
@@ -8,6 +8,31 @@ project before restarting the app.
 Versions follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Pre-1.0, `MINOR` bumps cover new modules; `PATCH` bumps cover bug fixes
 and polish.
+
+## [Unreleased]
+
+The product was renamed from **wacrm** to **crmbr**. Nothing about the
+data model changed — no migration required — but a few wire formats and
+stored names carry the old brand.
+
+### Changed
+
+- **API keys are minted with the `crmbr_live_` prefix.** Keys issued
+  before the rename keep working — the database stores a SHA-256 hash,
+  not the prefix — but new keys carry the new one. If your integration
+  pattern-matches the prefix, widen it to accept both.
+- **Webhook deliveries carry `X-Crmbr-Event`, `X-Crmbr-Webhook-Id` and
+  `X-Crmbr-Signature`.** The pre-rebrand `X-Wacrm-*` names are still
+  sent alongside them, with the same values, so a receiver that
+  hard-coded the old header keeps verifying deliveries untouched.
+- **The R2 bucket default is now `crmbr-media`.** Set `R2_BUCKET`
+  explicitly if you already created a bucket under the old name —
+  the default only applies when the variable is unset.
+- **Browser-stored settings moved to `crmbr.*` localStorage keys**
+  (theme, light/dark mode, notification opt-in, inbox panel state,
+  flow editor view). The old keys are still read as a fallback and
+  are cleared the first time each setting is changed, so no device
+  loses its theme or gets its notifications switched back off.
 
 ## [0.8.1] — 2026-07-10
 
@@ -122,9 +147,9 @@ relevant excerpts are retrieved into every draft and auto-reply.
 
 Adds the **AI reply assistant** — bring-your-own-key. Each account
 pastes its own OpenAI or Anthropic key under **Settings → AI
-Assistant**; wacrm calls the provider directly with that key, so
+Assistant**; crmbr calls the provider directly with that key, so
 there's no per-seat AI fee and your conversation data never leaves
-your own infrastructure for a wacrm-run service. The key is stored
+your own infrastructure for a crmbr-run service. The key is stored
 AES-256-GCM-encrypted at rest (same as WhatsApp tokens) and never
 returned to the client after saving.
 
@@ -178,7 +203,7 @@ automations can *react* to activity instead of polling.
 
 ## [0.3.0] — 2026-07-01
 
-Multi-user accounts ship. Every wacrm install is multi-tenant on the
+Multi-user accounts ship. Every crmbr install is multi-tenant on the
 database side: a single user's signup creates a fresh "account", and
 every row is scoped to that account rather than to the user directly.
 This release also opens the user-visible **Members** surface — invite
@@ -193,7 +218,7 @@ always did.
 ### Added
 
 - **Public REST API (`/api/v1`) — groundwork.** A scoped, revocable
-  **API key** system so you can drive wacrm from your own scripts and
+  **API key** system so you can drive crmbr from your own scripts and
   automations. Create keys under **Settings → API keys** (admin+),
   grant only the scopes each integration needs, and authenticate with
   `Authorization: Bearer <key>`. Keys are account-scoped and stored
@@ -487,7 +512,7 @@ Apply against your Supabase project before deploying this version:
 
 ### Note on multi-user setups
 
-wacrm is intentionally **single-tenant per WhatsApp number**. RLS on
+crmbr is intentionally **single-tenant per WhatsApp number**. RLS on
 `conversations`/`messages` is `auth.uid() = user_id`, so a second
 user physically cannot read messages routed to a different owner —
 two users sharing one number was never supported. If you need

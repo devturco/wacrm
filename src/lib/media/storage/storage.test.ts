@@ -107,7 +107,7 @@ describe("R2MediaStorage", () => {
     accountId: "r2-account",
     accessKeyId: "AKIA_TEST",
     secretAccessKey: "secret",
-    bucket: "wacrm-media",
+    bucket: "crmbr-media",
     publicBaseUrl: "https://media.test",
   };
 
@@ -123,7 +123,7 @@ describe("R2MediaStorage", () => {
 
     expect(target.mode).toBe("presigned");
     expect(target.url).toContain(
-      "https://r2-account.r2.cloudflarestorage.com/wacrm-media/",
+      "https://r2-account.r2.cloudflarestorage.com/crmbr-media/",
     );
     expect(target.url).toContain("X-Amz-Signature=");
     expect(target.url).toContain("X-Amz-Expires=900");
@@ -168,11 +168,11 @@ describe("r2ConfigFromEnv", () => {
       R2_ACCOUNT_ID: "r2-account",
       R2_ACCESS_KEY_ID: "AKIA_TEST",
       R2_SECRET_ACCESS_KEY: "secret",
-      R2_BUCKET: "wacrm-media",
+      R2_BUCKET: "crmbr-media",
       MEDIA_PUBLIC_BASE_URL: "https://media.test",
     });
 
-    expect(config?.bucket).toBe("wacrm-media");
+    expect(config?.bucket).toBe("crmbr-media");
     expect(config?.publicBaseUrl).toBe("https://media.test");
     expect(config?.missing).toEqual([]);
   });
@@ -203,7 +203,7 @@ describe("readMediaSettings", () => {
             maybeSingle: async () => ({
               data: {
                 backend: "r2",
-                bucket: "wacrm-media",
+                bucket: "crmbr-media",
                 max_file_bytes: 52428800,
                 public_base_url: "https://media.test",
               },
@@ -216,7 +216,7 @@ describe("readMediaSettings", () => {
 
     const settings = await readMediaSettings(db, "acc-1");
     expect(settings.backend).toBe("r2");
-    expect(settings.bucket).toBe("wacrm-media");
+    expect(settings.bucket).toBe("crmbr-media");
     expect(settings.maxFileBytes).toBe(52428800);
     expect(settings.publicBaseUrl).toBe("https://media.test");
   });
@@ -228,7 +228,7 @@ describe("mediaStorageFor", () => {
     const storage = mediaStorageFor(
       {
         backend: "r2",
-        bucket: "wacrm-media",
+        bucket: "crmbr-media",
         maxFileBytes: 104857600,
         publicBaseUrl: "https://media.test",
       },
@@ -237,13 +237,13 @@ describe("mediaStorageFor", () => {
         R2_ACCOUNT_ID: "r2-account",
         R2_ACCESS_KEY_ID: "AKIA_TEST",
         R2_SECRET_ACCESS_KEY: "secret",
-        R2_BUCKET: "wacrm-media",
+        R2_BUCKET: "crmbr-media",
         MEDIA_PUBLIC_BASE_URL: "https://media.test",
       },
     );
 
     expect(storage.backend).toBe("r2");
-    expect(storage.bucket).toBe("wacrm-media");
+    expect(storage.bucket).toBe("crmbr-media");
   });
 
   it("stays on Supabase when the R2 credentials are missing", () => {
@@ -251,7 +251,7 @@ describe("mediaStorageFor", () => {
     const storage = mediaStorageFor(
       {
         backend: "r2",
-        bucket: "wacrm-media",
+        bucket: "crmbr-media",
         maxFileBytes: 104857600,
         publicBaseUrl: null,
       },

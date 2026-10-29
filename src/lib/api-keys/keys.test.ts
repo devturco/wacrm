@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   API_KEY_PREFIX,
+  LEGACY_API_KEY_PREFIX,
   generateApiKey,
   hashApiKey,
   looksLikeApiKey,
@@ -35,11 +36,11 @@ describe('generateApiKey', () => {
 
 describe('hashApiKey', () => {
   it('is deterministic', () => {
-    expect(hashApiKey('wacrm_live_abc')).toBe(hashApiKey('wacrm_live_abc'));
+    expect(hashApiKey('crmbr_live_abc')).toBe(hashApiKey('crmbr_live_abc'));
   });
 
   it('differs for different inputs', () => {
-    expect(hashApiKey('wacrm_live_abc')).not.toBe(hashApiKey('wacrm_live_abd'));
+    expect(hashApiKey('crmbr_live_abc')).not.toBe(hashApiKey('crmbr_live_abd'));
   });
 });
 
@@ -53,11 +54,16 @@ describe('looksLikeApiKey', () => {
     expect(looksLikeApiKey('')).toBe(false);
     expect(looksLikeApiKey('some-invite-token')).toBe(false);
   });
+
+  it('still accepts keys minted under the pre-rebrand prefix', () => {
+    expect(looksLikeApiKey(`${LEGACY_API_KEY_PREFIX}abcdef`)).toBe(true);
+    expect(looksLikeApiKey(LEGACY_API_KEY_PREFIX)).toBe(false);
+  });
 });
 
 describe('timingSafeHexEqual', () => {
   it('is true for identical digests', () => {
-    const h = hashApiKey('wacrm_live_xyz');
+    const h = hashApiKey('crmbr_live_xyz');
     expect(timingSafeHexEqual(h, h)).toBe(true);
   });
 

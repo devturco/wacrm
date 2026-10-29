@@ -55,10 +55,10 @@ curl -X GET 'https://api.whatsmiau.dev/v2/instance/fetchInstances' \
 | `delay` | Em rotas de envio que o oferecem, representa milissegundos, com limite de **110.000 ms**. |
 | Credenciais | Nunca armazenar chaves em código frontend ou em repositórios públicos. |
 
-### O que o wacrm faz com o que chega
+### O que o crmbr faz com o que chega
 
 O provedor entrega tudo pelo mesmo webhook: conversa de pessoa, grupo, canal e
-status. O wacrm separa os casos pelo **sufixo do JID** e aplica duas regras
+status. O crmbr separa os casos pelo **sufixo do JID** e aplica duas regras
 que são **do app**, não do provedor — o provedor não tem flag para nenhuma
 delas.
 
@@ -81,10 +81,10 @@ provedor**: ela nunca é enviada para ele.
 
 #### Mensagens enviadas pelo celular (`data.key.fromMe`)
 
-O provedor devolve as nossas próprias mensagens pelo webhook. O wacrm
+O provedor devolve as nossas próprias mensagens pelo webhook. O crmbr
 distingue dois casos:
 
-| Caso | Como é reconhecido | O que o wacrm faz |
+| Caso | Como é reconhecido | O que o crmbr faz |
 |---|---|---|
 | O **CRM** enviou a mensagem | Já existe uma linha em `messages` com aquele `message_id` | Reconcilia só o **status** (a linha já foi gravada pelo caminho de envio) |
 | O **agente enviou pelo celular** | Não existe linha — ninguém no app escreveu nada | **Grava a mensagem** na conversa, como `sender_type: 'agent'` |
@@ -104,9 +104,9 @@ enviada para um número que nunca nos escreveu não cria um cliente.
 > violação reusando a linha existente em vez de dar a mensagem por perdida
 > (`src/lib/whatsapp/send-message.ts`).
 
-### Como o wacrm usa esta API (credencial da plataforma)
+### Como o crmbr usa esta API (credencial da plataforma)
 
-O wacrm **não entrega a chave ao assinante**. A chave é da **plataforma** e mora
+O crmbr **não entrega a chave ao assinante**. A chave é da **plataforma** e mora
 apenas na variável de ambiente do servidor:
 
 ```bash
@@ -121,7 +121,7 @@ navegador e nunca é digitada por ninguém.
 Isso traz uma consequência prática: **a conta do provedor é compartilhada por todos
 os assinantes**. Duas empresas podem, portanto, pedir o mesmo nome de instância —
 e a colisão significaria uma empresa assumindo o número de WhatsApp da outra. Por
-isso o wacrm nunca usa o nome que o cliente digitou como nome da instância no
+isso o crmbr nunca usa o nome que o cliente digitou como nome da instância no
 provedor. Ele cria o nome assim:
 
 ```
@@ -156,7 +156,7 @@ entrega ser aceita. Um payload que não nomeia nenhuma instância nossa é 404.
 
 > **Formatos de entrega.** O `messages.upsert` documentado (§7.1) chega como
 > **lote** (`data.messages` é um array, `data.type` é `"notify"`); a entrega
-> compatível com Evolution traz a mensagem solta em `data`. O wacrm lê as
+> compatível com Evolution traz a mensagem solta em `data`. O crmbr lê as
 > duas formas.
 
 ### O endereço público do webhook
@@ -166,7 +166,7 @@ precisa conseguir chegar lá. A documentação é explícita: *"Destino HTTPS p�
 sem localhost e redes privadas (SSRF)"*. Um `http://localhost:3000` é recusado
 com `invalid webhook URL: host must not point to internal network`.
 
-Por isso o wacrm **não usa cegamente o endereço do request**. A regra é:
+Por isso o crmbr **não usa cegamente o endereço do request**. A regra é:
 
 1. **se a requisição chegou por um endereço público, ele vence** — em produção
    esse endereço é o domínio do app, e ele está certo por construção. Um
@@ -995,7 +995,7 @@ curl -X POST 'https://api.whatsmiau.dev/v2/chat/fetchProfilePictureUrl/Atendimen
 }'
 ```
 
-#### Como o wacrm usa a foto de perfil
+#### Como o crmbr usa a foto de perfil
 
 A API oficial (Meta) **não expõe** a foto de um contato — o webhook do Meta
 entrega nome e número, e é só isso. A CRMBR expõe, então a caixa de entrada

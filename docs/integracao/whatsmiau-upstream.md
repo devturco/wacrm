@@ -1,7 +1,7 @@
 # Integração com o upstream — API CRMBR (WhatsMiau)
 
 Este documento explica como manter a **API CRMBR (não oficial)** coexistindo com a
-**API oficial da Meta** no wacrm, e como continuar recebendo as atualizações do
+**API oficial da Meta** no crmbr, e como continuar recebendo as atualizações do
 mantenedor upstream (`ArnasDon/wacrm`) sem que o trabalho novo entre em conflito.
 
 > O número de Whatsapp do provedor, a chave da API e a URL do webhook **nunca**

@@ -24,10 +24,15 @@ import {
   mergeFetchedPage,
   prependOlderMessages,
 } from "@/lib/inbox/optimistic-messages";
+import {
+  LEGACY_CONTACT_PANEL_KEY,
+  readWithLegacy,
+  writeKey,
+} from "@/lib/storage-keys";
 
 // Remembers the agent's show/hide choice for the desktop contact panel
 // across reloads and sessions (device-scoped, like the theme prefs).
-const CONTACT_PANEL_STORAGE_KEY = "wacrm:inbox:contact-panel-open";
+const CONTACT_PANEL_STORAGE_KEY = "crmbr:inbox:contact-panel-open";
 
 // `useSearchParams` (the `?c=<id>` deep link below) requires a Suspense
 // boundary or the production build bails to CSR and errors out. Thin
@@ -84,22 +89,23 @@ function InboxPageInner() {
    */
   const [contactPanelOpen, setContactPanelOpen] = useState(true);
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(CONTACT_PANEL_STORAGE_KEY);
-      if (stored !== null) setContactPanelOpen(stored === "true");
-    } catch {
-      // localStorage can throw in private-browsing / sandboxed contexts.
-    }
+    const stored = readWithLegacy(
+      localStorage,
+      CONTACT_PANEL_STORAGE_KEY,
+      LEGACY_CONTACT_PANEL_KEY,
+    );
+    if (stored !== null) setContactPanelOpen(stored === "true");
   }, []);
 
   const handleToggleContactPanel = useCallback(() => {
     setContactPanelOpen((prev) => {
       const next = !prev;
-      try {
-        localStorage.setItem(CONTACT_PANEL_STORAGE_KEY, String(next));
-      } catch {
-        // Persistence is best-effort; ignore storage failures.
-      }
+      writeKey(
+        localStorage,
+        CONTACT_PANEL_STORAGE_KEY,
+        LEGACY_CONTACT_PANEL_KEY,
+        String(next),
+      );
       return next;
     });
   }, []);

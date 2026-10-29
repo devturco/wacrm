@@ -12,17 +12,24 @@
 //   only slow the per-request auth lookup. A fast hash with a UNIQUE
 //   index is the correct, indexable choice for opaque secrets.
 //
-// Why the `wacrm_live_` prefix
+// Why the `crmbr_live_` prefix
 //   - Self-identifying: a leaked string is instantly recognisable as
-//     a wacrm key (handy for secret-scanners like GitGuardian).
-//   - Forward-compatible: leaves room for a `wacrm_test_` variant if
+//     a crmbr key (handy for secret-scanners like GitGuardian).
+//   - Forward-compatible: leaves room for a `crmbr_test_` variant if
 //     a sandbox mode is ever added, without reshaping the format.
 // ============================================================
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /** Secret prefix on every key. Part of the plaintext, not a secret. */
-export const API_KEY_PREFIX = 'wacrm_live_';
+export const API_KEY_PREFIX = 'crmbr_live_';
+
+/**
+ * The prefix keys carried before the rebrand. Keys issued under it stay
+ * valid — the DB stores a hash, not the prefix, so nothing has to be
+ * re-issued — but they are no longer minted.
+ */
+export const LEGACY_API_KEY_PREFIX = 'wacrm_live_';
 
 /**
  * Length of the non-secret display prefix stored in `key_prefix` and
@@ -71,10 +78,15 @@ export function hashApiKey(plaintext: string): string {
  * Structural check that a string looks like one of our keys before
  * we bother hashing + hitting the DB. Cheap reject for obviously
  * malformed `Authorization` headers (e.g. a stale invite token).
+ *
+ * Accepts the pre-rebrand prefix too, so keys minted before the
+ * rename keep working.
  */
 export function looksLikeApiKey(value: string): boolean {
   return (
-    value.startsWith(API_KEY_PREFIX) && value.length > API_KEY_PREFIX.length
+    (value.startsWith(API_KEY_PREFIX) && value.length > API_KEY_PREFIX.length) ||
+    (value.startsWith(LEGACY_API_KEY_PREFIX) &&
+      value.length > LEGACY_API_KEY_PREFIX.length)
   );
 }
 

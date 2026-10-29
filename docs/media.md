@@ -126,7 +126,7 @@ chegam ao navegador:
 | `R2_ACCOUNT_ID` | A primeira metade do endpoint (`<account>.r2.cloudflarestorage.com`) |
 | `R2_ACCESS_KEY_ID` | O identificador da chave |
 | `R2_SECRET_ACCESS_KEY` | **A chave em si** — nunca sai do servidor |
-| `R2_BUCKET` | O bucket (padrão: `wacrm-media`) |
+| `R2_BUCKET` | O bucket (padrão: `crmbr-media`) |
 | `MEDIA_PUBLIC_BASE_URL` | A URL pública base — a conta pode sobrescrever na tela |
 
 A tela de configurações mostra **quais** variáveis faltam, pelo nome.

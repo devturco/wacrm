@@ -14,6 +14,7 @@ import {
   STORAGE_KEY,
   THEME_IDS,
 } from "@/lib/themes";
+import { LEGACY_MODE_KEY, LEGACY_THEME_KEY } from "@/lib/storage-keys";
 
 // Inter Variable, self-hosted.
 //
@@ -70,8 +71,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const metadata: Metadata = {
   title: {
-    default: "wacrm",
-    template: "%s — wacrm",
+    default: "crmbr",
+    template: "%s — crmbr",
   },
   robots: {
     index: false,
@@ -108,15 +109,19 @@ const THEME_BOOT_SCRIPT = `
   var d = document.documentElement;
   try {
     var THEME_KEY = ${JSON.stringify(STORAGE_KEY)};
+    var THEME_LEGACY_KEY = ${JSON.stringify(LEGACY_THEME_KEY)};
     var THEME_DEFAULT = ${JSON.stringify(DEFAULT_THEME)};
     var THEMES = ${JSON.stringify(THEME_IDS)};
     var savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme === null) savedTheme = localStorage.getItem(THEME_LEGACY_KEY);
     d.dataset.theme = THEMES.indexOf(savedTheme) !== -1 ? savedTheme : THEME_DEFAULT;
 
     var MODE_KEY = ${JSON.stringify(MODE_STORAGE_KEY)};
+    var MODE_LEGACY_KEY = ${JSON.stringify(LEGACY_MODE_KEY)};
     var MODE_DEFAULT = ${JSON.stringify(DEFAULT_MODE)};
     var MODES = ${JSON.stringify(MODES)};
     var savedMode = localStorage.getItem(MODE_KEY);
+    if (savedMode === null) savedMode = localStorage.getItem(MODE_LEGACY_KEY);
     d.dataset.mode = MODES.indexOf(savedMode) !== -1 ? savedMode : MODE_DEFAULT;
   } catch (_e) {
     d.dataset.theme = ${JSON.stringify(DEFAULT_THEME)};

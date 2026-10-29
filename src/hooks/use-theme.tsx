@@ -19,6 +19,12 @@ import {
   type Mode,
   type ThemeId,
 } from "@/lib/themes";
+import {
+  LEGACY_MODE_KEY,
+  LEGACY_THEME_KEY,
+  readWithLegacy,
+  writeKey,
+} from "@/lib/storage-keys";
 
 /**
  * ThemeProvider — wraps the whole app, owns the two theming axes:
@@ -54,12 +60,8 @@ function readInitialTheme(): ThemeId {
   // (e.g. someone bypassed the boot script in a custom layout).
   const fromAttr = document.documentElement.dataset.theme;
   if (isThemeId(fromAttr)) return fromAttr;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (isThemeId(stored)) return stored;
-  } catch {
-    // localStorage can throw in private-browsing / sandboxed contexts.
-  }
+  const stored = readWithLegacy(localStorage, STORAGE_KEY, LEGACY_THEME_KEY);
+  if (isThemeId(stored)) return stored;
   return DEFAULT_THEME;
 }
 
@@ -67,12 +69,8 @@ function readInitialMode(): Mode {
   if (typeof window === "undefined") return DEFAULT_MODE;
   const fromAttr = document.documentElement.dataset.mode;
   if (isMode(fromAttr)) return fromAttr;
-  try {
-    const stored = localStorage.getItem(MODE_STORAGE_KEY);
-    if (isMode(stored)) return stored;
-  } catch {
-    // localStorage can throw in private-browsing / sandboxed contexts.
-  }
+  const stored = readWithLegacy(localStorage, MODE_STORAGE_KEY, LEGACY_MODE_KEY);
+  if (isMode(stored)) return stored;
   return DEFAULT_MODE;
 }
 
@@ -85,12 +83,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof document !== "undefined") {
       document.documentElement.dataset.theme = next;
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // Same private-browsing edge case as above; the in-memory state
-      // still updates so the current tab works for the session.
-    }
+    // The in-memory state still updates even if storage throws, so the
+    // current tab works for the session.
+    writeKey(localStorage, STORAGE_KEY, LEGACY_THEME_KEY, next);
   }, []);
 
   const setMode = useCallback((next: Mode) => {
@@ -98,11 +93,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof document !== "undefined") {
       document.documentElement.dataset.mode = next;
     }
-    try {
-      localStorage.setItem(MODE_STORAGE_KEY, next);
-    } catch {
-      // Same private-browsing edge case as above.
-    }
+    writeKey(localStorage, MODE_STORAGE_KEY, LEGACY_MODE_KEY, next);
   }, []);
 
   const toggleMode = useCallback(() => {
