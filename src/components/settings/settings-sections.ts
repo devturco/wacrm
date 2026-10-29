@@ -1,6 +1,7 @@
 import {
   Coins,
   FileText,
+  HardDrive,
   Inbox,
   KeyRound,
   LayoutGrid,
@@ -33,6 +34,7 @@ export const SETTINGS_SECTIONS = [
   'inbox',
   'fields',
   'deals',
+  'media',
   'members',
   'api',
 ] as const;
@@ -72,6 +74,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   inbox: { id: 'inbox', label: 'Inbox', icon: Inbox, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
+  media: { id: 'media', label: 'Media storage', icon: HardDrive, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
 };

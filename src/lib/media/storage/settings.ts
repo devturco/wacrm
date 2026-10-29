@@ -22,6 +22,23 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
 };
 
 /**
+ * The ceilings the settings screen offers, in bytes.
+ *
+ * 100 MB is the WhatsApp document limit and the bucket's own limit —
+ * anything above it would be refused downstream anyway.
+ */
+export const MEDIA_SIZE_OPTIONS = [
+  26214400, // 25 MB
+  52428800, // 50 MB
+  104857600, // 100 MB
+] as const;
+
+/** Is this a ceiling the app accepts? */
+export function isAllowedMediaSize(size: number): boolean {
+  return (MEDIA_SIZE_OPTIONS as readonly number[]).includes(size);
+}
+
+/**
  * Reads an account's storage configuration.
  *
  * A failed read is NOT an error: the account falls back to the default

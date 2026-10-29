@@ -17,6 +17,30 @@ export interface R2Config {
 export const PRESIGN_EXPIRES_SECONDS = 900;
 
 /**
+ * The environment variables R2 needs — and whether they are there.
+ *
+ * Only the NAMES travel to the browser: the settings screen says which
+ * variables to set, never what they hold.
+ *
+ * `overrides.publicBaseUrl` is the account's own base URL, configured
+ * in the settings screen — when it is there, the env variable is not
+ * needed at all.
+ */
+export function r2MissingFromEnv(
+  env: Record<string, string | undefined> = process.env,
+  overrides: { publicBaseUrl?: string | null } = {},
+): string[] {
+  const missing: string[] = [];
+  if (!env.R2_ACCOUNT_ID) missing.push("R2_ACCOUNT_ID");
+  if (!env.R2_ACCESS_KEY_ID) missing.push("R2_ACCESS_KEY_ID");
+  if (!env.R2_SECRET_ACCESS_KEY) missing.push("R2_SECRET_ACCESS_KEY");
+  if (!overrides.publicBaseUrl && !env.MEDIA_PUBLIC_BASE_URL) {
+    missing.push("MEDIA_PUBLIC_BASE_URL");
+  }
+  return missing;
+}
+
+/**
  * Reads the R2 configuration from the environment.
  *
  * The credentials are SERVER-ONLY: they never reach the browser. What
@@ -28,27 +52,17 @@ export const PRESIGN_EXPIRES_SECONDS = 900;
  */
 export function r2ConfigFromEnv(
   env: Record<string, string | undefined> = process.env,
+  overrides: { publicBaseUrl?: string | null } = {},
 ): (R2Config & { missing: string[] }) | null {
-  const missing: string[] = [];
-  const accountId = env.R2_ACCOUNT_ID;
-  const accessKeyId = env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = env.R2_SECRET_ACCESS_KEY;
-  const bucket = env.R2_BUCKET ?? "wacrm-media";
-  const publicBaseUrl = env.MEDIA_PUBLIC_BASE_URL;
-
-  if (!accountId) missing.push("R2_ACCOUNT_ID");
-  if (!accessKeyId) missing.push("R2_ACCESS_KEY_ID");
-  if (!secretAccessKey) missing.push("R2_SECRET_ACCESS_KEY");
-  if (!publicBaseUrl) missing.push("MEDIA_PUBLIC_BASE_URL");
-
+  const missing = r2MissingFromEnv(env, overrides);
   if (missing.length > 0) return null;
 
   return {
-    accountId: accountId!,
-    accessKeyId: accessKeyId!,
-    secretAccessKey: secretAccessKey!,
-    bucket,
-    publicBaseUrl: publicBaseUrl!,
+    accountId: env.R2_ACCOUNT_ID!,
+    accessKeyId: env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
+    bucket: env.R2_BUCKET ?? "wacrm-media",
+    publicBaseUrl: overrides.publicBaseUrl ?? env.MEDIA_PUBLIC_BASE_URL!,
     missing,
   };
 }

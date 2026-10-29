@@ -2160,7 +2160,8 @@
       "deals": "Deals & currency",
       "inbox": "Inbox",
       "members": "Team members",
-      "api": "API keys"
+      "api": "API keys",
+      "media": "Media storage"
     },
     "groups": {
       "account": "Account",
@@ -2423,6 +2424,32 @@
       "textPlaceholder": "The message text to insert",
       "cancel": "Cancel",
       "save": "Save"
+    },
+    "media": {
+      "title": "Media storage",
+      "description": "Where the files your customers send end up. Everything you receive is copied here, so it stays available even after the messaging service forgets about it.",
+      "backend": "Storage",
+      "backendDescription": "Choose where the attachments live.",
+      "backendSupabase": "Built-in storage",
+      "backendSupabaseHint": "The bucket that comes with the app. Nothing to configure.",
+      "backendR2": "Cloudflare R2",
+      "backendR2Hint": "Keeps the files outside our database, on your own Cloudflare account.",
+      "r2Ready": "R2 is ready — the credentials are set on the server.",
+      "r2MissingTitle": "R2 is missing some environment variables",
+      "r2MissingHint": "These are set by whoever runs the server. The names are safe to share; the values never leave the server.",
+      "bucket": "Bucket",
+      "bucketHint": "The bucket the files are written to. Lowercase, no spaces.",
+      "maxSize": "Maximum file size",
+      "maxSizeHint": "Attachments bigger than this are refused.",
+      "publicBaseUrl": "Public base URL",
+      "publicBaseUrlHint": "The address the files are served from, without the file name. Leave empty to use the bucket's own address.",
+      "sizeOption": "{mb} MB",
+      "save": "Save",
+      "saving": "Saving...",
+      "saveSuccess": "Media storage updated",
+      "saveFailed": "Couldn't save the media storage settings",
+      "loadFailed": "Couldn't load the media storage settings",
+      "adminOnlyHint": "Only account admins can change the media storage."
     }
   },
   "SignupPage": {
@@ -3102,7 +3129,10 @@
       "nothingToRepair": "This message has no attachment to restore",
       "providerMissing": "This attachment is no longer available",
       "tooLarge": "This attachment is bigger than the allowed limit",
-      "repairFailed": "Could not restore this attachment"
+      "repairFailed": "Could not restore this attachment",
+      "invalidBucket": "Invalid bucket name",
+      "invalidMaxSize": "Invalid maximum file size",
+      "invalidPublicBaseUrl": "Invalid public base URL"
     },
     "react": {
       "idEmojiRequired": "message_id and emoji are required",

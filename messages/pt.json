@@ -2160,7 +2160,8 @@
       "deals": "Negócios e moeda",
       "inbox": "Caixa de entrada",
       "members": "Membros da equipe",
-      "api": "Chaves de API"
+      "api": "Chaves de API",
+      "media": "Armazenamento de mídia"
     },
     "groups": {
       "account": "Conta",
@@ -2423,6 +2424,32 @@
       "textPlaceholder": "O texto da mensagem a inserir",
       "cancel": "Cancelar",
       "save": "Salvar"
+    },
+    "media": {
+      "title": "Armazenamento de mídia",
+      "description": "Onde ficam os arquivos que seus clientes enviam. Tudo o que entra é copiado para cá, então continua disponível mesmo depois que o serviço de mensagens esquecer o anexo.",
+      "backend": "Armazenamento",
+      "backendDescription": "Escolha onde os anexos ficam guardados.",
+      "backendSupabase": "Armazenamento do próprio app",
+      "backendSupabaseHint": "O bucket que vem com o app. Nada para configurar.",
+      "backendR2": "Cloudflare R2",
+      "backendR2Hint": "Mantém os arquivos fora do nosso banco, na sua própria conta Cloudflare.",
+      "r2Ready": "R2 pronto — as credenciais estão no servidor.",
+      "r2MissingTitle": "Faltam variáveis de ambiente para o R2",
+      "r2MissingHint": "Quem roda o servidor define isso. Os nomes podem ser compartilhados; os valores nunca saem do servidor.",
+      "bucket": "Bucket",
+      "bucketHint": "O bucket onde os arquivos são gravados. Minúsculas, sem espaços.",
+      "maxSize": "Tamanho máximo",
+      "maxSizeHint": "Anexos maiores que isso são recusados.",
+      "publicBaseUrl": "URL pública base",
+      "publicBaseUrlHint": "O endereço de onde os arquivos são servidos, sem o nome do arquivo. Deixe vazio para usar o endereço do próprio bucket.",
+      "sizeOption": "{mb} MB",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "saveSuccess": "Armazenamento de mídia atualizado",
+      "saveFailed": "Não foi possível salvar as configurações de mídia",
+      "loadFailed": "Não foi possível carregar as configurações de mídia",
+      "adminOnlyHint": "Só administradores da conta podem mudar o armazenamento de mídia."
     }
   },
   "SignupPage": {
@@ -3102,7 +3129,10 @@
       "nothingToRepair": "Esta mensagem não tem anexo para restaurar",
       "providerMissing": "Este anexo não está mais disponível",
       "tooLarge": "Este anexo é maior do que o limite permitido",
-      "repairFailed": "Não foi possível restaurar este anexo"
+      "repairFailed": "Não foi possível restaurar este anexo",
+      "invalidBucket": "Nome de bucket inválido",
+      "invalidMaxSize": "Tamanho máximo inválido",
+      "invalidPublicBaseUrl": "URL pública base inválida"
     },
     "react": {
       "idEmojiRequired": "message_id e emoji são obrigatórios",

@@ -6,9 +6,14 @@ import type { MediaSettings } from "./settings";
 import type { MediaStorage } from "./types";
 
 export type { MediaBackend, MediaStorage, UploadTarget } from "./types";
-export { DEFAULT_MEDIA_SETTINGS, readMediaSettings } from "./settings";
+export {
+  DEFAULT_MEDIA_SETTINGS,
+  MEDIA_SIZE_OPTIONS,
+  isAllowedMediaSize,
+  readMediaSettings,
+} from "./settings";
 export type { MediaSettings } from "./settings";
-export { R2MediaStorage, r2ConfigFromEnv, r2Endpoint } from "./r2";
+export { R2MediaStorage, r2ConfigFromEnv, r2Endpoint, r2MissingFromEnv } from "./r2";
 export { SupabaseMediaStorage } from "./supabase";
 
 /**
@@ -48,14 +53,16 @@ export function mediaStorageFor(
   const configuredBucket = settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
 
   if (settings.backend === "r2" && targetBucket === configuredBucket) {
-    const config = r2ConfigFromEnv(env);
+    const config = r2ConfigFromEnv(env, {
+      publicBaseUrl: settings.publicBaseUrl,
+    });
     if (config) {
       return new R2MediaStorage({
         accountId: config.accountId,
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
         bucket: targetBucket,
-        publicBaseUrl: settings.publicBaseUrl ?? config.publicBaseUrl,
+        publicBaseUrl: config.publicBaseUrl,
         maxFileBytes: settings.maxFileBytes,
       });
     }

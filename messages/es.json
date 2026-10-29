@@ -2160,7 +2160,8 @@
       "deals": "Negocios y moneda",
       "inbox": "Bandeja de entrada",
       "members": "Miembros del equipo",
-      "api": "Claves de API"
+      "api": "Claves de API",
+      "media": "Almacenamiento de archivos"
     },
     "groups": {
       "account": "Cuenta",
@@ -2423,6 +2424,32 @@
       "textPlaceholder": "El texto del mensaje que se insertará",
       "cancel": "Cancelar",
       "save": "Guardar"
+    },
+    "media": {
+      "title": "Almacenamiento de archivos",
+      "description": "Dónde acaban los archivos que envían tus clientes. Todo lo que entra se copia aquí, así que sigue disponible aunque el servicio de mensajería lo olvide.",
+      "backend": "Almacenamiento",
+      "backendDescription": "Elige dónde viven los adjuntos.",
+      "backendSupabase": "Almacenamiento incluido",
+      "backendSupabaseHint": "El bucket que viene con la app. Nada que configurar.",
+      "backendR2": "Cloudflare R2",
+      "backendR2Hint": "Mantiene los archivos fuera de nuestra base de datos, en tu propia cuenta de Cloudflare.",
+      "r2Ready": "R2 está listo — las credenciales están en el servidor.",
+      "r2MissingTitle": "A R2 le faltan variables de entorno",
+      "r2MissingHint": "Las define quien administra el servidor. Los nombres se pueden compartir; los valores nunca salen del servidor.",
+      "bucket": "Bucket",
+      "bucketHint": "El bucket donde se escriben los archivos. En minúsculas, sin espacios.",
+      "maxSize": "Tamaño máximo",
+      "maxSizeHint": "Los adjuntos mayores que esto se rechazan.",
+      "publicBaseUrl": "URL pública base",
+      "publicBaseUrlHint": "La dirección desde la que se sirven los archivos, sin el nombre del archivo. Déjalo vacío para usar la dirección del propio bucket.",
+      "sizeOption": "{mb} MB",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saveSuccess": "Almacenamiento de archivos actualizado",
+      "saveFailed": "No se pudo guardar la configuración de archivos",
+      "loadFailed": "No se pudo cargar la configuración de archivos",
+      "adminOnlyHint": "Solo los administradores de la cuenta pueden cambiar el almacenamiento de archivos."
     }
   },
   "SignupPage": {
@@ -3102,7 +3129,10 @@
       "nothingToRepair": "Este mensaje no tiene ningún archivo que restaurar",
       "providerMissing": "Este archivo ya no está disponible",
       "tooLarge": "Este archivo supera el límite permitido",
-      "repairFailed": "No se pudo restaurar este archivo"
+      "repairFailed": "No se pudo restaurar este archivo",
+      "invalidBucket": "Nombre de bucket no válido",
+      "invalidMaxSize": "Tamaño máximo no válido",
+      "invalidPublicBaseUrl": "URL pública base no válida"
     },
     "react": {
       "idEmojiRequired": "message_id y emoji son obligatorios",
