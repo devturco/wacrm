@@ -32,6 +32,9 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
+import { referralFromMetaMessage, stripLeadCode } from '@/lib/leads/inbound'
+import { resolveOrigin } from '@/lib/leads/origin'
+import { createLeadOriginStore } from '@/lib/leads/store'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -96,8 +99,40 @@ interface WhatsAppMessage {
    * payload and mirrors the label into it).
    */
   button?: { text?: string; payload?: string }
+  /**
+   * The ad this message came from. TWO envelopes carry it:
+   *
+   *   - `referral` — a click-to-WhatsApp ad (`ad_id`, `adset_id`,
+   *     `campaign_id`, `source`).
+   *   - `context.messaging_referral` — a DM that answers an ad (the
+   *     same ids plus `post_id` and `ads_metadata`).
+   *
+   * Neither was read anywhere before — the referral of an ad is
+   * exactly the origin the CRM was missing.
+   */
+  referral?: {
+    source?: string
+    ad_id?: string
+    adset_id?: string
+    campaign_id?: string
+    creative_id?: string
+    adcreatives_id?: string
+    post_id?: string
+    ads_metadata?: Record<string, unknown>
+  }
   /** Present when the customer swipe-replies to one of our messages. */
-  context?: { id: string }
+  context?: {
+    id: string
+    /** The ad this reply answers. See `referral` above. */
+    messaging_referral?: {
+      ad_id?: string
+      adset_id?: string
+      campaign_id?: string
+      creative_id?: string
+      post_id?: string
+      ads_metadata?: Record<string, unknown>
+    }
+  }
 }
 
 /** One entry of a failed status's `errors` array, as Meta sends it. */
@@ -667,6 +702,13 @@ async function processMessage(
     }
   }
 
+  // The lead code. The agent must NOT see `ref A7X9K2M4` — the CRM
+  // strips it and keeps the raw text in the origin. The strip happens
+  // BEFORE the insert so the bubble the agent reads is already clean.
+  const rawContentText = contentText
+  const stripped = stripLeadCode(rawContentText)
+  const agentText = stripped.text
+
   // Insert message — field names MUST match the messages table schema
   // (see supabase/migrations/001_initial_schema.sql):
   //   conversation_id, sender_type, content_type, content_text,
@@ -707,7 +749,7 @@ async function processMessage(
         conversation_id: conversation.id,
         sender_type: 'customer',
         content_type: contentType,
-        content_text: contentText,
+        content_text: agentText,
         media_url: mediaUrl,
         // Meta's MIME type for the attachment (migration 039). Was
         // discarded before, which forced the download path to guess an
@@ -744,6 +786,26 @@ async function processMessage(
     return
   }
 
+  // Where this lead came from. AFTER the idempotency boundary: a
+  // replayed delivery must not write a second origin.
+  try {
+    await resolveOrigin(createLeadOriginStore(supabaseAdmin()), {
+      accountId,
+      contactId: contactRecord.id,
+      provider: 'meta',
+      channel: 'whatsapp',
+      phone: message.from ? normalizePhone(message.from) : null,
+      leadToken: stripped.token,
+      rawText: rawContentText,
+      referral: referralFromMetaMessage(message),
+      touchedAt: receivedAt,
+    })
+  } catch (originError) {
+    // A failure here must not lose the message — the message is
+    // already stored. The origin is recreated by the next touch.
+    console.error('[webhook] could not record the lead origin:', originError)
+  }
+
   const isFirstInboundMessage = await claimFirstInboundMessage(
     supabaseAdmin(),
     conversation,
@@ -761,7 +823,7 @@ async function processMessage(
     'bump_conversation_on_inbound',
     {
       p_conversation_id: conversation.id,
-      p_last_message_text: contentText || `[${message.type}]`,
+      p_last_message_text: agentText || `[${message.type}]`,
     }
   )
 
@@ -809,12 +871,12 @@ async function processMessage(
         ? {
             kind: 'interactive_reply',
             reply_id: interactiveReplyId,
-            reply_title: contentText ?? '',
+            reply_title: agentText,
             meta_message_id: message.id,
           }
         : {
             kind: 'text',
-            text: contentText ?? message.text?.body ?? '',
+            text: agentText,
             meta_message_id: message.id,
           },
     isFirstInboundMessage,
@@ -826,7 +888,7 @@ async function processMessage(
   // message all exist before any step — including send_message — runs.
   // Fire-and-forget: a slow or failing automation must not block the
   // webhook's 200 OK response to Meta.
-  const inboundText = contentText ?? message.text?.body ?? ''
+  const inboundText = agentText
 
   // An automation parked at a "wait for reply" Send Buttons / Send List
   // step takes this message as its reply — a tap or typed text — and
@@ -928,7 +990,7 @@ async function processMessage(
     contact_id: contactRecord.id,
     whatsapp_message_id: message.id,
     content_type: contentType,
-    text: contentText,
+    text: agentText,
   })
 }
 

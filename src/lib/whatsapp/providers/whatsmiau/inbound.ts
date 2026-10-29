@@ -40,6 +40,9 @@ import {
   type WhatsmiauInstanceSettings,
 } from '@/lib/whatsapp/whatsmiau-config';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
+import { stripLeadCode } from '@/lib/leads/inbound';
+import { resolveOrigin } from '@/lib/leads/origin';
+import { createLeadOriginStore } from '@/lib/leads/store';
 
 import { refreshContactAvatar } from './avatar';
 import { isChannelJid, isGroupJid } from './channels';
@@ -424,6 +427,12 @@ export async function handleWhatsmiauInboundMessage(
       ? (message.buttonReplyTitle ?? message.listReplyTitle ?? '')
       : (message.text ?? message.caption ?? null);
 
+  // The lead code — the agent reads the clean text. See the Meta
+  // webhook for the full story.
+  const rawContentText = contentText;
+  const stripped = stripLeadCode(rawContentText);
+  const agentText = stripped.text;
+
   // Resolve the swipe-reply context. A missing parent is fine — the row
   // stores NULL and the bubble renders without a quote.
   let replyToInternalId: string | null = null;
@@ -453,7 +462,7 @@ export async function handleWhatsmiauInboundMessage(
         conversation_id: conversation.id,
         sender_type: 'customer',
         content_type: contentType,
-        content_text: contentText,
+        content_text: agentText,
         media_url: mediaUrl,
         media_type: mediaType,
         message_id: message.messageId,
@@ -484,13 +493,38 @@ export async function handleWhatsmiauInboundMessage(
     };
   }
 
+  // Where this lead came from. AFTER the idempotency boundary: a
+  // replayed delivery must not write a second origin.
+  //
+  // whatsmiau does not expose the ad that produced the message, so
+  // there is no referral here — the code in the text and the phone
+  // number are the two bridges back to the click.
+  try {
+    await resolveOrigin(createLeadOriginStore(db), {
+      accountId,
+      contactId: contactOutcome.contact.id,
+      provider: 'whatsmiau',
+      channel: 'whatsapp',
+      phone,
+      leadToken: stripped.token,
+      rawText: rawContentText,
+      referral: null,
+      touchedAt: receivedAt,
+    });
+  } catch (originError) {
+    console.error(
+      '[whatsmiau] could not record the lead origin:',
+      originError,
+    );
+  }
+
   const isFirstInboundMessage = await claimFirstInboundMessage(db, conversation, receivedAt);
 
   // The unread bump is DB-side (migration 037) so two concurrent
   // deliveries cannot lose one increment (issue #369).
   const { error: convError } = await db.rpc('bump_conversation_on_inbound', {
     p_conversation_id: conversation.id,
-    p_last_message_text: contentText || `[${message.kind}]`,
+    p_last_message_text: agentText || `[${message.kind}]`,
   });
   if (convError) {
     console.error('[whatsmiau] could not bump the conversation:', convError.message);
@@ -533,19 +567,19 @@ export async function handleWhatsmiauInboundMessage(
       ? {
           kind: 'interactive_reply',
           reply_id: interactiveReplyId,
-          reply_title: contentText ?? '',
+          reply_title: agentText ?? '',
           meta_message_id: message.messageId,
         }
       : {
           kind: 'text',
-          text: contentText ?? '',
+          text: agentText ?? '',
           meta_message_id: message.messageId,
         },
     isFirstInboundMessage,
   });
   const flowConsumed = flowResult.consumed;
 
-  const inboundText = contentText ?? '';
+  const inboundText = agentText ?? '';
 
   // An automation parked at a "wait for reply" step takes this message
   // as its reply and continues from the next step.
@@ -608,7 +642,7 @@ export async function handleWhatsmiauInboundMessage(
     contact_id: contactOutcome.contact.id,
     whatsapp_message_id: message.messageId,
     content_type: contentType,
-    text: contentText,
+    text: agentText,
   });
 
   return {
