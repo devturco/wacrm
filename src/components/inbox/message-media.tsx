@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Download,
   FileText,
   ImageOff,
   Loader2,
   Maximize2,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
 import { downloadMediaMessage } from "@/lib/media/download";
 import { shouldDownloadDocumentClick } from "@/lib/media/document-click";
+import { isProxiedMediaUrl } from "@/lib/media/blob-cache";
 import { useMediaBlobUrl } from "@/hooks/use-media-blob-url";
 
 /**
@@ -54,20 +56,26 @@ export function MediaUnavailable({
  * each bubble owns its own in-flight state — a slow 16 MB video shouldn't
  * put a spinner on every other attachment in the thread.
  */
-function useMediaDownload(message: Message, t: Translator) {
+function useMediaDownload(message: Message, t: Translator, url?: string) {
   const [downloading, setDownloading] = useState(false);
 
   const download = useCallback(async () => {
     if (downloading) return;
     setDownloading(true);
     try {
-      await downloadMediaMessage(message);
+      // After a restore the bytes live in our own bucket — download them
+      // from there, not from the provider's expiring url.
+      await downloadMediaMessage(
+        url && url !== message.media_url
+          ? { ...message, media_url: url }
+          : message,
+      );
     } catch {
       toast.error(t("downloadFailed"));
     } finally {
       setDownloading(false);
     }
-  }, [downloading, message, t]);
+  }, [downloading, message, t, url]);
 
   return { downloading, download };
 }
@@ -112,6 +120,89 @@ function MediaPlaceholder({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Keeps the attachment's url in sync with the row, and restores it on
+ * demand.
+ *
+ * An attachment that still lives at the provider (`/api/whatsapp/media/…`)
+ * disappears when the provider drops it — that is the "the media is gone"
+ * complaint this whole feature answers. The repair copies the bytes into
+ * our own bucket and rewrites the row; until then the old url keeps
+ * working for as long as the provider holds it.
+ *
+ * The restored url is kept locally so the bubble shows the attachment
+ * right away, without waiting for the thread to refetch.
+ */
+function useRepairedMedia(message: Message, t: Translator) {
+  const [url, setUrl] = useState(message.media_url);
+  const [repairing, setRepairing] = useState(false);
+
+  // The thread refetches and hands us a new row — follow it, unless we
+  // just repaired it ourselves (the row already carries the same url).
+  useEffect(() => {
+    setUrl(message.media_url);
+  }, [message.media_url]);
+
+  const repair = useCallback(async () => {
+    if (repairing) return;
+    setRepairing(true);
+    try {
+      const response = await fetch("/api/media/repair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: message.id }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        url?: string;
+        error?: string;
+      } | null;
+      if (!response.ok || !payload?.url) {
+        toast.error(payload?.error || t("restoreFailed"));
+        return;
+      }
+      setUrl(payload.url);
+      toast.success(t("restored"));
+    } catch {
+      toast.error(t("restoreFailed"));
+    } finally {
+      setRepairing(false);
+    }
+  }, [message.id, repairing, t]);
+
+  return { url, repairing, repair };
+}
+
+/**
+ * True when the attachment still lives at the provider and can be
+ * copied into our own bucket.
+ */
+function canRestore(message: Message): boolean {
+  return !!message.media_url && isProxiedMediaUrl(message.media_url);
+}
+
+/** The "restore" affordance — only for attachments the provider holds. */
+function MediaRestoreButton({
+  message,
+  repairing,
+  onRestore,
+  t,
+}: {
+  message: Message;
+  repairing: boolean;
+  onRestore: () => void;
+  t: Translator;
+}) {
+  if (!canRestore(message)) return null;
+  return (
+    <MediaActionButton
+      icon={RefreshCw}
+      label={t("restore")}
+      onClick={onRestore}
+      busy={repairing}
+    />
+  );
+}
+
 export function MediaImageBubble({
   message,
   onOpen,
@@ -122,15 +213,29 @@ export function MediaImageBubble({
   onOpen?: () => void;
   t: Translator;
 }) {
-  const { src, status } = useMediaBlobUrl(message.media_url);
+  const { url, repairing, repair } = useRepairedMedia(message, t);
+  const { src, status } = useMediaBlobUrl(url);
   // The fetch can succeed and the bytes still not be a decodable image.
-  const [broken, setBroken] = useState(false);
-  const { downloading, download } = useMediaDownload(message, t);
+  // The url is part of the verdict: a restored attachment is a different
+  // url, and deserves a fresh chance to decode.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const broken = !!url && brokenUrl === url;
+  const { downloading, download } = useMediaDownload(message, t, url);
 
   if (status === "error" || broken) {
     return (
       <MediaPlaceholder>
-        <ImageOff className="h-8 w-8 text-muted-foreground" />
+        <div className="flex flex-col items-center gap-3">
+          <ImageOff className="h-8 w-8 text-muted-foreground" />
+          {/* The attachment is gone from the provider — the one case
+              where restoring it is worth a click. */}
+          <MediaRestoreButton
+            message={message}
+            repairing={repairing}
+            onRestore={repair}
+            t={t}
+          />
+        </div>
       </MediaPlaceholder>
     );
   }
@@ -149,7 +254,7 @@ export function MediaImageBubble({
       src={src}
       alt={t("imageAlt")}
       className={cn(MEDIA_BOX, "rounded-lg object-contain")}
-      onError={() => setBroken(true)}
+      onError={() => setBrokenUrl(url ?? null)}
     />
   );
 
@@ -169,7 +274,13 @@ export function MediaImageBubble({
       )}
       {/* Hover-only: on touch there is no hover, but tapping the image opens
           the viewer, which carries a full-size Download button. */}
-      <div className="absolute bottom-2 right-2 opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
+      <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
+        <MediaRestoreButton
+          message={message}
+          repairing={repairing}
+          onRestore={repair}
+          t={t}
+        />
         <MediaActionButton
           icon={Download}
           label={t("download")}
@@ -190,14 +301,15 @@ export function MediaVideoBubble({
   onOpen?: () => void;
   t: Translator;
 }) {
-  const { downloading, download } = useMediaDownload(message, t);
+  const { url, repairing, repair } = useRepairedMedia(message, t);
+  const { downloading, download } = useMediaDownload(message, t, url);
 
   return (
     <div className="relative w-fit">
       {/* Plain URL, not a blob: the element should stream rather than wait
           for up to 16 MB to land. */}
       <video
-        src={message.media_url}
+        src={url}
         controls
         preload="metadata"
         className={cn(MEDIA_BOX, "rounded-lg")}
@@ -213,6 +325,12 @@ export function MediaVideoBubble({
             onClick={onOpen}
           />
         )}
+        <MediaRestoreButton
+          message={message}
+          repairing={repairing}
+          onRestore={repair}
+          t={t}
+        />
         <MediaActionButton
           icon={Download}
           label={t("download")}
@@ -231,11 +349,18 @@ export function MediaAudioBubble({
   message: Message;
   t: Translator;
 }) {
-  const { downloading, download } = useMediaDownload(message, t);
+  const { url, repairing, repair } = useRepairedMedia(message, t);
+  const { downloading, download } = useMediaDownload(message, t, url);
 
   return (
     <div className="flex items-center gap-2">
-      <audio src={message.media_url} controls className="max-w-60" />
+      <audio src={url} controls className="max-w-60" />
+      <MediaRestoreButton
+        message={message}
+        repairing={repairing}
+        onRestore={repair}
+        t={t}
+      />
       <MediaActionButton
         icon={Download}
         label={t("download")}
@@ -253,16 +378,17 @@ export function MediaDocumentBubble({
   message: Message;
   t: Translator;
 }) {
-  const { downloading, download } = useMediaDownload(message, t);
+  const { url, repairing, repair } = useRepairedMedia(message, t);
+  const { downloading, download } = useMediaDownload(message, t, url);
 
   return (
     <div className="flex items-center gap-2">
       <a
-        href={message.media_url}
+        href={url}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(event) => {
-          if (!shouldDownloadDocumentClick(message.media_url, event)) return;
+          if (!shouldDownloadDocumentClick(url, event)) return;
           event.preventDefault();
           void download();
         }}
@@ -272,6 +398,12 @@ export function MediaDocumentBubble({
         <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
         <span className="truncate">{message.content_text || t("document")}</span>
       </a>
+      <MediaRestoreButton
+        message={message}
+        repairing={repairing}
+        onRestore={repair}
+        t={t}
+      />
       <MediaActionButton
         icon={Download}
         label={t("download")}

@@ -459,7 +459,10 @@
       "downloadFailed": "첨부파일을 다운로드할 수 없습니다",
       "viewImage": "이미지 보기",
       "expandVideo": "동영상 확대",
-      "imageAlt": "공유된 이미지"
+      "imageAlt": "공유된 이미지",
+      "restore": "복원",
+      "restoreFailed": "첨부 파일을 복원하지 못했습니다",
+      "restored": "첨부 파일이 복원되었습니다"
     },
     "mediaViewer": {
       "counter": "{total}개 중 {index}번째",
@@ -3068,7 +3071,11 @@
     },
     "media": {
       "idRequired": "미디어 ID는 필수입니다",
-      "fetchFailed": "미디어를 가져오지 못했습니다"
+      "fetchFailed": "미디어를 가져오지 못했습니다",
+      "nothingToRepair": "이 메시지에는 복원할 첨부 파일이 없습니다",
+      "providerMissing": "이 첨부 파일은 더 이상 사용할 수 없습니다",
+      "tooLarge": "이 첨부 파일은 허용된 크기 제한을 초과합니다",
+      "repairFailed": "첨부 파일을 복원하지 못했습니다"
     },
     "react": {
       "idEmojiRequired": "message_id와 emoji는 필수입니다",

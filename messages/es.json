@@ -459,7 +459,10 @@
       "downloadFailed": "No se pudo descargar el adjunto",
       "viewImage": "Ver imagen",
       "expandVideo": "Ampliar video",
-      "imageAlt": "Imagen compartida"
+      "imageAlt": "Imagen compartida",
+      "restore": "Restaurar",
+      "restoreFailed": "No se pudo restaurar el archivo",
+      "restored": "Archivo restaurado"
     },
     "mediaViewer": {
       "counter": "{index} de {total}",
@@ -3068,7 +3071,11 @@
     },
     "media": {
       "idRequired": "El ID del archivo multimedia es obligatorio",
-      "fetchFailed": "Error al obtener el archivo multimedia"
+      "fetchFailed": "Error al obtener el archivo multimedia",
+      "nothingToRepair": "Este mensaje no tiene ningún archivo que restaurar",
+      "providerMissing": "Este archivo ya no está disponible",
+      "tooLarge": "Este archivo supera el límite permitido",
+      "repairFailed": "No se pudo restaurar este archivo"
     },
     "react": {
       "idEmojiRequired": "message_id y emoji son obligatorios",

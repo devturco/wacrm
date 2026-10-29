@@ -459,7 +459,10 @@
       "downloadFailed": "Couldn't download the attachment",
       "viewImage": "View image",
       "expandVideo": "Expand video",
-      "imageAlt": "Shared image"
+      "imageAlt": "Shared image",
+      "restore": "Restore",
+      "restoreFailed": "Couldn't restore the attachment",
+      "restored": "Attachment restored"
     },
     "mediaViewer": {
       "counter": "{index} of {total}",
@@ -3068,7 +3071,11 @@
     },
     "media": {
       "idRequired": "Media ID is required",
-      "fetchFailed": "Failed to fetch media"
+      "fetchFailed": "Failed to fetch media",
+      "nothingToRepair": "This message has no attachment to restore",
+      "providerMissing": "This attachment is no longer available",
+      "tooLarge": "This attachment is bigger than the allowed limit",
+      "repairFailed": "Could not restore this attachment"
     },
     "react": {
       "idEmojiRequired": "message_id and emoji are required",
