@@ -1,0 +1,214 @@
+# InfinitePay — Checkout Integrado (llms.txt)
+
+> Documentação condensada para LLMs e desenvolvedores, baseada na documentação oficial:
+> https://www.infinitepay.io/checkout-documentacao
+> Central de Ajuda: https://ajuda.infinitepay.io/pt-BR/articles/10766888-como-usar-o-checkout-integrado-da-infinitepay
+> Portal de desenvolvedores: https://www.infinitepay.io/desenvolvedores
+
+## O que é
+
+O Checkout Integrado da InfinitePay permite gerar links de pagamento automaticamente
+via API a partir do seu site ou sistema. O cliente é direcionado para um checkout
+hospedado pela InfinitePay e volta para o seu site após o pagamento. Pix com taxa
+zero. Sem mensalidade nem taxa de adesão — você paga apenas as taxas padrão por venda.
+
+## Pré-requisitos
+
+1. Conta InfinitePay ativa.
+2. Habilitar o Checkout Integrado:
+   - App: aba Vendas → rolar até Checkout → Configurações → Habilitar Checkout Integrado.
+   - Ou pela web: menu Checkout → Criar checkout.
+3. Sua **handle** (InfiniteTag): nome de usuário no App InfinitePay, usada SEM o "$".
+
+## Glossário
+
+- Vendedor: você, dono do site.
+- Comprador: quem faz a compra.
+- Handle: sua InfiniteTag (sem o símbolo $).
+- order_nsu: número do pedido no SEU sistema (identificador de rastreio).
+
+## Fluxo de integração
+
+1. Cliente finaliza o pedido no seu site.
+2. Seu backend envia um POST para criar o link de pagamento.
+3. A API devolve um link de checkout pronto.
+4. Você redireciona o cliente para o link.
+5. Cliente paga (Pix, cartão, Apple Pay ou Google Pay) e é redirecionado de volta (redirect_url).
+6. Você confirma o pagamento via webhook (recomendado) ou payment_check.
+
+## 1. Criar link de pagamento
+
+POST https://api.checkout.infinitepay.io/links
+
+### Payload mínimo
+
+```json
+{
+  "handle": "seu-handle",
+  "items": [
+    { "quantity": 1, "price": 1000, "description": "Produto de Exemplo" }
+  ]
+}
+```
+
+### Campos
+
+- handle (obrigatório): sua InfiniteTag sem o "$".
+- items (obrigatório, mínimo 1 item): lista de objetos.
+  - quantity: inteiro.
+  - price: EM CENTAVOS (R$ 10,00 = 1000).
+  - description: texto do produto/serviço.
+- order_nsu (opcional): identificador do pedido no seu sistema. Se omitido, a
+  InfinitePay gera um valor aleatório. Use para rastrear o pagamento no seu sistema.
+- redirect_url (opcional): URL para onde o cliente volta após pagar (página de sucesso).
+- webhook_url (opcional): URL que recebe a notificação automática de pagamento aprovado.
+- customer (opcional): { "name", "email", "phone_number" } — pré-preenche o checkout.
+  Exemplo de phone_number: "+5511999887766".
+- address (opcional, entrega): { "cep", "street", "neighborhood", "number", "complement" }.
+
+### Payload completo
+
+```json
+{
+  "handle": "seu-handle",
+  "items": [
+    { "quantity": 2, "price": 2500, "description": "Camiseta azul" }
+  ],
+  "order_nsu": "order-nsu-123",
+  "redirect_url": "https://seusite.com/pagamento-concluido",
+  "webhook_url": "https://seusite.com/webhook-infinitepay",
+  "customer": {
+    "name": "João Silva",
+    "email": "joao@email.com",
+    "phone_number": "+5511999887766"
+  },
+  "address": {
+    "cep": "12345678",
+    "street": "Rua das Flores",
+    "neighborhood": "Centro",
+    "number": "123",
+    "complement": "Apto 45"
+  }
+}
+```
+
+### Resposta da API
+
+```json
+{
+  "url": "https://checkout.infinitepay.com.br/..."
+}
+```
+
+Redirecione o cliente para a URL retornada.
+
+## 2. Parâmetros de retorno da redirect_url
+
+Após o pagamento, o cliente clica em "Continuar" e é redirecionado à sua
+redirect_url com estes parâmetros:
+
+- receipt_url: link do comprovante de pagamento.
+- order_nsu: número do pedido no seu sistema.
+- slug: código da fatura na InfinitePay.
+- capture_method: forma de pagamento ("credit_card" ou "pix").
+- transaction_nsu: ID único da transação.
+
+## 3. Consultar status do pagamento
+
+POST https://api.checkout.infinitepay.io/payment_check
+
+Corpo:
+
+```json
+{
+  "handle": "sua_infinite_tag",
+  "order_nsu": "123456",
+  "transaction_nsu": "UUID-que-recebeu",
+  "slug": "codigo-da-fatura"
+}
+```
+
+Resposta:
+
+```json
+{
+  "success": true,
+  "paid": true,
+  "amount": 1500,
+  "paid_amount": 1510,
+  "installments": 1,
+  "capture_method": "pix"
+}
+```
+
+Valores em centavos. capture_method: "pix" ou "credit_card".
+
+## 4. Webhook (recomendado)
+
+Configure webhook_url no payload. Quando o pagamento é aprovado, a InfinitePay
+envia automaticamente os dados da venda para essa URL em tempo real.
+
+Corpo recebido no webhook (pagamento aprovado):
+
+```json
+{
+  "invoice_slug": "abc123",
+  "amount": 1000,
+  "paid_amount": 1010,
+  "installments": 1,
+  "capture_method": "credit_card",
+  "transaction_nsu": "UUID",
+  "order_nsu": "UUID-do-pedido",
+  "receipt_url": "https://comprovante.com/123",
+  "items": []
+}
+```
+
+Regras de resposta do seu servidor:
+
+- Sucesso: responda 200 OK rapidamente (de preferência em menos de 1 segundo).
+- Erro: responda 400 Bad Request — a InfinitePay tenta reenviar a notificação.
+
+## Formas de pagamento e recebimento
+
+- Checkout Integrado: Pix (taxa zero, cai na hora), cartão de crédito em até 12x,
+  Apple Pay e Google Pay.
+- Apple Pay e Google Pay: carteiras digitais já embutidas no checkout hospedado,
+  como opção de "pagamento com 1 toque". NÃO exigem campo novo no payload, SDK
+  adicional ou configuração extra — aparecem automaticamente na tela de pagamento.
+- Recebimento: na hora ou em 1 dia útil, conforme o plano de recebimento escolhido.
+- Antifraude incluso em toda transação, sem custo extra.
+
+## ⚠️ Armadilhas comuns (leia antes de integrar)
+
+- **Preço em CENTAVOS, não em reais.** `price: 1000` = R$ 10,00. Enviar `price: 10`
+  cobra R$ 0,10; enviar `price: 1000` quando queria R$ 1000,00 cobra R$ 10,00.
+  Regra prática: multiplique o valor em reais por 100 e envie como inteiro
+  (R$ 49,90 → 4990). Isso vale para TODOS os campos de valor: `price` nos itens,
+  `amount` e `paid_amount` no payment_check e no webhook.
+- **Handle sem o "$".** Se sua InfiniteTag é `$lojinha`, envie `"handle": "lojinha"`.
+- **Crie o link no backend, nunca no navegador.** Se o preço vier do front, o
+  cliente pode alterá-lo. Derive itens e total no seu servidor.
+- **Valide o order_nsu no webhook.** Só marque o pedido como pago se o order_nsu
+  recebido corresponder a um pedido real e pendente no seu sistema.
+- **Guarde o transaction_nsu** de cada venda — é a chave para consultas futuras
+  via payment_check.
+- **Webhook deve responder 200 rápido** (idealmente < 1s). Faça o processamento
+  pesado em fila; responder 400 faz a InfinitePay reenviar a notificação.
+
+## Boas práticas
+
+- Prefira webhook a polling manual (payment_check) para confirmar pagamentos.
+- Sempre valide se o order_nsu recebido corresponde a um pedido real no seu sistema.
+- Guarde o transaction_nsu para consultas futuras.
+- Teste bastante em ambiente de desenvolvimento antes de ir para produção.
+- Nunca confie em preço vindo do cliente: derive itens e total no seu backend.
+- Nunca exponha handle/lógica de preço no JavaScript do navegador; crie o link
+  sempre no servidor.
+
+## Links oficiais
+
+- Documentação do Checkout: https://www.infinitepay.io/checkout-documentacao
+- Página do produto: https://www.infinitepay.io/checkout
+- Desenvolvedores: https://www.infinitepay.io/desenvolvedores
+- Central de Ajuda: https://ajuda.infinitepay.io/pt-BR/articles/10766888-como-usar-o-checkout-integrado-da-infinitepay
