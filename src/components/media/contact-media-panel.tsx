@@ -108,7 +108,9 @@ export function ContactMediaPanel({
             ? base.in("content_type", ["image", "video", "audio"])
             : kind === "documents"
               ? base.eq("content_type", "document")
-              : base.eq("content_type", "text").like("content_text", "%http%");
+              : // `ilike`, not `like`: a customer who writes "HTTP://" is
+                // still sharing a link.
+                base.eq("content_type", "text").ilike("content_text", "%http%");
 
         const from = nextPage * MEDIA_PAGE_SIZE;
         const { data, error: messagesError } = await query
