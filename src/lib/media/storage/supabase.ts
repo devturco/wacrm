@@ -54,6 +54,8 @@ export class SupabaseMediaStorage implements MediaStorage {
     path: string;
     body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
     contentType: string;
+    /** Ignored here — the SDK reads the length off the body itself. */
+    contentLength?: number;
     upsert?: boolean;
     cacheControl?: string;
   }): Promise<{ publicUrl: string; path: string; size: number }> {

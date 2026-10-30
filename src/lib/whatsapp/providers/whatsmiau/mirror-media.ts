@@ -28,11 +28,21 @@ import {
 } from '@/lib/whatsapp/mirror-inbound-media';
 import type { MediaStorage } from '@/lib/media/storage';
 import { normalizeContentType } from '@/lib/media/content-type';
+import { contentLengthOf } from '@/lib/media/content-length';
 import { CHAT_MEDIA_MAX_BYTES } from '@/lib/storage/upload-media';
 
 export interface WhatsmiauMediaDownload {
   stream: ReadableStream<Uint8Array>;
   contentType: string | null;
+  /**
+   * How many bytes the body holds, when the provider's response says so.
+   *
+   * R2's S3 API refuses a PUT whose length it cannot know, so the
+   * length travels with the download: a stream without it goes out as
+   * `Transfer-Encoding: chunked` and the bucket answers "length
+   * required" — the attachment then stays on the provider's server.
+   */
+  contentLength?: number | null;
 }
 
 /** Injected in tests; defaults to a plain GET of the public url. */
@@ -112,7 +122,7 @@ export const downloadWhatsmiauMedia: WhatsmiauMediaDownloader = async (
     },
   });
 
-  return { stream, contentType };
+  return { stream, contentType, contentLength: contentLengthOf(response) };
 };
 
 /**
@@ -143,12 +153,19 @@ export async function mirrorWhatsmiauMedia(
 
   let body: ReadableStream<Uint8Array> | Uint8Array | null = null;
   let contentType: string | null = null;
+  // How many bytes the body holds. The bucket needs to know: a stream
+  // whose length nobody declared goes out as `Transfer-Encoding:
+  // chunked`, and R2 refuses it ("length required") — the attachment
+  // then stays on the provider's own server, which is exactly what the
+  // mirror exists to prevent.
+  let contentLength: number | null = null;
 
   if (mediaUrl) {
     try {
       const downloaded = await download(mediaUrl, maxBytes);
       body = downloaded.stream;
       contentType = downloaded.contentType;
+      contentLength = downloaded.contentLength ?? null;
     } catch (error) {
       console.warn('[whatsmiau-mirror] download failed for', mediaId, error);
       return null;
@@ -166,6 +183,7 @@ export async function mirrorWhatsmiauMedia(
       return null;
     }
     body = bytes;
+    contentLength = bytes.byteLength;
   } else {
     return null;
   }
@@ -190,6 +208,7 @@ export async function mirrorWhatsmiauMedia(
       path,
       body,
       contentType: uploadType,
+      contentLength: contentLength ?? undefined,
       cacheControl: '3600',
       upsert: true,
     });

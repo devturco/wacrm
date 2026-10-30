@@ -155,7 +155,68 @@ describe("R2MediaStorage", () => {
     expect(target.url).not.toContain(config.secretAccessKey);
     expect(JSON.stringify(target)).not.toContain("secretAccessKey");
   });
+
+  it("declares the length of a streamed body — R2 refuses a chunked PUT", async () => {
+    // A stream whose length nobody declared goes out as
+    // `Transfer-Encoding: chunked`, and R2's S3 API answers "length
+    // required" — the upload dies and the attachment stays on the
+    // provider's own server.
+    const requests: Request[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        requests.push(input as Request);
+        return new Response("", { status: 200 });
+      }),
+    );
+
+    const storage = new R2MediaStorage(config);
+    await storage.put({
+      path: "account-acc-1/inbound/x.pdf",
+      body: streamOf(3),
+      contentType: "application/pdf",
+      contentLength: 3,
+      upsert: true,
+    });
+
+    expect(requests[0]?.headers.get("content-length")).toBe("3");
+    expect(requests[0]?.headers.get("transfer-encoding")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("counts the stream itself when the caller does not know the length", async () => {
+    const requests: Request[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        requests.push(input as Request);
+        return new Response("", { status: 200 });
+      }),
+    );
+
+    const storage = new R2MediaStorage(config);
+    const result = await storage.put({
+      path: "account-acc-1/inbound/x.pdf",
+      body: streamOf(5),
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+    expect(requests[0]?.headers.get("content-length")).toBe("5");
+    expect(result.size).toBe(5);
+    vi.unstubAllGlobals();
+  });
 });
+
+/** A stream carrying `bytes` bytes. */
+function streamOf(bytes: number): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    },
+  });
+}
 
 describe("r2ConfigFromEnv", () => {
   it("reports the missing variable names, never their values", () => {

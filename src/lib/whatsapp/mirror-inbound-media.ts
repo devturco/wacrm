@@ -203,7 +203,7 @@ export async function mirrorInboundMedia(
   }
 
   try {
-    const { stream, contentType } = await download({
+    const { stream, contentType, contentLength } = await download({
       downloadUrl,
       accessToken,
       maxBytes,
@@ -235,6 +235,13 @@ export async function mirrorInboundMedia(
         path,
         body: stream,
         contentType: uploadType,
+        // The bucket needs to know how long the body is: a stream whose
+        // length nobody declared goes out as `Transfer-Encoding:
+        // chunked`, and R2 refuses it. The download's own header is the
+        // truth; Meta's `file_size` is the fallback.
+        contentLength:
+          contentLength ??
+          (typeof fileSize === "number" ? fileSize : undefined),
         cacheControl: "3600",
         upsert: true,
       }));

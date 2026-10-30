@@ -179,6 +179,9 @@ export async function repairMessageMedia(
 
   let body: ReadableStream<Uint8Array>;
   let sourceMime: string | null = mime;
+  // How many bytes the body holds — the bucket needs to know, or the
+  // upload goes out as `Transfer-Encoding: chunked` and R2 refuses it.
+  let contentLength: number | undefined;
 
   if (proxyId) {
     // The official provider: resolve the download url with the
@@ -214,6 +217,9 @@ export async function repairMessageMedia(
         maxBytes,
       });
       body = downloaded.stream;
+      contentLength =
+        downloaded.contentLength ??
+        (typeof info.fileSize === "number" ? info.fileSize : undefined);
       sourceMime =
         mime ??
         normalizeMimeType(info.mimeType) ??
@@ -230,6 +236,7 @@ export async function repairMessageMedia(
     try {
       const downloaded = await download(mediaUrl, maxBytes);
       body = downloaded.stream;
+      contentLength = downloaded.contentLength ?? undefined;
       sourceMime = mime ?? normalizeMimeType(downloaded.contentType);
     } catch (error) {
       return {
@@ -259,6 +266,7 @@ export async function repairMessageMedia(
       path,
       body,
       contentType: uploadType,
+      contentLength,
       upsert: true,
     });
 

@@ -11,6 +11,7 @@
 
 import { isBusinessScopedUserId } from './wa-identity'
 import { getT } from '@/lib/i18n/translate'
+import { contentLengthOf } from '@/lib/media/content-length'
 
 const ti = getT('Validation.interactive')
 
@@ -1278,7 +1279,12 @@ export interface DownloadMediaStreamArgs {
  */
 export async function downloadMediaStream(
   args: DownloadMediaStreamArgs
-): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string }> {
+): Promise<{
+  stream: ReadableStream<Uint8Array>
+  contentType: string
+  /** How many bytes the body holds, when the response says so. */
+  contentLength?: number | null
+}> {
   const { downloadUrl, accessToken, maxBytes } = args
   const response = await fetch(downloadUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -1316,5 +1322,5 @@ export async function downloadMediaStream(
     },
   })
 
-  return { stream, contentType }
+  return { stream, contentType, contentLength: contentLengthOf(response) }
 }

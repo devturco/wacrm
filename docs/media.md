@@ -146,6 +146,25 @@ Quando a R2 está escolhida mas falta alguma variável, o app **continua
 no Supabase** em vez de quebrar. Uma configuração incompleta nunca
 derruba o inbox.
 
+### O R2 exige o comprimento do corpo
+
+A API S3 do R2 **não aceita** um PUT cujo comprimento ele não consiga
+saber. Um stream sem `Content-Length` sai como
+`Transfer-Encoding: chunked`, e o bucket responde "length required" —
+o upload morre e a row continua apontando para a URL do provedor
+(a foto aparece, mas é a cópia temporária de lá, que expira).
+
+Por isso o espelho sempre declara o comprimento: o cabeçalho
+`content-length` da resposta do provedor (e, no caso do WhatsMiau
+com `webhook.base64`, o tamanho do próprio base64 decodificado). Sem
+esses bytes, o adaptador do R2 lê o stream inteiro e conta sozinho —
+mais lento, mas sempre certo.
+
+Um corpo comprimido (`content-encoding: gzip`) **não** tem
+comprimento declarado: o cabeçalho conta os bytes comprimidos, e o
+stream que subimos é o decodificado. Um `Content-Length` errado faria o
+upload falhar (ou truncar o arquivo).
+
 ---
 
 ## O reparo sob demanda

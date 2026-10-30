@@ -127,6 +127,30 @@ describe('mirrorWhatsmiauMedia', () => {
 
     expect(uploads).toHaveLength(1);
     expect(url).toBeTruthy();
+    // The bytes are in hand — their length is declared.
+    expect(uploads[0]?.contentLength).toBe(5);
+  });
+
+  it('declares the length the provider announced', async () => {
+    // R2's S3 API refuses a PUT whose length it cannot know: a stream
+    // without a Content-Length goes out as `Transfer-Encoding:
+    // chunked` and the bucket answers "length required" — the upload
+    // dies and the attachment stays on the provider's own server.
+    const { storage, uploads } = fakeStorage();
+    const download = vi.fn(async () => ({
+      stream: fakeStream(3),
+      contentType: 'image/png',
+      contentLength: 3,
+    }));
+
+    await mirrorWhatsmiauMedia({
+      ...baseArgs,
+      storage,
+      mediaUrl: 'https://cdn.test/original.png',
+      download,
+    } as MirrorWhatsmiauMediaArgs);
+
+    expect(uploads[0]?.contentLength).toBe(3);
   });
 
   it('returns null when the download fails', async () => {
@@ -192,6 +216,75 @@ describe('downloadWhatsmiauMedia', () => {
     await expect(
       new Response(stream).arrayBuffer(),
     ).rejects.toThrow(/exceeds/);
+    vi.unstubAllGlobals();
+  });
+
+  it('reads the length off the response, so the upload can declare it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'image/jpeg',
+          'content-length': '4096',
+        }),
+        body: (() => {
+          let sent = false;
+          return {
+            getReader: () => ({
+              read: async () => {
+                if (sent) return { done: true, value: undefined };
+                sent = true;
+                return { done: false, value: new Uint8Array(10) };
+              },
+              cancel: async () => {},
+            }),
+          };
+        })(),
+      })),
+    );
+
+    const { contentLength } = await downloadWhatsmiauMedia(
+      'https://cdn.test/x',
+      1024,
+    );
+    expect(contentLength).toBe(4096);
+    vi.unstubAllGlobals();
+  });
+
+  it('ignores the length of a compressed body — it counts the wrong bytes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'image/jpeg',
+          'content-length': '40',
+          'content-encoding': 'gzip',
+        }),
+        body: (() => {
+          let sent = false;
+          return {
+            getReader: () => ({
+              read: async () => {
+                if (sent) return { done: true, value: undefined };
+                sent = true;
+                return { done: false, value: new Uint8Array(100) };
+              },
+              cancel: async () => {},
+            }),
+          };
+        })(),
+      })),
+    );
+
+    const { contentLength } = await downloadWhatsmiauMedia(
+      'https://cdn.test/x',
+      1024,
+    );
+    expect(contentLength).toBeNull();
     vi.unstubAllGlobals();
   });
 });

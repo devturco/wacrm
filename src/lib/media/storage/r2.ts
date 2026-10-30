@@ -162,6 +162,7 @@ export class R2MediaStorage implements MediaStorage {
     path: string;
     body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
     contentType: string;
+    contentLength?: number;
     upsert?: boolean;
     cacheControl?: string;
   }): Promise<{ publicUrl: string; path: string; size: number }> {
@@ -170,9 +171,19 @@ export class R2MediaStorage implements MediaStorage {
     };
     if (args.cacheControl) headers["Cache-Control"] = args.cacheControl;
 
+    // R2's S3 API does NOT take a PUT whose length it cannot know: a
+    // stream without a Content-Length goes out as
+    // `Transfer-Encoding: chunked`, and the bucket answers "length
+    // required" — the upload dies and the caller keeps the file
+    // wherever it came from. The caller knows the size (the
+    // provider's metadata, the download's own header), so it is
+    // declared here.
+    const { body, length } = await bodyWithLength(args.body, args.contentLength);
+    if (length !== null) headers["Content-Length"] = String(length);
+
     const response = await this.client().fetch(this.endpoint(args.path), {
       method: "PUT",
-      body: args.body as BodyInit,
+      body: body as BodyInit,
       headers,
     });
     if (!response.ok) {
@@ -181,7 +192,7 @@ export class R2MediaStorage implements MediaStorage {
     return {
       publicUrl: this.publicUrl(args.path),
       path: args.path,
-      size: byteLengthOf(args.body),
+      size: length ?? byteLengthOf(args.body),
     };
   }
 
@@ -208,4 +219,48 @@ function byteLengthOf(
     return body.byteLength;
   }
   return 0;
+}
+
+/** Is this body a stream — one whose length nobody knows upfront? */
+function isStream(
+  body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
+): body is ReadableStream<Uint8Array> {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    typeof (body as ReadableStream<Uint8Array>).getReader === 'function'
+  );
+}
+
+/**
+ * The body to send, and how many bytes it holds.
+ *
+ * A buffered body knows its own length. A stream does not — unless the
+ * caller says how long it is, and then the header is all it takes. When
+ * neither is true the stream is read into memory: an upload R2 refuses
+ * is worse than a little memory, and the caller caps the size anyway.
+ */
+async function bodyWithLength(
+  body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
+  known: number | undefined,
+): Promise<{
+  body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
+  length: number | null;
+}> {
+  if (!isStream(body)) {
+    return { body, length: byteLengthOf(body) };
+  }
+  if (typeof known === 'number' && Number.isFinite(known) && known >= 0) {
+    return { body, length: known };
+  }
+
+  const chunks: Buffer[] = [];
+  const reader = body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(Buffer.from(value));
+  }
+  const bytes = Buffer.concat(chunks);
+  return { body: bytes, length: bytes.byteLength };
 }

@@ -6,6 +6,8 @@ export interface FakePut {
   body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
   /** How many bytes the body held, when it can be told without reading it. */
   bytes: number;
+  /** The length the caller declared, when it declared one. */
+  contentLength?: number;
   contentType: string;
   upsert?: boolean;
   cacheControl?: string;
@@ -71,6 +73,7 @@ export function fakeMediaStorage(
         path: args.path,
         body: args.body,
         bytes: byteLengthOf(args.body),
+        contentLength: args.contentLength,
         contentType: args.contentType,
         upsert: args.upsert,
         cacheControl: args.cacheControl,

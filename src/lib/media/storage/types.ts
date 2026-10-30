@@ -44,6 +44,17 @@ export interface MediaStorage {
     path: string;
     body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
     contentType: string;
+    /**
+     * How many bytes the body holds, when it is known.
+     *
+     * It is NOT optional in practice: R2's S3 API refuses a PUT whose
+     * length is unknown (a stream goes out as `Transfer-Encoding:
+     * chunked`, and the bucket answers "length required"). The
+     * caller knows the size — from the provider's metadata or from the
+     * download's own header — and passing it is what makes the
+     * streaming upload work.
+     */
+    contentLength?: number;
     upsert?: boolean;
     cacheControl?: string;
   }): Promise<{ publicUrl: string; path: string; size: number }>;
