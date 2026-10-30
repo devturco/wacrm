@@ -1,3 +1,10 @@
+import {
+  accountRoot,
+  encodeObjectPath,
+  folderForFile,
+  mediaPath,
+  stampFolder,
+} from "@/lib/media/layout";
 import type { MediaStorage, UploadTarget } from "./types";
 
 /** One recorded write. */
@@ -32,6 +39,10 @@ export interface FakeMediaStorageOptions {
   publicBase?: string;
   /** When set, every write fails with this message. */
   failWith?: string;
+  /** The account the objects belong to — it names the root folder. */
+  accountId?: string;
+  /** The account's company name — the R2 folder is named after it. */
+  accountName?: string | null;
 }
 
 /**
@@ -42,6 +53,10 @@ export interface FakeMediaStorageOptions {
  * bucket or R2 — so the fake has to be the whole interface: a test
  * asserts on the backend, the bucket and the public URL to prove the
  * bytes went where the account asked.
+ *
+ * The fake builds its paths with the REAL rules (`mediaPath`), so a
+ * test that asserts on a path is asserting on what the production
+ * storage would really produce.
  */
 export function fakeMediaStorage(
   options: FakeMediaStorageOptions = {},
@@ -50,6 +65,9 @@ export function fakeMediaStorage(
   const bucket = options.bucket ?? "chat-media";
   const maxFileBytes = options.maxFileBytes ?? 104857600;
   const publicBase = options.publicBase ?? `https://cdn.test/storage/${bucket}`;
+  const accountId = options.accountId ?? "test-account";
+  const accountName = options.accountName ?? null;
+  const root = accountRoot(backend, accountId, accountName);
 
   const puts: FakePut[] = [];
   const removals: string[] = [];
@@ -58,13 +76,24 @@ export function fakeMediaStorage(
     backend,
     bucket,
     maxFileBytes,
+    root,
+
+    pathFor(args) {
+      return mediaPath({ root, ...args });
+    },
 
     async prepareUpload(args): Promise<UploadTarget> {
-      const path = `account-${args.accountId}/${args.fileName}`;
+      const path = mediaPath({
+        root,
+        folder: folderForFile(args.fileName, args.contentType),
+        fileName: args.fileName,
+        contentType: args.contentType,
+        segment: stampFolder(),
+      });
       return {
         mode: backend === "r2" ? "presigned" : "supabase",
         path,
-        publicUrl: `${publicBase}/${path}`,
+        publicUrl: `${publicBase}/${encodeObjectPath(path)}`,
       };
     },
 
@@ -80,7 +109,7 @@ export function fakeMediaStorage(
       });
       if (options.failWith) throw new Error(options.failWith);
       return {
-        publicUrl: `${publicBase}/${args.path}`,
+        publicUrl: `${publicBase}/${encodeObjectPath(args.path)}`,
         path: args.path,
         size: 0,
       };
@@ -91,7 +120,7 @@ export function fakeMediaStorage(
     },
 
     publicUrl(path) {
-      return `${publicBase}/${path}`;
+      return `${publicBase}/${encodeObjectPath(path)}`;
     },
   };
 

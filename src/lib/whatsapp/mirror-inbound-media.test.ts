@@ -6,6 +6,7 @@ import {
   normalizeMimeType,
 } from "./mirror-inbound-media";
 import { fakeMediaStorage } from "@/lib/media/storage/fake-storage.test-helper";
+import { inboundSegment } from "@/lib/media/layout";
 import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 
 const ACCOUNT = "11111111-2222-3333-4444-555555555555";
@@ -17,9 +18,10 @@ const MEDIA_ID = "1234567890123456";
  * without a Supabase project.
  */
 function fakeStorage(uploadError: { message: string } | null = null) {
-  const fake = fakeMediaStorage(
-    uploadError ? { failWith: uploadError.message } : {},
-  );
+  const fake = fakeMediaStorage({
+    accountId: ACCOUNT,
+    ...(uploadError ? { failWith: uploadError.message } : {}),
+  });
   return { storage: fake.storage, uploads: fake.puts, fake };
 }
 
@@ -41,7 +43,6 @@ function fakeDownload(bytes: number, contentType = "image/jpeg") {
 }
 
 const BASE = {
-  accountId: ACCOUNT,
   mediaId: MEDIA_ID,
   downloadUrl: "https://lookaside.fbsbx.com/whatsapp/abc",
   accessToken: "test-token",
@@ -107,23 +108,46 @@ describe("mirrorFileName", () => {
 });
 
 describe("mirrorObjectPath", () => {
-  it("keeps the media id in its own segment", () => {
-    expect(mirrorObjectPath(ACCOUNT, MEDIA_ID, "invoice.pdf")).toBe(
-      `account-${ACCOUNT}/inbound/${MEDIA_ID}/invoice.pdf`,
+  it("keeps the media id in a folder of its own, and the name clean", () => {
+    // The last segment of the url IS the file's name — that is what the
+    // provider shows the recipient when it names the attachment after
+    // the url it downloaded.
+    const { storage } = fakeStorage();
+    expect(mirrorObjectPath(storage, MEDIA_ID, "invoice.pdf")).toBe(
+      `account-${ACCOUNT}/documentos/${inboundSegment(MEDIA_ID)}/invoice.pdf`,
     );
   });
 
-  it("sanitises an id that carries path separators", () => {
-    // The whole run of unsafe characters collapses into one underscore,
-    // so the id can never climb out of its own segment.
-    expect(mirrorObjectPath(ACCOUNT, "../../etc", "invoice.pdf")).toBe(
-      `account-${ACCOUNT}/inbound/_etc/invoice.pdf`,
+  it("files a picture under midias, a document under documentos", () => {
+    const { storage } = fakeStorage();
+    expect(mirrorObjectPath(storage, MEDIA_ID, "foto.jpg")).toContain(
+      `account-${ACCOUNT}/midias/`,
+    );
+    expect(mirrorObjectPath(storage, MEDIA_ID, "contrato.pdf")).toContain(
+      `account-${ACCOUNT}/documentos/`,
     );
   });
 
-  it("never produces an empty segment", () => {
-    expect(mirrorObjectPath(ACCOUNT, "", "invoice.pdf")).toBe(
-      `account-${ACCOUNT}/inbound/media/invoice.pdf`,
+  it("adds the day the message arrived to the folder", () => {
+    const { storage } = fakeStorage();
+    expect(
+      mirrorObjectPath(storage, MEDIA_ID, "invoice.pdf", "1754899200"),
+    ).toBe(
+      `account-${ACCOUNT}/documentos/20250811-${inboundSegment(MEDIA_ID)}/invoice.pdf`,
+    );
+  });
+
+  it("never lets the media id shape the path", () => {
+    // The id is hashed, so a hostile id can never climb out of its own
+    // folder — nor leave an empty segment behind.
+    const { storage } = fakeStorage();
+    const path = mirrorObjectPath(storage, "../../etc", "invoice.pdf");
+    expect(path).toBe(
+      `account-${ACCOUNT}/documentos/${inboundSegment("../../etc")}/invoice.pdf`,
+    );
+    expect(path).not.toContain("..");
+    expect(mirrorObjectPath(storage, "", "invoice.pdf")).toBe(
+      `account-${ACCOUNT}/documentos/${inboundSegment("")}/invoice.pdf`,
     );
   });
 });
@@ -153,11 +177,11 @@ describe("mirrorInboundMedia", () => {
     expect(uploads).toHaveLength(1);
     expect(storage.bucket).toBe("chat-media");
     expect(uploads[0].path).toBe(
-      `account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
+      `account-${ACCOUNT}/midias/20250811-${inboundSegment(MEDIA_ID)}/image-1754899200.jpg`,
     );
     expect(uploads[0].contentType).toBe("image/jpeg");
     expect(url).toBe(
-      `https://cdn.test/storage/chat-media/account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
+      `https://cdn.test/storage/chat-media/account-${ACCOUNT}/midias/20250811-${inboundSegment(MEDIA_ID)}/image-1754899200.jpg`,
     );
   });
 
@@ -170,6 +194,8 @@ describe("mirrorInboundMedia", () => {
       backend: "r2",
       bucket: "crmbr-media",
       publicBase: "https://media.test",
+      accountId: ACCOUNT,
+      accountName: "Storm Eletrônicos",
     });
     const download = fakeDownload(1024);
 
@@ -183,11 +209,12 @@ describe("mirrorInboundMedia", () => {
     });
 
     expect(fake.puts).toHaveLength(1);
+    // R2 has no RLS: the company's own folder is the boundary.
     expect(fake.puts[0].path).toBe(
-      `account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
+      `storm-eletronicos-11111111/midias/20250811-${inboundSegment(MEDIA_ID)}/image-1754899200.jpg`,
     );
     expect(url).toBe(
-      `https://media.test/account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
+      `https://media.test/storm-eletronicos-11111111/midias/20250811-${inboundSegment(MEDIA_ID)}/image-1754899200.jpg`,
     );
   });
 

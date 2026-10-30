@@ -5,17 +5,16 @@ import { normalizeContentType } from "@/lib/media/content-type";
 const t = getT("LibErrors");
 
 /**
- * Shared media-upload helper for Supabase Storage buckets that use the
- * account-scoped path convention introduced in migration 020
- * (`flow-media`) and reused by migration 023 (`chat-media`):
+ * Shared media-upload helper — the browser's side of the upload.
  *
- *   <bucket>/account-<account_id>/<timestamp>-<basename>.<ext>
+ * The PATH is not the browser's decision: `/api/media/upload-url`
+ * builds it, with the account's own backend (Supabase bucket or R2),
+ * the account's own root folder and the taxonomy of
+ * `@/lib/media/layout` — avatar, midias, documentos. A caller only
+ * asks WHERE to send the bytes and how big they are.
  *
- * The first path segment (`account-<uuid>`) is what the bucket's RLS
- * write policies match on, so every caller MUST go through here rather
- * than hand-rolling a path — a mismatched segment is silently rejected
- * by RLS. Both the Flows builder (`node-config-form`) and the inbox
- * composer call this so the logic lives in exactly one place.
+ * The file keeps the name the user gave it: the last segment of the url
+ * IS the file's name, which is what the provider shows the recipient.
  */
 
 /** 16 MB — the `flow-media` bucket's `file_size_limit` (migration 016). */
@@ -41,52 +40,6 @@ export const MEDIA_MAX_BYTES_BY_KIND = {
   audio: 16 * 1024 * 1024,
   document: 100 * 1024 * 1024,
 } as const;
-
-/**
- * Build the account-scoped object path for an upload. Pure + exported so
- * it can be unit-tested without a Supabase client.
- *
- * - `basename` is stripped of its extension, lower-cased non-safe chars
- *   are collapsed to `_`, and it's capped at 40 chars (falls back to
- *   "file" when empty).
- * - The timestamp + the original name keep collisions between two
- *   concurrent uploads astronomically unlikely.
- *
- * `now = null` omits the timestamp prefix entirely. That's for callers
- * whose name is already unique AND who need the path to be *stable*
- * across repeated calls — the inbound mirror (`@/lib/whatsapp/
- * mirror-inbound-media`) keys on Meta's media id so a redelivered
- * webhook rewrites one object instead of orphaning a second copy.
- *
- * `subfolder` inserts one level below `account-<id>`. The bucket's RLS
- * write policies only match the FIRST path segment (migrations 020/023),
- * so nesting below it is free.
- */
-export function buildMediaPath(
-  accountId: string,
-  fileName: string,
-  now: number | null = Date.now(),
-  subfolder?: string,
-): string {
-  // Only treat the trailing segment as an extension when there's a real
-  // one — a bare name like "README" has no extension and falls back to
-  // "bin" rather than becoming "readme". The extension is whitelisted
-  // too: it comes from a client-supplied name, and a "/" or a ".."
-  // smuggled in there would reshape the object path.
-  const hasExt = /\.[^.]+$/.test(fileName);
-  const rawExt = hasExt ? fileName.split(".").pop()!.toLowerCase() : "";
-  const ext = /^[a-z0-9]{1,12}$/.test(rawExt) ? rawExt : "bin";
-  const safeBase =
-    fileName
-      .replace(/\.[^.]+$/, "")
-      .replace(/[^a-zA-Z0-9_-]+/g, "_")
-      .slice(0, 40) || "file";
-  const dir = subfolder
-    ? `account-${accountId}/${subfolder}`
-    : `account-${accountId}`;
-  const stamp = now === null ? "" : `${now}-`;
-  return `${dir}/${stamp}${safeBase}.${ext}`;
-}
 
 export interface UploadAccountMediaResult {
   /** Public URL Meta can fetch at send time. */

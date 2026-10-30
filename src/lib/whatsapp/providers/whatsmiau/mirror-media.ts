@@ -54,7 +54,6 @@ export type WhatsmiauMediaDownloader = (
 export interface MirrorWhatsmiauMediaArgs {
   /** The account's storage — Supabase bucket or R2, per `media_settings`. */
   storage: MediaStorage;
-  accountId: string;
   /** The provider's message id — makes the object path deterministic. */
   mediaId: string;
   /** Public url from `data.message.mediaUrl`. */
@@ -137,7 +136,6 @@ export async function mirrorWhatsmiauMedia(
 ): Promise<string | null> {
   const {
     storage,
-    accountId,
     mediaId,
     mediaUrl,
     mediaBase64,
@@ -202,7 +200,12 @@ export async function mirrorWhatsmiauMedia(
       fileName,
       messageTimestamp,
     });
-    const path = mirrorObjectPath(accountId, mediaId, objectName);
+    const path = mirrorObjectPath(
+      storage,
+      mediaId,
+      objectName,
+      messageTimestamp,
+    );
 
     const { publicUrl } = await storage.put({
       path,

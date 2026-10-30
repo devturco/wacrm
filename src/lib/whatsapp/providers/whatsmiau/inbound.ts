@@ -413,7 +413,6 @@ export async function handleWhatsmiauInboundMessage(
   if (message.kind !== 'text' && message.kind !== 'interactive') {
     const mirrored = await mirrorWhatsmiauMedia({
       storage: ctx.storage,
-      accountId,
       mediaId: message.messageId,
       mediaUrl: message.mediaUrl ?? null,
       mediaBase64: message.mediaBase64 ?? null,
@@ -702,7 +701,6 @@ async function storeOwnPhoneMessage(
   if (message.kind !== 'text' && message.kind !== 'interactive') {
     const mirrored = await mirrorWhatsmiauMedia({
       storage: ctx.storage,
-      accountId,
       mediaId: message.messageId,
       mediaUrl: message.mediaUrl ?? null,
       mediaBase64: message.mediaBase64 ?? null,

@@ -12,6 +12,8 @@ import {
   repairMessageMedia,
 } from "./repair";
 import type { MediaStorage } from "./storage";
+import { mediaPath } from "./layout";
+import type { MediaFolder } from "./layout";
 
 const ACCOUNT = "acc-1";
 
@@ -55,7 +57,17 @@ function fakeStorage(publicUrl: string) {
       size: 3,
     }),
   );
-  return { storage: { put } as unknown as MediaStorage, put };
+  const root = `account-${ACCOUNT}`;
+  const storage = {
+    root,
+    pathFor: (args: {
+      folder: MediaFolder;
+      fileName: string;
+      segment?: string | null;
+    }) => mediaPath({ root, ...args }),
+    put,
+  } as unknown as MediaStorage;
+  return { storage, put };
 }
 
 const env = {
@@ -120,7 +132,7 @@ describe("repairMessageMedia", () => {
       whatsapp_config: { data: { access_token: "enc" } },
     });
     const publicUrl =
-      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/inbound/MEDIA123/image-20261001120000.jpg";
+      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/midias/20261001-bcb7930d/image-20261001120000.jpg";
     const { storage, put } = fakeStorage(publicUrl);
 
     const outcome = await repairMessageMedia({
@@ -147,7 +159,7 @@ describe("repairMessageMedia", () => {
     expect(outcome).toEqual({ ok: true, url: publicUrl, repaired: true });
     expect(put).toHaveBeenCalledTimes(1);
     expect(put.mock.calls[0]?.[0]?.path).toMatch(
-      /^account-acc-1\/inbound\/MEDIA123\/image-\d+\.jpg$/,
+      /^account-acc-1\/midias\/\d{8}-[0-9a-f]{8}\/image-\d+\.jpg$/,
     );
     expect(put.mock.calls[0]?.[0]?.contentType).toBe("image/jpeg");
     expect(put.mock.calls[0]?.[0]?.upsert).toBe(true);
@@ -194,7 +206,7 @@ describe("repairMessageMedia", () => {
 
   it("is idempotent when the media is already durable", async () => {
     const durable =
-      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/inbound/x/a.jpg";
+      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/midias/x/a.jpg";
     const { db, updates } = fakeDb({
       messages: { data: { ...message, media_url: durable } },
       conversations: { data: { account_id: ACCOUNT } },
@@ -221,7 +233,7 @@ describe("repairMessageMedia", () => {
     // and nothing is rewritten. Only the attachments that arrive from
     // now on follow the new backend.
     const durable =
-      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/inbound/x/a.jpg";
+      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/midias/x/a.jpg";
     const { db, updates } = fakeDb({
       messages: { data: { ...message, media_url: durable } },
       conversations: { data: { account_id: ACCOUNT } },
@@ -253,7 +265,7 @@ describe("repairMessageMedia", () => {
       conversations: { data: { account_id: ACCOUNT } },
     });
     const { storage, put } = fakeStorage(
-      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/inbound/wamid_ABC/file-20261001120000.png",
+      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/midias/wamid-abc/file-20261001120000.png",
     );
 
     const outcome = await repairMessageMedia({

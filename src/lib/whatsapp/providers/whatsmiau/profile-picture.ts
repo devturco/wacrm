@@ -18,7 +18,6 @@
 // ============================================================
 
 import type { MediaStorage } from '@/lib/media/storage';
-import { buildMediaPath } from '@/lib/storage/upload-media';
 
 import type { WhatsmiauConnection } from '../types';
 import { whatsmiauRequest } from './client';
@@ -49,9 +48,6 @@ const ALLOWED_IMAGE_TYPES: Record<string, { mime: string; ext: string }> = {
   'image/webp': { mime: 'image/webp', ext: 'webp' },
   'image/gif': { mime: 'image/gif', ext: 'gif' },
 };
-
-/** Folder inside the account's folder — keeps avatars apart from media. */
-const AVATAR_FOLDER = 'avatars';
 
 /**
  * Pull the picture URL out of the provider's answer.
@@ -190,7 +186,6 @@ export const downloadProfilePicture: ProfilePictureDownloader = async (url) => {
 export interface MirrorProfilePictureArgs {
   /** The account's storage — Supabase bucket or R2, per `media_settings`. */
   storage: MediaStorage;
-  accountId: string;
   /** The contact — the object path is keyed on it, so it is stable. */
   contactId: string;
   /** The CDN url the provider returned. */
@@ -243,7 +238,6 @@ export async function mirrorProfilePicture(
 ): Promise<MirrorProfilePictureResult> {
   const {
     storage,
-    accountId,
     contactId,
     url,
     download = downloadProfilePicture,
@@ -282,7 +276,13 @@ export async function mirrorProfilePicture(
   const type = imageTypeFor(contentType);
 
   try {
-    const path = buildMediaPath(accountId, `${contactId}.${type.ext}`, null, AVATAR_FOLDER);
+    // The contact's own picture, in the account's avatar folder. The
+    // contact id in the name keeps it stable: a second attempt
+    // overwrites the same object instead of littering the bucket.
+    const path = storage.pathFor({
+      folder: 'avatar',
+      fileName: `${contactId}.${type.ext}`,
+    });
     const { publicUrl } = await storage.put({
       path,
       body: bytes,

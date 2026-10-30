@@ -6,8 +6,9 @@
  * hold at once:
  *
  *  1. the path belongs to the caller's own account folder — the first
- *     segment is `account-<uuid>` (migration 020/023), which is what
- *     the bucket's RLS matches on, and what keeps the R2 backend
+ *     segment is `account-<uuid>` (migration 020/023) on Supabase, which
+ *     is what the bucket's RLS matches on, or the account's own
+ *     company folder on R2, which is what keeps the R2 backend
  *     account-scoped even though R2 has no RLS at all;
  *  2. the path is a plain object key — no `.`/`..` segments, no
  *     backslashes, no leading slash.
@@ -17,10 +18,13 @@
  * `..` segments. A path like `account-<mine>/../account-<other>/x.pdf`
  * would therefore point at ANOTHER account's object, with a signature
  * that still validates.
+ *
+ * @param account the account's id, or the account's id plus the R2
+ *                folder (`root`) it owns
  */
 export function isAccountScopedPath(
   path: string,
-  accountId: string,
+  account: string | { id: string; root?: string | null },
 ): boolean {
   if (typeof path !== "string") return false;
   if (path.length === 0 || path.length > 1024) return false;
@@ -31,5 +35,12 @@ export function isAccountScopedPath(
     if (segment === "" || segment === "." || segment === "..") return false;
   }
 
-  return path.startsWith(`account-${accountId}/`);
+  const roots =
+    typeof account === "string"
+      ? [`account-${account}`]
+      : [`account-${account.id}`, account.root].filter(
+          (root): root is string => typeof root === "string" && root.length > 0,
+        );
+
+  return roots.some((root) => path.startsWith(`${root}/`));
 }

@@ -66,7 +66,7 @@ describe("sanitizeFilename", () => {
 });
 
 describe("basenameFromUrl", () => {
-  it("drops the epoch-ms prefix buildMediaPath adds", () => {
+  it("drops the epoch-ms prefix the old path builder added", () => {
     expect(
       basenameFromUrl(
         "https://x.supabase.co/storage/v1/object/public/chat-media/account-abc/1770000000000-invoice.pdf",

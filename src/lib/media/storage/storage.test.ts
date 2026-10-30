@@ -42,10 +42,10 @@ describe("SupabaseMediaStorage", () => {
       bucket: "chat-media",
       publicBaseUrl: null,
       client,
+      account: { id: "acc-1", name: null },
     });
 
     const target = await storage.prepareUpload({
-      accountId: "acc-1",
       fileName: "foto.jpg",
       contentType: "image/jpeg",
       sizeBytes: 10,
@@ -53,9 +53,31 @@ describe("SupabaseMediaStorage", () => {
 
     expect(target.mode).toBe("supabase");
     expect(target.bucket).toBe("chat-media");
-    expect(target.path.startsWith("account-acc-1/")).toBe(true);
-    expect(target.path.endsWith(".jpg")).toBe(true);
+    expect(target.path.startsWith("account-acc-1/midias/")).toBe(true);
+    expect(target.path.endsWith("/foto.jpg")).toBe(true);
     expect(target.publicUrl).toContain(target.path);
+  });
+
+  it("keeps the file's own name — the last segment IS the name", async () => {
+    // A provider that names the attachment after the url it downloaded
+    // shows THIS to the recipient. A timestamped blob would arrive as
+    // "1712345678901-Proposta Comercial.pdf".
+    const { client } = fakeSupabase();
+    const storage = new SupabaseMediaStorage({
+      bucket: "chat-media",
+      publicBaseUrl: null,
+      client,
+      account: { id: "acc-1", name: null },
+    });
+
+    const target = await storage.prepareUpload({
+      fileName: "Proposta Comercial.pdf",
+      contentType: "application/pdf",
+      sizeBytes: 10,
+    });
+
+    expect(target.path.startsWith("account-acc-1/documentos/")).toBe(true);
+    expect(target.path.endsWith("/Proposta Comercial.pdf")).toBe(true);
   });
 
   it("writes the object with the declared type", async () => {
@@ -64,6 +86,7 @@ describe("SupabaseMediaStorage", () => {
       bucket: "chat-media",
       publicBaseUrl: null,
       client,
+      account: { id: "acc-1", name: null },
     });
 
     const result = await storage.put({
@@ -87,6 +110,7 @@ describe("SupabaseMediaStorage", () => {
       bucket: "chat-media",
       publicBaseUrl: null,
       client,
+      account: { id: "acc-1", name: null },
     });
 
     await storage.remove("account-acc-1/x.png");
@@ -99,6 +123,7 @@ describe("SupabaseMediaStorage", () => {
       bucket: "chat-media",
       publicBaseUrl: "https://media.test/",
       client,
+      account: { id: "acc-1", name: null },
     });
 
     expect(storage.publicUrl("account-acc-1/x.png")).toBe(
@@ -115,12 +140,13 @@ describe("R2MediaStorage", () => {
     bucket: "crmbr-media",
     publicBaseUrl: "https://media.test",
   };
+  /** The company whose folder the objects land in. */
+  const account = { id: "acc-1", name: "Storm Eletrônicos" };
 
   it("presigns a PUT against the R2 endpoint", async () => {
-    const storage = new R2MediaStorage(config);
+    const storage = new R2MediaStorage({ ...config, account });
 
     const target = await storage.prepareUpload({
-      accountId: "acc-1",
       fileName: "contrato.pdf",
       contentType: "application/pdf",
       sizeBytes: 10,
@@ -133,16 +159,19 @@ describe("R2MediaStorage", () => {
     expect(target.url).toContain("X-Amz-Signature=");
     expect(target.url).toContain("X-Amz-Expires=900");
     expect(target.headers?.["Content-Type"]).toBe("application/pdf");
+    // R2 has no RLS: the company's own folder is the boundary.
+    expect(target.path.startsWith("storm-eletronicos-acc1/documentos/")).toBe(
+      true,
+    );
     expect(target.publicUrl).toContain(
-      "https://media.test/account-acc-1/",
+      "https://media.test/storm-eletronicos-acc1/",
     );
     expect(target.publicUrl.endsWith(".pdf")).toBe(true);
   });
 
   it("never lets the secret reach the caller", async () => {
-    const storage = new R2MediaStorage(config);
+    const storage = new R2MediaStorage({ ...config, account });
     const target = await storage.prepareUpload({
-      accountId: "acc-1",
       fileName: "a.pdf",
       contentType: "application/pdf",
       sizeBytes: 1,
@@ -170,7 +199,7 @@ describe("R2MediaStorage", () => {
       }),
     );
 
-    const storage = new R2MediaStorage(config);
+    const storage = new R2MediaStorage({ ...config, account });
     await storage.put({
       path: "account-acc-1/inbound/x.pdf",
       body: streamOf(3),
@@ -194,7 +223,7 @@ describe("R2MediaStorage", () => {
       }),
     );
 
-    const storage = new R2MediaStorage(config);
+    const storage = new R2MediaStorage({ ...config, account });
     const result = await storage.put({
       path: "account-acc-1/inbound/x.pdf",
       body: streamOf(5),
@@ -306,10 +335,14 @@ describe("mediaStorageFor", () => {
         R2_BUCKET: "crmbr-media",
         MEDIA_PUBLIC_BASE_URL: "https://media.test",
       },
+      undefined,
+      { id: "acc-1", name: "Storm Eletrônicos" },
     );
 
     expect(storage.backend).toBe("r2");
     expect(storage.bucket).toBe("crmbr-media");
+    // The company's own folder is what keeps one tenant out of another's.
+    expect(storage.root).toBe("storm-eletronicos-acc1");
   });
 
   it("stays on Supabase when the R2 credentials are missing", () => {
@@ -351,6 +384,8 @@ describe("mediaStorageFor — whose bucket is it", () => {
       },
       client,
       R2_ENV,
+      undefined,
+      { id: "acc-1", name: "Storm Eletrônicos" },
     );
 
     expect(storage.backend).toBe("r2");

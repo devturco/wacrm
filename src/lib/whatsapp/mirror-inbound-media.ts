@@ -1,8 +1,9 @@
 import { downloadMediaStream } from "./meta-api";
 import { extensionForMime } from "@/lib/media/filename";
 import { normalizeContentType } from "@/lib/media/content-type";
+import { folderForFile, inboundSegment } from "@/lib/media/layout";
 import type { MediaStorage } from "@/lib/media/storage";
-import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
+import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 
 /**
  * Copies inbound WhatsApp media into the account's OWN storage so it
@@ -36,14 +37,6 @@ import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media
  * for as long as Meta holds the bytes.
  */
 
-/**
- * Second path segment for mirrored inbound objects, so a bucket listing
- * separates "things a customer sent us" from "things we sent". RLS only
- * matches on the FIRST segment (`account-<id>`, migration 023), so an
- * extra level is free.
- */
-export const MIRROR_FOLDER = "inbound";
-
 export interface MirrorInboundMediaArgs {
   /**
    * The account's storage — Supabase bucket or R2, per `media_settings`.
@@ -51,8 +44,6 @@ export interface MirrorInboundMediaArgs {
    * of a conversation land in the same place.
    */
   storage: MediaStorage;
-  /** Tenant. Drives the account-scoped path the bucket's policies expect. */
-  accountId: string;
   /** Meta's media id. Makes the object path deterministic. */
   mediaId: string;
   /** Short-lived CDN URL from `getMediaUrl`. */
@@ -107,9 +98,10 @@ function kindForMime(mimeType: string | null): string {
  * name survives whatever shape the provider's id has (Meta's long digit
  * string, the other provider's alphanumeric one).
  *
- * Names are kept short on purpose: `buildMediaPath` caps the basename it
- * receives at 40 characters. Hence `image-<epoch>` rather than
- * `whatsapp-image-<epoch>` — the latter truncates.
+ * The name is the file's OWN name — a document called "Proposta
+ * Comercial.pdf" keeps that name all the way to the recipient. Only
+ * when the sender gave no name at all is one synthesised, and then it is
+ * the plain kind plus the provider's timestamp: `image-<epoch>`.
  */
 export function mirrorFileName(args: {
   mimeType: string | null;
@@ -120,7 +112,7 @@ export function mirrorFileName(args: {
   const ext = extensionForMime(mimeType);
 
   // A document's own name is the best download name there is, so keep
-  // it. Strip any directory part and its extension — `buildMediaPath`
+  // it. Strip any directory part and its extension — the storage layer
   // re-derives the extension from whatever we hand it, and we'd rather
   // that come from the MIME type than from a sender-controlled string.
   const stem = (fileName ?? "")
@@ -142,26 +134,25 @@ export function mirrorFileName(args: {
 /**
  * The full object path of a mirrored attachment.
  *
- *   account-<uuid>/inbound/<media id>/<name>.<ext>
+ *   <root>/<midias|documentos>/<day>-<hash>/<name>.<ext>
  *
- * The id sits in its own segment so it keeps the path unique and
- * stable — a redelivery rewrites the same object instead of orphaning
- * a second copy — without ever ending up in the name the agent sees.
- * The bucket's RLS only matches the FIRST segment, so the extra levels
- * are free.
+ * The uniqueness sits in a folder of its own — the day the message
+ * arrived plus a short hash of the media id. A redelivery therefore
+ * rewrites the same object instead of orphaning a second copy, and
+ * the file name stays exactly what the sender called it: the last
+ * segment of the url IS the name.
  */
 export function mirrorObjectPath(
-  accountId: string,
+  storage: MediaStorage,
   mediaId: string,
   objectName: string,
+  messageTimestamp?: string | number | null,
 ): string {
-  const safeId = (mediaId ?? "").replace(/[^a-zA-Z0-9_-]+/g, "_") || "media";
-  return buildMediaPath(
-    accountId,
-    objectName,
-    null,
-    `${MIRROR_FOLDER}/${safeId}`,
-  );
+  return storage.pathFor({
+    folder: folderForFile(objectName),
+    fileName: objectName,
+    segment: inboundSegment(mediaId, messageTimestamp),
+  });
 }
 
 /**
@@ -176,7 +167,6 @@ export async function mirrorInboundMedia(
 ): Promise<string | null> {
   const {
     storage,
-    accountId,
     mediaId,
     downloadUrl,
     accessToken,
@@ -223,7 +213,12 @@ export async function mirrorInboundMedia(
       fileName,
       messageTimestamp,
     });
-    const path = mirrorObjectPath(accountId, mediaId, objectName);
+    const path = mirrorObjectPath(
+      storage,
+      mediaId,
+      objectName,
+      messageTimestamp,
+    );
 
     // `upsert: true` for the same reason the path is stable: on the
     // rare Meta redelivery the second pass rewrites byte-identical

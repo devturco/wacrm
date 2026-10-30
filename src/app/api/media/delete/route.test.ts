@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/account", () => ({
     userId: "user-1",
     role: "agent",
     supabase: {},
+    account: { id: "acc-1", name: "Storm Eletronicos" },
   }),
   toErrorResponse: (err: unknown) => ({
     body: { error: err instanceof Error ? err.message : "error" },

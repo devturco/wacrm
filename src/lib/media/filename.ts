@@ -13,9 +13,10 @@ import type { ContentType } from "@/types";
  *      name — but only when the sender typed no caption, hence the
  *      "does it look like a filename" guard.
  *   2. The basename of a `chat-media` bucket URL, minus the leading id/epoch
- *      prefix that `buildMediaPath` (`@/lib/storage/upload-media`) puts in
- *      front of it. Covers outbound uploads and, since migration 039,
- *      inbound media mirrored into the same bucket.
+ *      prefix the OLD path builder put in front of it. Covers outbound
+ *      uploads and, since migration 039, inbound media mirrored into the
+ *      same bucket. Objects written since the layout change carry the
+ *      name alone — nothing to strip.
  *   3. A synthesised `whatsapp-<kind>-<timestamp>.<ext>`. The extension comes
  *      from `media_type` when the row has one (migration 039 — the webhook
  *      used to discard Meta's MIME type), falling back to whatever the
@@ -131,9 +132,9 @@ function hasExtension(name: string): boolean {
 
 /**
  * Basename of a URL's path, query and fragment dropped, percent-decoded,
- * and with `buildMediaPath`'s `<epoch-ms>-` prefix removed. Returns "" when
- * the URL has no filename-looking last segment (e.g. a proxy URL, whose
- * last segment is a bare Meta media-id).
+ * and with the OLD path builder's `<epoch-ms>-` prefix removed. Returns ""
+ * when the URL has no filename-looking last segment (e.g. a proxy URL,
+ * whose last segment is a bare Meta media-id).
  *
  * Objects mirrored before migration 066 kept the provider's media id in
  * front of the name (`<id>-invoice.pdf`), so a run of 10+ digits is

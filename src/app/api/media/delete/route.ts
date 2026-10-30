@@ -6,6 +6,7 @@ import {
   resolveBucket,
 } from "@/lib/media/storage";
 import { isAccountScopedPath } from "@/lib/media/object-path";
+import { companyFolder } from "@/lib/media/layout";
 import { getT } from "@/lib/i18n/translate";
 
 const t = getT("Api");
@@ -39,7 +40,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: t("common.invalidRequestBody") }, { status: 400 });
     }
 
-    if (!isAccountScopedPath(path, ctx.accountId)) {
+    const account = { id: ctx.accountId, name: ctx.account.name };
+
+    if (
+      !isAccountScopedPath(path, {
+        id: account.id,
+        // The R2 folder is the company's name — the account's own, so
+        // an object of another account is out of reach.
+        root: companyFolder(account.name, account.id),
+      })
+    ) {
       // Another account's object — 404, never a hint that it exists.
       return NextResponse.json({ error: t("common.notFound") }, { status: 404 });
     }
@@ -58,6 +68,7 @@ export async function DELETE(request: Request) {
       ctx.supabase,
       process.env,
       resolveBucket(settings, bucket),
+      account,
     );
     await storage.remove(path);
 

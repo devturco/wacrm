@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       ctx.supabase,
       process.env,
       resolveBucket(settings, bucket),
+      { id: ctx.accountId, name: ctx.account.name },
     );
 
     // The account's own ceiling, capped by what the bucket accepts.
@@ -81,7 +82,6 @@ export async function POST(request: Request) {
     );
 
     const target = await storage.prepareUpload({
-      accountId: ctx.accountId,
       fileName,
       contentType,
       sizeBytes,

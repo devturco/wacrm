@@ -1,5 +1,21 @@
+import type { MediaFolder } from "../layout";
+
 /** Which backend holds the media for an account. */
 export type MediaBackend = "supabase" | "r2";
+
+/**
+ * The account a storage belongs to.
+ *
+ * The id is what scopes every path. The name is what the R2 folder is
+ * called — R2 has no RLS, so the folder is the only boundary between
+ * two tenants there.
+ */
+export interface MediaAccount {
+  /** The CRM account (the tenant). */
+  id: string;
+  /** The account's company name. */
+  name?: string | null;
+}
 
 /** Where the bytes go. */
 export interface UploadTarget {
@@ -8,7 +24,7 @@ export interface UploadTarget {
    * `presigned` — the browser does a PUT against a signed URL.
    */
   mode: "supabase" | "presigned";
-  /** Object path (account-scoped). */
+  /** Object path (inside the account's folder). */
   path: string;
   /** Bucket — `supabase` mode only. */
   bucket?: string;
@@ -28,13 +44,33 @@ export interface MediaStorage {
   /** The account's ceiling, in bytes. */
   readonly maxFileBytes: number;
   /**
+   * The first segment of every path this storage writes — the
+   * account's own folder.
+   *
+   * `account-<uuid>` on Supabase (the bucket's RLS matches that exact
+   * segment) and the company's slug on R2.
+   */
+  readonly root: string;
+  /**
+   * The path of a file inside the account's tree.
+   *
+   * The folder (`avatar`, `midias`, `documentos`) and the file name
+   * are the caller's decision; the root is the storage's.
+   */
+  pathFor(args: {
+    folder: MediaFolder;
+    fileName: string;
+    contentType?: string | null;
+    /** The uniqueness folder — a stamp, an inbound segment. */
+    segment?: string | null;
+  }): string;
+  /**
    * Where the browser should send the bytes.
    *
    * The credentials NEVER reach the browser: in `presigned` mode what
    * leaves the server is a URL that is already signed.
    */
   prepareUpload(args: {
-    accountId: string;
     fileName: string;
     contentType: string;
     sizeBytes: number;

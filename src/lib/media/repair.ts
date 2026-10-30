@@ -37,7 +37,11 @@ import {
   normalizeMimeType,
 } from "@/lib/whatsapp/mirror-inbound-media";
 import { normalizeContentType } from "@/lib/media/content-type";
-import { mediaStorageFor, readMediaSettings } from "@/lib/media/storage";
+import {
+  mediaStorageFor,
+  readMediaAccount,
+  readMediaSettings,
+} from "@/lib/media/storage";
 import type { MediaStorage } from "@/lib/media/storage";
 import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 
@@ -166,7 +170,9 @@ export async function repairMessageMedia(
   if (!mediaUrl) return { ok: false, reason: "no-media" };
 
   const settings = await readMediaSettings(db, accountId);
-  const storage = deps.storage ?? mediaStorageFor(settings, db, env);
+  const account = await readMediaAccount(db, accountId, settings.backend);
+  const storage =
+    deps.storage ?? mediaStorageFor(settings, db, env, undefined, account);
 
   // Already ours: nothing to do, and the call is idempotent.
   if (isOwnMediaUrl(mediaUrl, ownMediaPrefixes(env, settings.publicBaseUrl))) {
@@ -256,9 +262,10 @@ export async function repairMessageMedia(
     messageTimestamp: message.created_at as string | null,
   });
   const path = mirrorObjectPath(
-    accountId,
+    storage,
     proxyId ?? (message.message_id as string | null) ?? (message.id as string),
     objectName,
+    message.created_at as string | null,
   );
 
   try {

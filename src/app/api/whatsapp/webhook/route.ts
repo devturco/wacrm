@@ -1048,7 +1048,6 @@ async function parseMessageContent(
           const storage = await safeMediaStorage(mirror.accountId, supabaseAdmin())
           const mirrored = await mirrorInboundMedia({
             storage,
-            accountId: mirror.accountId,
             mediaId,
             downloadUrl: info.url,
             accessToken,

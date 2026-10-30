@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
-import type { MediaStorage, UploadTarget } from "./types";
+import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
+import {
+  accountRoot,
+  encodeObjectPath,
+  folderForFile,
+  mediaPath,
+  stampFolder,
+} from "@/lib/media/layout";
+import type { MediaAccount, MediaStorage, UploadTarget } from "./types";
 
 export interface SupabaseMediaStorageOptions {
   /** Bucket the objects live in (`chat-media` by default). */
@@ -11,6 +18,8 @@ export interface SupabaseMediaStorageOptions {
   client: SupabaseClient;
   /** The account's ceiling, in bytes. */
   maxFileBytes?: number;
+  /** The account the objects belong to. */
+  account: MediaAccount;
 }
 
 /**
@@ -20,12 +29,13 @@ export interface SupabaseMediaStorageOptions {
  * provider fetches the media without authentication at send time. The
  * browser uploads through the client SDK and the bucket's RLS matches
  * the FIRST path segment (`account-<uuid>`), so the path must come
- * from `buildMediaPath`.
+ * from `accountRoot` — the folder tree below it is free.
  */
 export class SupabaseMediaStorage implements MediaStorage {
   readonly backend = "supabase" as const;
   readonly bucket: string;
   readonly maxFileBytes: number;
+  readonly root: string;
 
   private readonly options: SupabaseMediaStorageOptions;
 
@@ -33,15 +43,32 @@ export class SupabaseMediaStorage implements MediaStorage {
     this.options = options;
     this.bucket = options.bucket;
     this.maxFileBytes = options.maxFileBytes ?? CHAT_MEDIA_MAX_BYTES;
+    this.root = accountRoot("supabase", options.account.id);
+  }
+
+  pathFor(args: {
+    folder: "avatar" | "midias" | "documentos";
+    fileName: string;
+    contentType?: string | null;
+    segment?: string | null;
+  }): string {
+    return mediaPath({ root: this.root, ...args });
   }
 
   async prepareUpload(args: {
-    accountId: string;
     fileName: string;
     contentType: string;
     sizeBytes: number;
   }): Promise<UploadTarget> {
-    const path = buildMediaPath(args.accountId, args.fileName);
+    // A fresh upload lands in a folder of its own, named after the
+    // moment it happened — the file name stays exactly what the user
+    // called it, which is what the provider shows the recipient.
+    const path = this.pathFor({
+      folder: folderForFile(args.fileName, args.contentType),
+      fileName: args.fileName,
+      contentType: args.contentType,
+      segment: stampFolder(),
+    });
     return {
       mode: "supabase",
       bucket: this.options.bucket,
@@ -83,7 +110,7 @@ export class SupabaseMediaStorage implements MediaStorage {
 
   publicUrl(path: string): string {
     if (this.options.publicBaseUrl) {
-      return `${this.options.publicBaseUrl.replace(/\/$/, "")}/${path}`;
+      return `${this.options.publicBaseUrl.replace(/\/$/, "")}/${encodeObjectPath(path)}`;
     }
     const {
       data: { publicUrl },

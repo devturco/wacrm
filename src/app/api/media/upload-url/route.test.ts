@@ -5,7 +5,6 @@ const h = vi.hoisted(() => ({
   bucket: "chat-media",
   maxFileBytes: 104857600,
   prepared: [] as {
-    accountId: string;
     fileName: string;
     contentType: string;
     sizeBytes: number;
@@ -27,6 +26,7 @@ vi.mock("@/lib/auth/account", () => ({
     userId: "user-1",
     role: "agent",
     supabase: {},
+    account: { id: "acc-1", name: "Storm Eletronicos" },
   }),
   toErrorResponse: (err: unknown) => ({
     body: { error: err instanceof Error ? err.message : "error" },
@@ -48,7 +48,6 @@ vi.mock("@/lib/media/storage", () => ({
     bucket: h.bucket,
     maxFileBytes: h.maxFileBytes,
     prepareUpload: async (args: {
-      accountId: string;
       fileName: string;
       contentType: string;
       sizeBytes: number;
@@ -56,7 +55,7 @@ vi.mock("@/lib/media/storage", () => ({
       h.prepared.push(args);
       return {
         mode: h.backend === "r2" ? "presigned" : "supabase",
-        path: `account-acc-1/${args.fileName}`,
+        path: `account-acc-1/documentos/${args.fileName}`,
         bucket: h.bucket,
         url: h.backend === "r2" ? "https://signed.test/object" : undefined,
         headers:
@@ -96,9 +95,9 @@ describe("POST /api/media/upload-url", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.path).toBe("account-acc-1/invoice.pdf");
+    expect(res.body.path).toBe("account-acc-1/documentos/invoice.pdf");
     expect(res.body.mode).toBe("supabase");
-    expect(h.prepared[0]?.accountId).toBe("acc-1");
+    expect(h.prepared[0]?.fileName).toBe("invoice.pdf");
   });
 
   it("declares an unknown format as a download, never as active content", async () => {

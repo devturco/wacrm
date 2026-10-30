@@ -32,8 +32,8 @@ const connection: WhatsmiauConnection = {
   baseUrl: 'https://api.test/v2',
 };
 
-function fakeStorage(publicBase = 'https://cdn.test/avatars/contact-1.jpg') {
-  const fake = fakeMediaStorage({ publicBase });
+function fakeStorage(publicBase = 'https://cdn.test/media') {
+  const fake = fakeMediaStorage({ publicBase, accountId: 'acc-1' });
   return { storage: fake.storage, uploads: fake.puts };
 }
 
@@ -143,20 +143,21 @@ describe('mirrorProfilePicture', () => {
 
     const mirrored = await mirrorProfilePicture({
       storage,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/original.png',
       download,
     });
 
     expect(download).toHaveBeenCalledWith('https://cdn.test/original.png');
-    expect(uploads[0]?.path).toBe('account-acc-1/avatars/contact-1.png');
+    expect(uploads[0]?.path).toBe('account-acc-1/avatar/contact-1.png');
     expect(uploads[0]?.contentType).toBe('image/png');
     expect(uploads[0]?.bytes).toBe(3);
     expect(mirrored.ok).toBe(true);
     if (!mirrored.ok) return;
-    expect(mirrored.publicUrl).toContain('https://cdn.test/avatars/contact-1.jpg');
-    expect(mirrored.path).toBe('account-acc-1/avatars/contact-1.png');
+    expect(mirrored.publicUrl).toBe(
+      'https://cdn.test/media/account-acc-1/avatar/contact-1.png',
+    );
+    expect(mirrored.path).toBe('account-acc-1/avatar/contact-1.png');
   });
 
   it('refuses a url that is not fetchable', async () => {
@@ -165,7 +166,6 @@ describe('mirrorProfilePicture', () => {
 
     const mirrored = await mirrorProfilePicture({
       storage,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'data:image/png;base64,AAAA',
       download,
@@ -181,7 +181,6 @@ describe('mirrorProfilePicture', () => {
 
     const mirrored = await mirrorProfilePicture({
       storage,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/gone.png',
       download: async () => {
@@ -198,7 +197,6 @@ describe('mirrorProfilePicture', () => {
 
     const mirrored = await mirrorProfilePicture({
       storage,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/empty.png',
       download: async () => ({ buffer: new Uint8Array(0), contentType: 'image/png' }),
@@ -213,7 +211,6 @@ describe('mirrorProfilePicture', () => {
 
     const mirrored = await mirrorProfilePicture({
       storage,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/huge.png',
       download: async () => ({
@@ -227,11 +224,10 @@ describe('mirrorProfilePicture', () => {
   });
 
   it('says the storage refused the write', async () => {
-    const fake = fakeMediaStorage({ failWith: 'bucket is full' });
+    const fake = fakeMediaStorage({ failWith: 'bucket is full', accountId: 'acc-1' });
 
     const mirrored = await mirrorProfilePicture({
       storage: fake.storage,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/a.png',
       download: async () => ({ buffer: new Uint8Array([1]), contentType: 'image/png' }),
@@ -253,7 +249,6 @@ describe('mirrorProfilePicture', () => {
 
     const mirrored = await mirrorProfilePicture({
       storage: blind,
-      accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/a.png',
       download: async () => ({ buffer: new Uint8Array([1]), contentType: 'image/png' }),

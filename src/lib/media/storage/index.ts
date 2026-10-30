@@ -3,9 +3,9 @@ import { R2MediaStorage, r2ConfigFromEnv } from "./r2";
 import { SupabaseMediaStorage } from "./supabase";
 import { DEFAULT_MEDIA_SETTINGS, readMediaSettings } from "./settings";
 import type { MediaSettings } from "./settings";
-import type { MediaStorage } from "./types";
+import type { MediaAccount, MediaBackend, MediaStorage } from "./types";
 
-export type { MediaBackend, MediaStorage, UploadTarget } from "./types";
+export type { MediaAccount, MediaBackend, MediaStorage, UploadTarget } from "./types";
 export {
   DEFAULT_MEDIA_SETTINGS,
   MEDIA_SIZE_OPTIONS,
@@ -17,6 +17,30 @@ export { resolveBucket } from "./resolve-bucket";
 export type { MediaFieldVisibility, MediaSettings } from "./settings";
 export { R2MediaStorage, r2ConfigFromEnv, r2Endpoint, r2MissingFromEnv } from "./r2";
 export { SupabaseMediaStorage } from "./supabase";
+
+/**
+ * The account a storage belongs to — its id and, on R2, the name its
+ * folder is named after.
+ *
+ * The name is only read when the backend needs it: Supabase's root is
+ * the account id itself, so a Supabase account never pays for the
+ * extra query.
+ */
+export async function readMediaAccount(
+  db: Pick<SupabaseClient, "from">,
+  accountId: string,
+  backend: MediaBackend = "supabase",
+): Promise<MediaAccount> {
+  if (backend !== "r2") return { id: accountId, name: null };
+
+  const { data } = await db
+    .from("accounts")
+    .select("name")
+    .eq("id", accountId)
+    .maybeSingle();
+
+  return { id: accountId, name: (data?.name as string | null) ?? null };
+}
 
 /**
  * The storage of an account.
@@ -40,7 +64,8 @@ export async function getMediaStorage(
   bucket?: string,
 ): Promise<MediaStorage> {
   const settings = await readMediaSettings(db, accountId);
-  return mediaStorageFor(settings, db, process.env, bucket);
+  const account = await readMediaAccount(db, accountId, settings.backend);
+  return mediaStorageFor(settings, db, process.env, bucket, account);
 }
 
 /**
@@ -64,7 +89,13 @@ export async function safeMediaStorage(
       "[media/storage] could not read the account's storage settings; using the default backend:",
       error instanceof Error ? error.message : error,
     );
-    return mediaStorageFor(DEFAULT_MEDIA_SETTINGS, db, process.env, bucket);
+    return mediaStorageFor(
+      DEFAULT_MEDIA_SETTINGS,
+      db,
+      process.env,
+      bucket,
+      { id: accountId, name: null },
+    );
   }
 }
 
@@ -79,6 +110,7 @@ export function mediaStorageFor(
   db: Pick<SupabaseClient, "from">,
   env: Record<string, string | undefined> = process.env,
   bucket?: string,
+  account: MediaAccount = { id: "", name: null },
 ): MediaStorage {
   const configuredBucket = settings.bucket || DEFAULT_MEDIA_SETTINGS.bucket;
   // The caller named a bucket other than the account's own: it wants a
@@ -102,6 +134,8 @@ export function mediaStorageFor(
         bucket: config.bucket,
         publicBaseUrl: config.publicBaseUrl,
         maxFileBytes: settings.maxFileBytes,
+        // The folder the account's files live in — the company's name.
+        account,
       });
     }
   }
@@ -111,5 +145,6 @@ export function mediaStorageFor(
     publicBaseUrl: settings.publicBaseUrl,
     client: db as SupabaseClient,
     maxFileBytes: settings.maxFileBytes,
+    account,
   });
 }

@@ -228,7 +228,7 @@ export async function storeContactAvatar(
 ): Promise<StoreContactAvatarOutcome> {
   const { db, accountId, storage, contactId, url, now = new Date() } = args;
 
-  const mirrored = await mirrorProfilePicture({ storage, accountId, contactId, url });
+  const mirrored = await mirrorProfilePicture({ storage, contactId, url });
 
   if (!mirrored.ok) {
     // The bytes could not be copied. Recorded as `pending`, so the next

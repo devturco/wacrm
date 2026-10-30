@@ -1,6 +1,13 @@
 import { AwsClient, AwsV4Signer } from "aws4fetch";
-import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
-import type { MediaStorage, UploadTarget } from "./types";
+import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
+import {
+  accountRoot,
+  encodeObjectPath,
+  folderForFile,
+  mediaPath,
+  stampFolder,
+} from "@/lib/media/layout";
+import type { MediaAccount, MediaStorage, UploadTarget } from "./types";
 
 export interface R2Config {
   /** Cloudflare account id — the first half of the endpoint. */
@@ -80,33 +87,56 @@ export function r2Endpoint(config: R2Config, key: string): string {
  * authentication at send time — the same premise as today's public
  * `chat-media` bucket.
  *
- * The account separation is unchanged: it lives in the object's first
- * path segment (`account-<uuid>/…`), exactly as in Supabase Storage.
+ * The account separation lives in the object's first path segment —
+ * here it is the COMPANY's folder (`storm-eletronicos-3f2a1b9c/`),
+ * which is also what makes the bucket browsable. R2 has no RLS, so
+ * that folder is the only boundary between two tenants; the short id
+ * in its name is what keeps two companies with the same name apart.
  */
 export class R2MediaStorage implements MediaStorage {
   readonly backend = "r2" as const;
   readonly bucket: string;
   readonly maxFileBytes: number;
+  readonly root: string;
 
   private readonly config: R2Config;
 
-  constructor(config: R2Config & { maxFileBytes?: number }) {
+  constructor(
+    config: R2Config & { maxFileBytes?: number; account: MediaAccount },
+  ) {
     this.config = config;
     this.bucket = config.bucket;
     this.maxFileBytes = config.maxFileBytes ?? CHAT_MEDIA_MAX_BYTES;
+    this.root = accountRoot("r2", config.account.id, config.account.name);
   }
 
   private endpoint(key: string): string {
     return r2Endpoint(this.config, key);
   }
 
+  pathFor(args: {
+    folder: "avatar" | "midias" | "documentos";
+    fileName: string;
+    contentType?: string | null;
+    segment?: string | null;
+  }): string {
+    return mediaPath({ root: this.root, ...args });
+  }
+
   async prepareUpload(args: {
-    accountId: string;
     fileName: string;
     contentType: string;
     sizeBytes: number;
   }): Promise<UploadTarget> {
-    const path = buildMediaPath(args.accountId, args.fileName);
+    // The file keeps the name the user gave it — the last segment of
+    // the url IS the file's name, and that is what the provider shows
+    // the recipient. The uniqueness lives in the folder above it.
+    const path = this.pathFor({
+      folder: folderForFile(args.fileName, args.contentType),
+      fileName: args.fileName,
+      contentType: args.contentType,
+      segment: stampFolder(),
+    });
     const url = await this.presign(path, args.contentType);
     return {
       mode: "presigned",
@@ -206,7 +236,7 @@ export class R2MediaStorage implements MediaStorage {
   }
 
   publicUrl(path: string): string {
-    return `${this.config.publicBaseUrl.replace(/\/$/, "")}/${path}`;
+    return `${this.config.publicBaseUrl.replace(/\/$/, "")}/${encodeObjectPath(path)}`;
   }
 }
 

@@ -39,10 +39,11 @@ provider ──GET bytes──► app ──PUT──► bucket (chat-media)
                                       └─► messages.media_url = URL pública
 ```
 
-O caminho do objeto é sempre escopado por conta:
+O caminho do objeto é sempre escopado por conta — e organizado por
+tipo, para o bucket ser navegável:
 
 ```
-account-<uuid>/inbound/<media id>/<nome>.<ext>
+<raiz da conta>/<midias|documentos>/<dia>-<hash>/<nome>.<ext>
 ```
 
 O primeiro segmento é o que a RLS do Storage olha — um agente da
@@ -54,6 +55,42 @@ depende do provedor, e sobrevive a qualquer mudança de fornecedor.
 
 Quando o espelho falha, a row continua apontando para a URL do
 provedor — e aí entra o [reparo sob demanda](#reparo-sob-demanda).
+
+### A árvore de arquivos
+
+Toda conta tem uma pasta própria, e dentro dela três pastas — o que
+cada uma guarda é óbvio pelo nome:
+
+| Pasta | O que entra |
+|---|---|
+| `avatar/` | A foto de perfil dos contatos |
+| `midias/` | Imagem, vídeo e áudio |
+| `documentos/` | PDF, planilha, zip — tudo que não é mídia |
+
+A raiz da árvore depende do backend:
+
+| Backend | A raiz |
+|---|---|
+| Supabase | `account-<uuid>` — a RLS do bucket casa com esse primeiro segmento, e só ele serve |
+| R2 | `nome-da-empresa-<8>` — o slug do nome da empresa mais um pedaço do id da conta |
+
+No R2 a pasta se chama pelo **nome da empresa** porque é o bucket que o
+cliente abre no console: `storm-eletronicos-3f2a1b9c/` diz, de
+imediato, de quem são os arquivos. O R2 **não tem RLS** — o caminho é a
+única fronteira entre duas contas, e o id no final da pasta é o que
+mantém duas empresas com o mesmo nome separadas (`accounts.name` não
+tem restrição de unicidade).
+
+O **nome do arquivo** é o nome que o usuário deu a ele, com acentos e
+espaços intactos. O último segmento da URL **é** o nome do arquivo —
+e é dele que o provedor tira o nome do anexo que chega no WhatsApp.
+Por isso a unicidade mora numa **pasta** acima do arquivo
+(`20261030-143205-412/` na subida, `20231114-cb17f1f3/` na entrada),
+e nunca no nome: um documento enviado como "Proposta Comercial.pdf"
+chega como "Proposta Comercial.pdf", não como um blob com timestamp.
+
+As regras moram em `src/lib/media/layout.ts` — puras, sem I/O, e
+testadas por conta própria.
 
 ### A normalização de tipo
 
@@ -179,7 +216,7 @@ provedor (a URL começa com `/api/whatsapp/media/`). Ele:
 1. Busca os bytes no provedor (dois passos: URL de mídia, depois o
    download).
 2. Normaliza o `Content-Type`.
-3. Grava no bucket no mesmo caminho `account-<uuid>/inbound/...`.
+3. Grava no bucket na mesma árvore (`<raiz>/midias|documentos/...`).
 4. Reescreve `messages.media_url` com a URL pública nova.
 
 A partir daí o arquivo é nosso e expira mais.
