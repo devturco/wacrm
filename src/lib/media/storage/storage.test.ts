@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { mediaStorageFor } from "./index";
+import { resolveBucket } from "./resolve-bucket";
 import { R2MediaStorage, r2ConfigFromEnv } from "./r2";
 import { SupabaseMediaStorage } from "./supabase";
 import {
@@ -311,6 +312,33 @@ describe("mediaStorageFor — whose bucket is it", () => {
 
     expect(storage.backend).toBe("supabase");
     expect(storage.bucket).toBe("flow-media");
+  });
+});
+
+describe("resolveBucket", () => {
+  const settings = {
+    backend: "r2" as const,
+    bucket: "atacados",
+    maxFileBytes: 104857600,
+    publicBaseUrl: null,
+  };
+
+  it("answers the account's own bucket for the default chat bucket", () => {
+    // The browser says "chat-media" because that is where chat media
+    // has always lived — it cannot know what the account named its
+    // bucket.
+    expect(resolveBucket(settings, "chat-media")).toBe("atacados");
+  });
+
+  it("leaves another bucket alone", () => {
+    // The Flows builder writes to `flow-media`, which has its own RLS.
+    expect(resolveBucket(settings, "flow-media")).toBe("flow-media");
+  });
+
+  it("falls back to the default when the account named none", () => {
+    expect(
+      resolveBucket({ ...settings, bucket: "" }, "chat-media"),
+    ).toBe("chat-media");
   });
 });
 

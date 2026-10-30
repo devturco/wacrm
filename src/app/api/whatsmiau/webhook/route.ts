@@ -37,6 +37,7 @@ import { NextResponse, after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { supabaseAdmin } from '@/lib/flows/admin-client';
+import { safeMediaStorage } from '@/lib/media/storage';
 import {
   MAX_WEBHOOK_BODY_BYTES,
   readCappedBody,
@@ -183,12 +184,18 @@ async function processWhatsmiauEvent(
   try {
     const ownerUserId = await resolveWhatsmiauOwnerUserId(db, config.account_id);
 
+    // The account's storage — Supabase bucket or R2, per `media_settings`.
+    // The mirror writes where the composer writes, so an incoming photo
+    // and an outgoing one land in the same place. `safeMediaStorage`
+    // never throws: a failure here must not cost the whole message.
+    const storage = await safeMediaStorage(config.account_id, db);
+
     const ctx: WhatsmiauInboundContext = {
       db,
       accountId: config.account_id,
       ownerUserId,
       instanceSettings: config.instance_settings,
-      storage: db.storage,
+      storage,
       // The row that owns this connection. The account may hold
       // several, so a status change has to land on THIS one.
       configId: config.id,

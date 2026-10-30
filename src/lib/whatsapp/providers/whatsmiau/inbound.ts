@@ -33,7 +33,7 @@ import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { flagBroadcastReply } from '@/lib/whatsapp/broadcast-recipient-webhook';
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync';
-import type { MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
+import type { MediaStorage } from '@/lib/media/storage';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 import {
   updateWhatsmiauConfigById,
@@ -58,8 +58,12 @@ export interface WhatsmiauInboundContext {
   /** Audit user stamped on the contact / conversation rows we create. */
   ownerUserId: string;
   instanceSettings: WhatsmiauInstanceSettings;
-  /** Service-role storage — used to mirror inbound media. */
-  storage: MirrorStorage;
+  /**
+   * The account's storage — used to mirror inbound media and the
+   * contact's picture. It is the account's configured backend (Supabase
+   * bucket or R2), not a fixed one.
+   */
+  storage: MediaStorage;
   /**
    * The row of the connection this event belongs to. The account may
    * hold several CRMBR connections, so a status change has to land on

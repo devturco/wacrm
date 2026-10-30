@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireRole, toErrorResponse } from "@/lib/auth/account";
-import { getMediaStorage } from "@/lib/media/storage";
+import {
+  mediaStorageFor,
+  readMediaSettings,
+  resolveBucket,
+} from "@/lib/media/storage";
 import { isAccountScopedPath } from "@/lib/media/object-path";
 import { getT } from "@/lib/i18n/translate";
 
@@ -45,7 +49,16 @@ export async function DELETE(request: Request) {
         ? body.bucket.trim()
         : "chat-media";
 
-    const storage = await getMediaStorage(ctx.accountId, ctx.supabase, bucket);
+    // The same resolution the upload used, so the object this removes
+    // is the one that was written — the account's own bucket, and the
+    // account's own backend.
+    const settings = await readMediaSettings(ctx.supabase, ctx.accountId);
+    const storage = await mediaStorageFor(
+      settings,
+      ctx.supabase,
+      process.env,
+      resolveBucket(settings, bucket),
+    );
     await storage.remove(path);
 
     return NextResponse.json({ ok: true });

@@ -7,10 +7,14 @@
 // instance runs with `saveMedia` on — there is nothing to sign, we just
 // fetch it.
 //
-// Either way the bytes have to land in our own `chat-media` bucket: the
-// provider's url expires, and an attachment that quietly rots into
-// "unavailable" is exactly the failure this module exists to prevent
-// (issue #466).
+// Either way the bytes have to land in our OWN storage: the provider's
+// url expires, and an attachment that quietly rots into "unavailable" is
+// exactly the failure this module exists to prevent (issue #466).
+//
+// WHERE that storage is, is the account's choice (`media_settings`) —
+// Supabase bucket or R2 — the same place the composer uploads to. The
+// rows written before the switch keep their old URLs and keep working;
+// nothing is copied or deleted to make room for the new backend.
 //
 // BEST EFFORT, like the Meta mirror: any failure returns `null` and the
 // caller keeps the provider's url, which still works for as long as the
@@ -18,12 +22,11 @@
 // ============================================================
 
 import {
-  MIRROR_BUCKET,
   mirrorFileName,
   mirrorObjectPath,
   normalizeMimeType,
-  type MirrorStorage,
 } from '@/lib/whatsapp/mirror-inbound-media';
+import type { MediaStorage } from '@/lib/media/storage';
 import { normalizeContentType } from '@/lib/media/content-type';
 import { CHAT_MEDIA_MAX_BYTES } from '@/lib/storage/upload-media';
 
@@ -39,7 +42,8 @@ export type WhatsmiauMediaDownloader = (
 ) => Promise<WhatsmiauMediaDownload>;
 
 export interface MirrorWhatsmiauMediaArgs {
-  storage: MirrorStorage;
+  /** The account's storage — Supabase bucket or R2, per `media_settings`. */
+  storage: MediaStorage;
   accountId: string;
   /** The provider's message id — makes the object path deterministic. */
   mediaId: string;
@@ -112,7 +116,7 @@ export const downloadWhatsmiauMedia: WhatsmiauMediaDownloader = async (
 };
 
 /**
- * Copy an inbound WhatsMiau attachment into `chat-media`.
+ * Copy an inbound WhatsMiau attachment into the account's storage.
  *
  * @returns the durable public URL, or `null` when the mirror was
  *          skipped or failed — in which case the caller keeps the
@@ -130,7 +134,8 @@ export async function mirrorWhatsmiauMedia(
     mimeType,
     fileName,
     messageTimestamp,
-    maxBytes = CHAT_MEDIA_MAX_BYTES,
+    // The account's ceiling, capped by what the bucket accepts.
+    maxBytes = Math.min(storage.maxFileBytes, CHAT_MEDIA_MAX_BYTES),
     download = downloadWhatsmiauMedia,
   } = args;
 
@@ -181,22 +186,13 @@ export async function mirrorWhatsmiauMedia(
     });
     const path = mirrorObjectPath(accountId, mediaId, objectName);
 
-    const { error } = await storage.from(MIRROR_BUCKET).upload(path, body, {
+    const { publicUrl } = await storage.put({
+      path,
+      body,
       contentType: uploadType,
       cacheControl: '3600',
       upsert: true,
     });
-    if (error) {
-      console.warn(
-        `[whatsmiau-mirror] upload failed for ${mediaId} (${uploadType}):`,
-        error.message,
-      );
-      return null;
-    }
-
-    const {
-      data: { publicUrl },
-    } = storage.from(MIRROR_BUCKET).getPublicUrl(path);
     return publicUrl || null;
   } catch (error) {
     console.warn('[whatsmiau-mirror] could not mirror', mediaId, error);

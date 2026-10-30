@@ -8,16 +8,16 @@
 // possible here.
 //
 // The URL the provider hands back lives on WhatsApp's CDN and EXPIRES.
-// The bytes are therefore copied into our own `chat-media` bucket and
+// The bytes are therefore copied into our own storage and
 // `contacts.avatar_url` points at OUR object — durable, and served by
-// the same public bucket that already carries the chat media.
+// the same backend that already carries the chat media.
 //
 // Everything here is BEST EFFORT, like the inbound media mirror: a
 // picture is never worth losing a message over. Every failure returns
 // `null` and the caller carries on.
 // ============================================================
 
-import { MIRROR_BUCKET, type MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
+import type { MediaStorage } from '@/lib/media/storage';
 import { buildMediaPath } from '@/lib/storage/upload-media';
 
 import type { WhatsmiauConnection } from '../types';
@@ -39,9 +39,8 @@ export const PROFILE_PICTURE_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_PICTURE_DOWNLOAD_TIMEOUT_MS = 10_000;
 
 /**
- * The MIME types the `chat-media` bucket accepts for an image
- * (migration 039). Anything else is stored as JPEG — WhatsApp serves
- * profile pictures as JPEG in practice.
+ * The MIME types an image is stored as. Anything else becomes JPEG —
+ * WhatsApp serves profile pictures as JPEG in practice.
  */
 const ALLOWED_IMAGE_TYPES: Record<string, { mime: string; ext: string }> = {
   'image/jpeg': { mime: 'image/jpeg', ext: 'jpg' },
@@ -189,7 +188,8 @@ export const downloadProfilePicture: ProfilePictureDownloader = async (url) => {
 };
 
 export interface MirrorProfilePictureArgs {
-  storage: MirrorStorage;
+  /** The account's storage — Supabase bucket or R2, per `media_settings`. */
+  storage: MediaStorage;
   accountId: string;
   /** The contact — the object path is keyed on it, so it is stable. */
   contactId: string;
@@ -206,7 +206,7 @@ export interface MirroredProfilePicture {
 }
 
 /**
- * Copy the picture into `chat-media`.
+ * Copy the picture into the account's storage.
  *
  * The path is keyed on the contact id, so a second attempt overwrites
  * the same object instead of littering the bucket.
@@ -259,18 +259,13 @@ export async function mirrorProfilePicture(
 
   try {
     const path = buildMediaPath(accountId, `${contactId}.${type.ext}`, null, AVATAR_FOLDER);
-    const { error } = await storage.from(MIRROR_BUCKET).upload(path, bytes, {
+    const { publicUrl } = await storage.put({
+      path,
+      body: bytes,
       contentType: type.mime,
       cacheControl: '3600',
       upsert: true,
     });
-    if (error) {
-      console.warn('[whatsmiau-avatar] the upload failed:', error.message);
-      return null;
-    }
-    const {
-      data: { publicUrl },
-    } = storage.from(MIRROR_BUCKET).getPublicUrl(path);
     if (!publicUrl) return null;
     return { publicUrl, path };
   } catch (error) {

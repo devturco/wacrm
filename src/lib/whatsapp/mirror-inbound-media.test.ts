@@ -1,54 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  MIRROR_BUCKET,
   mirrorFileName,
   mirrorInboundMedia,
   mirrorObjectPath,
   normalizeMimeType,
 } from "./mirror-inbound-media";
+import { fakeMediaStorage } from "@/lib/media/storage/fake-storage.test-helper";
 import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 
 const ACCOUNT = "11111111-2222-3333-4444-555555555555";
 const MEDIA_ID = "1234567890123456";
 
 /**
- * Minimal stand-in for `supabase.storage`. Records every upload so a
- * test can assert on the object path and the content type without a
- * Supabase project.
+ * The account's storage, standing in for the real thing. Records every
+ * write so a test can assert on the object path and the content type
+ * without a Supabase project.
  */
 function fakeStorage(uploadError: { message: string } | null = null) {
-  const uploads: Array<{
-    bucket: string;
-    path: string;
-    body: ReadableStream<Uint8Array> | Uint8Array | Buffer;
-    options: { contentType: string; cacheControl: string; upsert: boolean };
-  }> = [];
-
-  const storage = {
-    from(bucket: string) {
-      return {
-        async upload(
-          path: string,
-          body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
-          options: {
-            contentType: string;
-            cacheControl: string;
-            upsert: boolean;
-          },
-        ) {
-          uploads.push({ bucket, path, body, options });
-          return { error: uploadError };
-        },
-        getPublicUrl(path: string) {
-          return {
-            data: { publicUrl: `https://cdn.test/storage/${bucket}/${path}` },
-          };
-        },
-      };
-    },
-  };
-
-  return { storage, uploads };
+  const fake = fakeMediaStorage(
+    uploadError ? { failWith: uploadError.message } : {},
+  );
+  return { storage: fake.storage, uploads: fake.puts, fake };
 }
 
 /** A stream carrying `bytes` bytes, like the real downloader returns. */
@@ -179,13 +151,43 @@ describe("mirrorInboundMedia", () => {
     });
 
     expect(uploads).toHaveLength(1);
-    expect(uploads[0].bucket).toBe(MIRROR_BUCKET);
+    expect(storage.bucket).toBe("chat-media");
     expect(uploads[0].path).toBe(
       `account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
     );
-    expect(uploads[0].options.contentType).toBe("image/jpeg");
+    expect(uploads[0].contentType).toBe("image/jpeg");
     expect(url).toBe(
       `https://cdn.test/storage/chat-media/account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
+    );
+  });
+
+  it("writes to the backend the account chose — R2 when that is the setting", async () => {
+    // The mirror used to be hardcoded to the Supabase bucket: an
+    // account that had chosen R2 received every photo there anyway,
+    // while the composer wrote to R2. Both directions now follow the
+    // same setting.
+    const fake = fakeMediaStorage({
+      backend: "r2",
+      bucket: "crmbr-media",
+      publicBase: "https://media.test",
+    });
+    const download = fakeDownload(1024);
+
+    const url = await mirrorInboundMedia({
+      ...BASE,
+      storage: fake.storage,
+      mimeType: "image/jpeg",
+      fileSize: 1024,
+      messageTimestamp: "1754899200",
+      download,
+    });
+
+    expect(fake.puts).toHaveLength(1);
+    expect(fake.puts[0].path).toBe(
+      `account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
+    );
+    expect(url).toBe(
+      `https://media.test/account-${ACCOUNT}/inbound/${MEDIA_ID}/image-1754899200.jpg`,
     );
   });
 
@@ -205,7 +207,7 @@ describe("mirrorInboundMedia", () => {
     expect(uploads).toHaveLength(2);
     expect(uploads[0].path).toBe(uploads[1].path);
     // upsert, so the second write replaces rather than erroring.
-    expect(uploads[1].options.upsert).toBe(true);
+    expect(uploads[1].upsert).toBe(true);
   });
 
   it("strips MIME parameters before handing the type to Storage", async () => {
@@ -220,7 +222,7 @@ describe("mirrorInboundMedia", () => {
       download: fakeDownload(2048, "audio/ogg; codecs=opus"),
     });
 
-    expect(uploads[0].options.contentType).toBe("audio/ogg");
+    expect(uploads[0].contentType).toBe("audio/ogg");
     expect(uploads[0].path).toMatch(/\.ogg$/);
   });
 
@@ -238,7 +240,7 @@ describe("mirrorInboundMedia", () => {
     });
 
     expect(url).not.toBeNull();
-    expect(uploads[0].options.contentType).toBe("application/octet-stream");
+    expect(uploads[0].contentType).toBe("application/octet-stream");
   });
 
   it("never declares active content inline", async () => {
@@ -251,7 +253,7 @@ describe("mirrorInboundMedia", () => {
       download: fakeDownload(1024, "text/html"),
     });
 
-    expect(uploads[0].options.contentType).toBe("application/octet-stream");
+    expect(uploads[0].contentType).toBe("application/octet-stream");
   });
 
   it("skips oversized media without downloading it", async () => {
@@ -331,6 +333,6 @@ describe("mirrorInboundMedia", () => {
       download: fakeDownload(1024, "image/png"),
     });
 
-    expect(uploads[0].options.contentType).toBe("image/png");
+    expect(uploads[0].contentType).toBe("image/png");
   });
 });

@@ -87,6 +87,7 @@ import {
   type WhatsmiauInboundContext,
 } from './inbound';
 import { findExistingContact } from '@/lib/contacts/dedupe';
+import { fakeMediaStorage } from '@/lib/media/storage/fake-storage.test-helper';
 import type { NormalizedInboundMessage } from './normalize';
 
 type Row = Record<string, unknown>;
@@ -171,12 +172,7 @@ function context(db: SupabaseClient): WhatsmiauInboundContext {
         base64: false,
       },
     },
-    storage: {
-      from: () => ({
-        upload: async () => ({ error: null }),
-        getPublicUrl: () => ({ data: { publicUrl: 'https://cdn.test/x.png' } }),
-      }),
-    },
+    storage: fakeMediaStorage().storage,
   };
 }
 

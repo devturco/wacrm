@@ -1,19 +1,31 @@
 import { downloadMediaStream } from "./meta-api";
 import { extensionForMime } from "@/lib/media/filename";
 import { normalizeContentType } from "@/lib/media/content-type";
+import type { MediaStorage } from "@/lib/media/storage";
 import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 
 /**
- * Copies inbound WhatsApp media into the `chat-media` bucket so it
+ * Copies inbound WhatsApp media into the account's OWN storage so it
  * outlives Meta's retention window (issue #466).
  *
  * Meta deletes media roughly 30 days after receipt. Before this, the
  * webhook stored only a pointer — `/api/whatsapp/media/<mediaId>` — and
  * the proxy route behind it re-fetched from Meta on every single view,
  * so an attachment quietly became unviewable a month after it arrived.
- * Outbound media never had the problem: the composer uploads to
- * `chat-media` (migration 023) and stores a durable public URL. This
- * puts inbound on the same footing.
+ * Outbound media never had the problem: the composer uploads to the
+ * account's storage (migration 023) and stores a durable public URL.
+ * This puts inbound on the same footing.
+ *
+ * WHERE the bytes land is the account's choice (`media_settings`): the
+ * Supabase `chat-media` bucket or Cloudflare R2. The mirror follows
+ * that choice — the same one the composer already obeys. This used to
+ * be hardcoded to the Supabase bucket, so an account that had chosen
+ * R2 still received every incoming photo there.
+ *
+ * The history is NOT rewritten: `media_url` keeps the full public URL
+ * of whatever backend served the attachment, and the objects already in
+ * the Supabase bucket stay exactly where they are. A row written before
+ * the switch keeps pointing at the Supabase URL and keeps rendering.
  *
  * Everything here is BEST EFFORT and returns `null` rather than
  * throwing. The caller is the Meta webhook, and a webhook that starts
@@ -24,21 +36,6 @@ import { buildMediaPath, CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media
  * for as long as Meta holds the bytes.
  */
 
-/** Service-role Storage surface this needs. Narrow so tests can fake it. */
-export interface MirrorStorage {
-  from(bucket: string): {
-    upload(
-      path: string,
-      body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
-      options: { contentType: string; cacheControl: string; upsert: boolean },
-    ): Promise<{ error: { message: string } | null }>;
-    getPublicUrl(path: string): { data: { publicUrl: string } };
-  };
-}
-
-/** Bucket the composer already writes to; inbound joins it. */
-export const MIRROR_BUCKET = "chat-media";
-
 /**
  * Second path segment for mirrored inbound objects, so a bucket listing
  * separates "things a customer sent us" from "things we sent". RLS only
@@ -48,8 +45,12 @@ export const MIRROR_BUCKET = "chat-media";
 export const MIRROR_FOLDER = "inbound";
 
 export interface MirrorInboundMediaArgs {
-  /** Service-role `supabase.storage` — RLS is bypassed, MIME/size limits are not. */
-  storage: MirrorStorage;
+  /**
+   * The account's storage — Supabase bucket or R2, per `media_settings`.
+   * The mirror writes wherever the composer writes, so both directions
+   * of a conversation land in the same place.
+   */
+  storage: MediaStorage;
   /** Tenant. Drives the account-scoped path the bucket's policies expect. */
   accountId: string;
   /** Meta's media id. Makes the object path deterministic. */
@@ -164,7 +165,7 @@ export function mirrorObjectPath(
 }
 
 /**
- * Download the bytes from Meta and put them in `chat-media`.
+ * Download the bytes from Meta and put them in the account's storage.
  *
  * @returns the durable public URL, or `null` if the mirror was skipped
  *          or failed — in which case the caller must fall back to the
@@ -183,7 +184,8 @@ export async function mirrorInboundMedia(
     fileSize,
     fileName,
     messageTimestamp,
-    maxBytes = CHAT_MEDIA_MAX_BYTES,
+    // The account's ceiling, capped by what the bucket accepts.
+    maxBytes = Math.min(storage.maxFileBytes, CHAT_MEDIA_MAX_BYTES),
     download = downloadMediaStream,
   } = args;
 
@@ -227,22 +229,23 @@ export async function mirrorInboundMedia(
     // rare Meta redelivery the second pass rewrites byte-identical
     // content at the same key instead of erroring or orphaning a
     // duplicate.
-    const { error } = await storage.from(MIRROR_BUCKET).upload(path, stream, {
-      contentType: uploadType,
-      cacheControl: "3600",
-      upsert: true,
-    });
-    if (error) {
+    let publicUrl: string;
+    try {
+      ({ publicUrl } = await storage.put({
+        path,
+        body: stream,
+        contentType: uploadType,
+        cacheControl: "3600",
+        upsert: true,
+      }));
+    } catch (error) {
       console.warn(
         `[mirror-media] upload failed for ${mediaId} (${uploadType}):`,
-        error.message,
+        error instanceof Error ? error.message : error,
       );
       return null;
     }
 
-    const {
-      data: { publicUrl },
-    } = storage.from(MIRROR_BUCKET).getPublicUrl(path);
     return publicUrl || null;
   } catch (error) {
     console.warn(

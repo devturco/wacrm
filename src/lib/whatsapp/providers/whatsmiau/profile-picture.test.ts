@@ -9,7 +9,7 @@ import {
   mirrorProfilePicture,
   readProfilePictureUrl,
 } from './profile-picture';
-import type { MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
+import { fakeMediaStorage } from '@/lib/media/storage/fake-storage.test-helper';
 import type { WhatsmiauConnection } from '../types';
 
 const h = vi.hoisted(() => ({
@@ -32,26 +32,9 @@ const connection: WhatsmiauConnection = {
   baseUrl: 'https://api.test/v2',
 };
 
-function fakeStorage(publicUrl = 'https://cdn.test/avatars/contact-1.jpg') {
-  const uploads: { path: string; contentType: string; bytes: number }[] = [];
-  const storage: MirrorStorage = {
-    from: () => ({
-      upload: async (
-        path: string,
-        body: Uint8Array | Buffer,
-        options: { contentType: string },
-      ) => {
-        uploads.push({
-          path,
-          contentType: options.contentType,
-          bytes: body.byteLength,
-        });
-        return { error: null };
-      },
-      getPublicUrl: (path: string) => ({ data: { publicUrl: `${publicUrl}#${path}` } }),
-    }),
-  };
-  return { storage, uploads };
+function fakeStorage(publicBase = 'https://cdn.test/avatars/contact-1.jpg') {
+  const fake = fakeMediaStorage({ publicBase });
+  return { storage: fake.storage, uploads: fake.puts };
 }
 
 describe('readProfilePictureUrl', () => {
@@ -151,7 +134,7 @@ describe('imageTypeFor', () => {
 });
 
 describe('mirrorProfilePicture', () => {
-  it('copies the picture into the account folder of chat-media', async () => {
+  it('copies the picture into the account folder of the account storage', async () => {
     const { storage, uploads } = fakeStorage();
     const download = vi.fn(async () => ({
       buffer: new Uint8Array([1, 2, 3]),
@@ -242,15 +225,10 @@ describe('mirrorProfilePicture', () => {
   });
 
   it('answers null when the upload fails', async () => {
-    const storage: MirrorStorage = {
-      from: () => ({
-        upload: async () => ({ error: { message: 'bucket is full' } }),
-        getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.test/${path}` } }),
-      }),
-    };
+    const fake = fakeMediaStorage({ failWith: 'bucket is full' });
 
     const mirrored = await mirrorProfilePicture({
-      storage,
+      storage: fake.storage,
       accountId: 'acc-1',
       contactId: 'contact-1',
       url: 'https://cdn.test/a.png',

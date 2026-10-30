@@ -214,6 +214,33 @@ describe("repairMessageMedia", () => {
     expect(updates).toHaveLength(0);
   });
 
+  it("leaves the history alone when the account moved to R2", async () => {
+    // The row points at the Supabase bucket, where the object still
+    // lives and keeps being served. The account switched its backend
+    // afterwards: the old url keeps working, so nothing is re-uploaded
+    // and nothing is rewritten. Only the attachments that arrive from
+    // now on follow the new backend.
+    const durable =
+      "https://proj.supabase.co/storage/v1/object/public/chat-media/account-acc-1/inbound/x/a.jpg";
+    const { db, updates } = fakeDb({
+      messages: { data: { ...message, media_url: durable } },
+      conversations: { data: { account_id: ACCOUNT } },
+    });
+    const { storage, put } = fakeStorage("https://media.crmbr.com/other");
+
+    const outcome = await repairMessageMedia({
+      db,
+      accountId: ACCOUNT,
+      messageId: "m1",
+      env: { ...env, MEDIA_PUBLIC_BASE_URL: "https://media.crmbr.com" },
+      deps: { storage },
+    });
+
+    expect(outcome).toEqual({ ok: true, url: durable, repaired: false });
+    expect(put).not.toHaveBeenCalled();
+    expect(updates).toHaveLength(0);
+  });
+
   it("fetches a provider url directly and re-uploads it", async () => {
     const { db } = fakeDb({
       messages: {

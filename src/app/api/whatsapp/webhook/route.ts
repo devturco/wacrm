@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
 import { mirrorInboundMedia } from '@/lib/whatsapp/mirror-inbound-media'
+import { safeMediaStorage } from '@/lib/media/storage'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
 import {
   hasUsableIdentity,
@@ -1038,18 +1039,31 @@ async function parseMessageContent(
       const info = await getMediaUrl({ mediaId, accessToken })
 
       if (mirror) {
-        const mirrored = await mirrorInboundMedia({
-          storage: supabaseAdmin().storage,
-          accountId: mirror.accountId,
-          mediaId,
-          downloadUrl: info.url,
-          accessToken,
-          mimeType: info.mimeType,
-          fileSize: info.fileSize,
-          fileName,
-          messageTimestamp: message.timestamp,
-        })
-        if (mirrored) return mirrored
+        // The account's OWN backend — Supabase bucket or R2, per
+        // `media_settings`. Resolved here, inside the media branch, so
+        // a text message costs no extra query. `safeMediaStorage` never
+        // throws, and the mirror swallows its own failures: the worst
+        // case is the proxy URL below, which still works.
+        try {
+          const storage = await safeMediaStorage(mirror.accountId, supabaseAdmin())
+          const mirrored = await mirrorInboundMedia({
+            storage,
+            accountId: mirror.accountId,
+            mediaId,
+            downloadUrl: info.url,
+            accessToken,
+            mimeType: info.mimeType,
+            fileSize: info.fileSize,
+            fileName,
+            messageTimestamp: message.timestamp,
+          })
+          if (mirrored) return mirrored
+        } catch (error) {
+          console.warn(
+            '[webhook] the media mirror failed:',
+            error instanceof Error ? error.message : error
+          )
+        }
       }
 
       return `/api/whatsapp/media/${mediaId}`

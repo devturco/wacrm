@@ -5,24 +5,11 @@ import {
   mirrorWhatsmiauMedia,
   type MirrorWhatsmiauMediaArgs,
 } from './mirror-media';
-import type { MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
+import { fakeMediaStorage } from '@/lib/media/storage/fake-storage.test-helper';
 
-function fakeStorage(publicUrl = 'https://cdn.test/public.png') {
-  const uploads: { path: string; contentType: string }[] = [];
-  const storage: MirrorStorage = {
-    from: () => ({
-      upload: async (
-        path: string,
-        _body: ReadableStream<Uint8Array> | Uint8Array | Buffer,
-        options: { contentType: string },
-      ) => {
-        uploads.push({ path, contentType: options.contentType });
-        return { error: null };
-      },
-      getPublicUrl: (path: string) => ({ data: { publicUrl: `${publicUrl}#${path}` } }),
-    }),
-  };
-  return { storage, uploads };
+function fakeStorage(publicBase = 'https://cdn.test/public.png') {
+  const fake = fakeMediaStorage({ publicBase });
+  return { storage: fake.storage, uploads: fake.puts };
 }
 
 /** A stream carrying `bytes` bytes, like the real downloader returns. */
@@ -42,7 +29,7 @@ const baseArgs = {
 } satisfies Partial<MirrorWhatsmiauMediaArgs>;
 
 describe('mirrorWhatsmiauMedia', () => {
-  it('downloads the public url and stores it in chat-media', async () => {
+  it('downloads the public url and stores it in the account storage', async () => {
     const { storage, uploads } = fakeStorage();
     const download = vi.fn(async () => ({
       stream: fakeStream(3),
@@ -61,6 +48,34 @@ describe('mirrorWhatsmiauMedia', () => {
     expect(uploads[0]?.path).toContain('inbound');
     expect(uploads[0]?.contentType).toBe('image/png');
     expect(url).toContain('https://cdn.test/public.png');
+  });
+
+  it('writes to the backend the account chose — R2 when that is the setting', async () => {
+    // The mirror used to be hardcoded to the Supabase bucket, so an
+    // account on R2 received every photo there while the composer
+    // wrote to R2. Both directions now follow the same setting.
+    const fake = fakeMediaStorage({
+      backend: 'r2',
+      bucket: 'crmbr-media',
+      publicBase: 'https://media.test',
+    });
+    const download = vi.fn(async () => ({
+      stream: fakeStream(3),
+      contentType: 'image/png',
+    }));
+
+    const url = await mirrorWhatsmiauMedia({
+      ...baseArgs,
+      storage: fake.storage,
+      mediaUrl: 'https://cdn.test/original.png',
+      download,
+    } as MirrorWhatsmiauMediaArgs);
+
+    expect(fake.puts).toHaveLength(1);
+    expect(fake.puts[0]?.path).toBe(
+      'account-acc-1/inbound/MSG_001/image.png',
+    );
+    expect(url).toBe('https://media.test/account-acc-1/inbound/MSG_001/image.png');
   });
 
   it('keeps the media id in its own path segment, so the name stays clean', async () => {

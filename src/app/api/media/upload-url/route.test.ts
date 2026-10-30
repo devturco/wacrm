@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   backend: "supabase" as "supabase" | "r2",
+  bucket: "chat-media",
   maxFileBytes: 104857600,
   prepared: [] as {
     accountId: string;
@@ -34,9 +35,17 @@ vi.mock("@/lib/auth/account", () => ({
 }));
 
 vi.mock("@/lib/media/storage", () => ({
-  getMediaStorage: async () => ({
+  readMediaSettings: async () => ({
     backend: h.backend,
-    bucket: "chat-media",
+    bucket: h.bucket,
+    maxFileBytes: h.maxFileBytes,
+    publicBaseUrl: null,
+  }),
+  resolveBucket: (settings: { bucket: string }, requested: string) =>
+    requested === "chat-media" ? settings.bucket : requested,
+  mediaStorageFor: () => ({
+    backend: h.backend,
+    bucket: h.bucket,
     maxFileBytes: h.maxFileBytes,
     prepareUpload: async (args: {
       accountId: string;
@@ -48,7 +57,7 @@ vi.mock("@/lib/media/storage", () => ({
       return {
         mode: h.backend === "r2" ? "presigned" : "supabase",
         path: `account-acc-1/${args.fileName}`,
-        bucket: "chat-media",
+        bucket: h.bucket,
         url: h.backend === "r2" ? "https://signed.test/object" : undefined,
         headers:
           h.backend === "r2"
@@ -73,6 +82,7 @@ function post(body: Record<string, unknown>) {
 
 beforeEach(() => {
   h.backend = "supabase";
+  h.bucket = "chat-media";
   h.maxFileBytes = 104857600;
   h.prepared = [];
 });
@@ -129,6 +139,23 @@ describe("POST /api/media/upload-url", () => {
 
     expect(res.status).toBe(400);
     expect(h.prepared).toHaveLength(0);
+  });
+
+  it("writes to the account's own bucket, whatever it is named", async () => {
+    // The browser says "chat-media"; the account named its bucket
+    // "atacados". The upload must follow the ACCOUNT — otherwise the
+    // composer writes to one bucket and the inbound mirror to another,
+    // and the account's media ends up split in two.
+    h.bucket = "atacados";
+
+    const res = await post({
+      fileName: "invoice.pdf",
+      contentType: "application/pdf",
+      sizeBytes: 2048,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.bucket).toBe("atacados");
   });
 
   it("hands back a pre-signed URL when the account is on R2", async () => {

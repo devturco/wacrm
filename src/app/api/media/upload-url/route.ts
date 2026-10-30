@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireRole, toErrorResponse } from "@/lib/auth/account";
-import { getMediaStorage } from "@/lib/media/storage";
+import {
+  mediaStorageFor,
+  readMediaSettings,
+  resolveBucket,
+} from "@/lib/media/storage";
 import { normalizeContentType } from "@/lib/media/content-type";
 import { CHAT_MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
 import { getT } from "@/lib/i18n/translate";
@@ -48,7 +52,17 @@ export async function POST(request: Request) {
         ? body.bucket.trim()
         : "chat-media";
 
-    const storage = await getMediaStorage(ctx.accountId, ctx.supabase, bucket);
+    // The browser names the bucket it wants; the account decides where
+    // its own media lives. `resolveBucket` turns "chat-media" into the
+    // account's configured bucket, so the upload lands in the same
+    // place the mirror and the repair write to.
+    const settings = await readMediaSettings(ctx.supabase, ctx.accountId);
+    const storage = await mediaStorageFor(
+      settings,
+      ctx.supabase,
+      process.env,
+      resolveBucket(settings, bucket),
+    );
 
     // The account's own ceiling, capped by what the bucket accepts.
     const maxBytes = Math.min(

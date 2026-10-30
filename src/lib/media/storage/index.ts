@@ -13,6 +13,7 @@ export {
   mediaFieldVisibility,
   readMediaSettings,
 } from "./settings";
+export { resolveBucket } from "./resolve-bucket";
 export type { MediaFieldVisibility, MediaSettings } from "./settings";
 export { R2MediaStorage, r2ConfigFromEnv, r2Endpoint, r2MissingFromEnv } from "./r2";
 export { SupabaseMediaStorage } from "./supabase";
@@ -28,6 +29,10 @@ export { SupabaseMediaStorage } from "./supabase";
  * other than the account's configured one (the Flows builder writes to
  * `flow-media`) always stays on Supabase: R2 has one bucket per
  * account, and the extra Supabase buckets have their own RLS.
+ *
+ * A BROWSER request names `chat-media` for "the account's own media" —
+ * run it through {@link resolveBucket} first, or an account that
+ * renamed its bucket sends its uploads to the wrong place.
  */
 export async function getMediaStorage(
   accountId: string,
@@ -36,6 +41,31 @@ export async function getMediaStorage(
 ): Promise<MediaStorage> {
   const settings = await readMediaSettings(db, accountId);
   return mediaStorageFor(settings, db, process.env, bucket);
+}
+
+/**
+ * The account's storage, never throwing.
+ *
+ * The webhooks are the callers that cannot afford an exception: a
+ * throw there loses the whole message, and a lost message is worse than
+ * an attachment that was not mirrored. A broken settings read falls
+ * back to the Supabase bucket — the backend every attachment lived in
+ * before the setting existed, and one whose objects stay readable.
+ */
+export async function safeMediaStorage(
+  accountId: string,
+  db: Pick<SupabaseClient, "from">,
+  bucket?: string,
+): Promise<MediaStorage> {
+  try {
+    return await getMediaStorage(accountId, db, bucket);
+  } catch (error) {
+    console.warn(
+      "[media/storage] could not read the account's storage settings; using the default backend:",
+      error instanceof Error ? error.message : error,
+    );
+    return mediaStorageFor(DEFAULT_MEDIA_SETTINGS, db, process.env, bucket);
+  }
 }
 
 /**

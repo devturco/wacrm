@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { AVATAR_RECHECK_AFTER_MS, refreshContactAvatar } from './avatar';
-import type { MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
+import { fakeMediaStorage } from '@/lib/media/storage/fake-storage.test-helper';
 import type { WhatsmiauConnection } from '../types';
 
 const h = vi.hoisted(() => ({
@@ -93,12 +93,7 @@ const connection: WhatsmiauConnection = {
   baseUrl: 'https://api.test/v2',
 };
 
-const storage: MirrorStorage = {
-  from: () => ({
-    upload: async () => ({ error: null }),
-    getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.test/${path}` } }),
-  }),
-};
+const storage = fakeMediaStorage().storage;
 
 const NOW = new Date('2026-10-29T12:00:00.000Z');
 

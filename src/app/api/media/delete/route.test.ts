@@ -27,7 +27,15 @@ vi.mock("@/lib/auth/account", () => ({
 }));
 
 vi.mock("@/lib/media/storage", () => ({
-  getMediaStorage: async () => ({
+  readMediaSettings: async () => ({
+    backend: "supabase",
+    bucket: "chat-media",
+    maxFileBytes: 104857600,
+    publicBaseUrl: null,
+  }),
+  resolveBucket: (settings: { bucket: string }, requested: string) =>
+    requested === "chat-media" ? settings.bucket : requested,
+  mediaStorageFor: () => ({
     backend: "supabase",
     bucket: "chat-media",
     maxFileBytes: 104857600,

@@ -16,7 +16,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import type { MirrorStorage } from '@/lib/whatsapp/mirror-inbound-media';
+import type { MediaStorage } from '@/lib/media/storage';
 import type { WhatsmiauConnection } from '../types';
 
 import { fetchProfilePictureUrl, mirrorProfilePicture } from './profile-picture';
@@ -45,8 +45,8 @@ let warnedAboutMissingTable = false;
 export interface RefreshContactAvatarArgs {
   db: SupabaseClient;
   accountId: string;
-  /** Service-role storage — the picture lands in `chat-media`. */
-  storage: MirrorStorage;
+  /** The account's storage — the picture lands in the account's backend. */
+  storage: MediaStorage;
   conn: WhatsmiauConnection;
   contactId: string;
   /** Digits-only phone (or the full JID — the provider accepts both). */
