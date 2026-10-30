@@ -38,6 +38,7 @@ import {
   WEBHOOK_URL_UNREACHABLE_HINT,
   WEBHOOK_URL_UNREACHABLE_MESSAGE,
 } from '@/lib/whatsapp/providers/whatsmiau/management';
+import { resolveEvents } from '@/lib/whatsapp/providers/whatsmiau/events';
 import {
   generateWebhookSecret,
   isProviderInstanceNameTaken,
@@ -188,6 +189,11 @@ export async function POST(request: Request) {
 
     const webhookSecret = generateWebhookSecret();
     const settings = mergeInstanceSettings(null, {});
+    // A brand-new connection is offered every event there is — it has
+    // no history to respect.
+    const resolved = resolveEvents(settings.webhook.events, undefined);
+    settings.webhook.events = resolved.events;
+    settings.webhook.offeredEvents = resolved.offeredEvents;
 
     // TWO webhook configs on purpose:
     //   - `storedSettings` is what we keep in the database. It holds the

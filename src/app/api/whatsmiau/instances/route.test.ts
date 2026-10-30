@@ -1,9 +1,11 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { WhatsmiauConfigRow } from '@/lib/whatsapp/whatsmiau-config';
+
 const h = vi.hoisted(() => ({
   db: {} as Record<string, unknown>,
   accountName: 'Studio Bella',
-  existing: null as Record<string, unknown> | null,
+  existing: null as WhatsmiauConfigRow | null,
   takenNames: [] as string[],
   createInstance: vi.fn(async () => {}),
   setWebhook: vi.fn(async () => {}),
@@ -81,10 +83,11 @@ vi.mock('@/lib/whatsapp/providers/whatsmiau/instances', async (importOriginal) =
 import { POST } from '../instances/route';
 import { GET as GET_INSTANCE, PUT } from '../instances/[name]/route';
 
+
 const CUSTOMER_NAME = 'Atendimento 01';
 const PROVIDER_NAME = 'studio_bella_atendimento_01';
 
-function configRow() {
+function configRow(): WhatsmiauConfigRow {
   return {
     id: 'row-1',
     account_id: 'acc-1',
@@ -267,7 +270,7 @@ describe('POST /api/whatsmiau/instances', () => {
   });
 
   it('pushes the webhook to the canonical public address, not to the request one', async () => {
-    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://crm.example.com');
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://app.crmbr.com');
     const res = await POST(
       new Request('http://localhost:3000/api/whatsmiau/instances', {
         method: 'POST',
@@ -280,7 +283,25 @@ describe('POST /api/whatsmiau/instances', () => {
       unknown,
       { settings: { webhook: { url: string } } },
     ];
-    expect(args.settings.webhook.url).toBe('https://crm.example.com/api/whatsmiau/webhook');
+    expect(args.settings.webhook.url).toBe('https://app.crmbr.com/api/whatsmiau/webhook');
+  });
+
+  it('refuses to create a connection for a documentation placeholder', async () => {
+    // `crm.example.com` is what a template carries — it does not
+    // resolve, so the provider would answer "no such host" to every
+    // delivery and the inbox would simply stay empty.
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://crm.example.com');
+    const res = await POST(
+      new Request('http://localhost:3000/api/whatsmiau/instances', {
+        method: 'POST',
+        body: JSON.stringify({ instance_name: CUSTOMER_NAME }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('webhook_url_unreachable');
+    expect(h.createInstance).not.toHaveBeenCalled();
   });
 
   it('refuses to create a connection when the webhook address is unreachable', async () => {
@@ -427,5 +448,102 @@ describe('PUT /api/whatsmiau/instances/[name]', () => {
 
     expect(res.status).toBe(404);
     expect(h.updateInstance).not.toHaveBeenCalled();
+  });
+
+  it('refuses to push an address the provider cannot reach', async () => {
+    // A wrong address does not fail loudly — the provider answers
+    // "no such host" to every delivery and the inbox stays empty.
+    // Reconnecting must never be the thing that breaks delivery.
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://crm.example.com');
+    const res = await PUT(
+      new Request(`http://localhost:3000/api/whatsmiau/instances/${CUSTOMER_NAME}`, {
+        method: 'PUT',
+        body: JSON.stringify({ settings: { readMessages: true } }),
+      }),
+      { params: Promise.resolve({ name: CUSTOMER_NAME }) },
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe('webhook_url_unreachable');
+    expect(h.updateInstance).not.toHaveBeenCalled();
+    expect(h.setWebhook).not.toHaveBeenCalled();
+  });
+
+  it('keeps the address the provider can already reach', async () => {
+    // The request arrives on an internal address, but the connection
+    // already has a working one: a reconnect must not degrade it.
+    const row = configRow();
+    row.instance_settings.webhook.url = 'https://app.crmbr.com/api/whatsmiau/webhook';
+    h.existing = row;
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', '');
+
+    const res = await PUT(
+      new Request(`http://localhost:3000/api/whatsmiau/instances/${CUSTOMER_NAME}`, {
+        method: 'PUT',
+        body: JSON.stringify({ settings: { readMessages: true } }),
+      }),
+      { params: Promise.resolve({ name: CUSTOMER_NAME }) },
+    );
+
+    expect(res.status).toBe(200);
+    const [, , settings] = h.updateInstance.mock.calls[0] as unknown as [
+      unknown,
+      string,
+      { webhook: { url: string } },
+    ];
+    expect(settings.webhook.url).toBe('https://app.crmbr.com/api/whatsmiau/webhook');
+  });
+
+  it('adds an event the customer was never offered', async () => {
+    // This connection was saved before `contacts.upsert` joined the
+    // grid: its list cannot say "no" to an event it never saw.
+    const res = await PUT(
+      new Request(`https://app.test/api/whatsmiau/instances/${CUSTOMER_NAME}`, {
+        method: 'PUT',
+        body: JSON.stringify({ settings: { readMessages: true } }),
+      }),
+      { params: Promise.resolve({ name: CUSTOMER_NAME }) },
+    );
+
+    expect(res.status).toBe(200);
+    const [, , settings] = h.updateInstance.mock.calls[0] as unknown as [
+      unknown,
+      string,
+      { webhook: { events: string[] } },
+    ];
+    expect(settings.webhook.events).toContain('contacts.upsert');
+    expect(settings.webhook.events).toContain('messages.upsert');
+  });
+
+  it('keeps an event the customer turned off', async () => {
+    // The customer WAS offered the event and said no. Their answer is
+    // the answer.
+    const row = configRow();
+    row.instance_settings.webhook.offeredEvents = [
+      'messages.upsert',
+      'messages.edited',
+      'messages.update',
+      'messages.delete',
+      'connection.update',
+      'contacts.upsert',
+    ];
+    h.existing = row;
+
+    const res = await PUT(
+      new Request(`https://app.test/api/whatsmiau/instances/${CUSTOMER_NAME}`, {
+        method: 'PUT',
+        body: JSON.stringify({ settings: { readMessages: true } }),
+      }),
+      { params: Promise.resolve({ name: CUSTOMER_NAME }) },
+    );
+
+    expect(res.status).toBe(200);
+    const [, , settings] = h.updateInstance.mock.calls[0] as unknown as [
+      unknown,
+      string,
+      { webhook: { events: string[] } },
+    ];
+    expect(settings.webhook.events).not.toContain('contacts.upsert');
   });
 });

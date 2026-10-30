@@ -25,11 +25,15 @@ import {
 import {
   buildWebhookConfig,
   crmbrErrorResponse,
+  isReachableWebhookUrl,
   providerErrorResponse,
   resolveOwnedInstance,
   webhookUrlFor,
   withoutLockedHeaders,
+  WEBHOOK_URL_UNREACHABLE_HINT,
+  WEBHOOK_URL_UNREACHABLE_MESSAGE,
 } from '@/lib/whatsapp/providers/whatsmiau/management';
+import { resolveEvents } from '@/lib/whatsapp/providers/whatsmiau/events';
 import {
   activateIfOnlyUsableConnection,
   applyWhatsmiauConnectionState,
@@ -104,9 +108,51 @@ export async function PUT(request: Request, context: RouteContext) {
         : {}),
     });
 
+    // The events this connection receives. The list the customer was
+    // LAST OFFERED is the one that counts — not the copy the browser
+    // happens to carry — so an event that joined the grid after their
+    // last save is added, and an event they said no to is left alone.
+    const resolved = resolveEvents(
+      merged.webhook.events,
+      row.instance_settings.webhook.offeredEvents,
+    );
+    merged.webhook.events = resolved.events;
+    merged.webhook.offeredEvents = resolved.offeredEvents;
+
+    // The address the provider delivers to.
+    //
+    // It is never pushed when the provider cannot reach it: a wrong
+    // address does not fail loudly, it fails SILENTLY — the provider
+    // answers "no such host" to every delivery and the inbox simply
+    // stays empty, with nothing on our side to explain it. When the
+    // computed address is unreachable but the stored one still works,
+    // the stored one wins: a reconnect must never degrade a delivery
+    // that was fine.
+    const computedUrl = webhookUrlFor(request);
+    const storedUrl = row.instance_settings.webhook.url;
+    const webhookUrl = isReachableWebhookUrl(computedUrl)
+      ? computedUrl
+      : storedUrl && isReachableWebhookUrl(storedUrl)
+        ? storedUrl
+        : computedUrl;
+
+    if (!isReachableWebhookUrl(webhookUrl)) {
+      // The details go to the log, not to the browser: the customer
+      // did not configure the deployment and cannot fix it.
+      console.error(
+        `[crmbr] the webhook address is not reachable: ${webhookUrl}. ${WEBHOOK_URL_UNREACHABLE_HINT}`,
+      );
+      return NextResponse.json(
+        {
+          error: WEBHOOK_URL_UNREACHABLE_MESSAGE,
+          code: 'webhook_url_unreachable',
+        },
+        { status: 400 },
+      );
+    }
+
     // Same split as the create route: the stored row never carries the
     // locked header, only the copy pushed to the provider does.
-    const webhookUrl = webhookUrlFor(request);
     const storedSettings = {
       ...merged,
       webhook: { ...merged.webhook, url: webhookUrl },

@@ -428,7 +428,12 @@ export function WhatsmiauInstanceBlock({
           </Button>
           <Button
             onClick={() => void handleSave()}
-            disabled={saving || !dirty}
+            // ALWAYS clickable, even with nothing to discard: saving is
+            // what PUSHES the settings to the provider — the address,
+            // the secret and the event list. A button that only works
+            // when something changed cannot repair a connection whose
+            // address the provider never received.
+            disabled={saving}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {saving ? (

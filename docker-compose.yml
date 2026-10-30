@@ -4,9 +4,17 @@ services:
   app:
     build:
       context: .
-      # NEXT_PUBLIC_* vars are inlined at build time — forward them
-      # from .env.local as build args. Changing any of them requires
-      # a rebuild (docker compose up --build).
+      # NEXT_PUBLIC_* vars are inlined at build time — they have to be
+      # forwarded as build args. Compose interpolates them from the
+      # shell or from a `.env` file next to this compose file — NOT
+      # from .env.local (which compose reads only as `env_file`,
+      # for the runtime secrets below). So a value that lives only in
+      # .env.local would reach the image as EMPTY. Either put it in a
+      # `.env` next to this file, or pass the env file explicitly:
+      #
+      #   docker compose --env-file .env.local up -d --build
+      #
+      # Changing any of them requires a rebuild.
       args:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}

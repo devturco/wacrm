@@ -121,9 +121,9 @@ describe('GET /api/whatsmiau/config', () => {
 
     // On a development address the server falls back to the canonical
     // public one — that is the address the provider can reach.
-    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://crm.example.com');
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://app.crmbr.com');
     const pinned = await (await GET(request('http://localhost:3000'))).json();
-    expect(pinned.webhook_url).toBe('https://crm.example.com/api/whatsmiau/webhook');
+    expect(pinned.webhook_url).toBe('https://app.crmbr.com/api/whatsmiau/webhook');
   });
 
   it('never sends the provider name to the browser', async () => {

@@ -48,30 +48,66 @@ export function withoutLockedHeaders(
 }
 
 /**
+ * The origin the proxy in front of the app says it is.
+ *
+ * `request.url` is what the FRAMEWORK saw. Behind a proxy that does
+ * not announce `x-forwarded-proto: https`, that is `http://` of an
+ * internal address — and the provider can never reach it. Every
+ * reverse proxy (Hostinger, nginx, Cloudflare) sets these two
+ * headers, and they name the address the CUSTOMER uses.
+ *
+ * The host in the header is written by the proxy, so it is as
+ * trustworthy as the `Host` header the framework already reads.
+ */
+function forwardedOrigin(request: Request): string | null {
+  const host = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  if (!host) return null;
+  const proto =
+    request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https';
+  return `${proto}://${host}`;
+}
+
+/**
  * The public origin of the app — the address the provider delivers
  * events to.
  *
- * Two candidates, and the order matters:
+ * Three candidates, and the order matters:
  *
  *   1. **the origin that served the request**, whenever it is already
  *      publicly reachable. In production that IS the app's domain, and
  *      it is right by construction — a stale `NEXT_PUBLIC_SITE_URL`
  *      left over in the environment can then never silently point the
  *      webhook at the wrong host.
- *   2. **`NEXT_PUBLIC_SITE_URL`**, the fallback for when the request
- *      arrives on an address the provider cannot reach: `localhost`
- *      during local development, or an internal host behind a proxy
- *      that does not forward the public one.
+ *   2. **the origin the proxy announces** — the same address, read
+ *      from the headers the proxy sets. This is what saves a deploy
+ *      whose requests arrive on an internal `http://` address.
+ *   3. **`NEXT_PUBLIC_SITE_URL`**, the fallback for local development
+ *      (`localhost`) and for a deploy whose proxy says nothing.
+ *
+ * THE FIRST REACHABLE CANDIDATE WINS — and a candidate that the
+ * provider cannot reach is never used, not even as a last resort.
+ * The first version took the environment variable as it was: a
+ * template placeholder (`https://crm.example.com`) sailed through
+ * every check and was pushed to the provider as the address of our
+ * webhook, which then answered "no such host" to every delivery.
  */
 function publicOrigin(request: Request): string {
   const requestOrigin = new URL(request.url).origin;
-  if (isReachableWebhookUrl(`${requestOrigin}/api/whatsmiau/webhook`)) {
-    return requestOrigin;
+
+  const candidates = [requestOrigin];
+  const forwarded = forwardedOrigin(request);
+  if (forwarded) candidates.push(forwarded);
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) candidates.push(explicit.replace(/\/+$/, ''));
+
+  for (const candidate of candidates) {
+    if (isReachableWebhookUrl(`${candidate}/api/whatsmiau/webhook`)) {
+      return candidate;
+    }
   }
 
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/+$/, '');
-
+  // Nothing is reachable: the caller refuses with the operator hint
+  // instead of pushing an address the provider cannot call.
   return requestOrigin;
 }
 
@@ -98,11 +134,41 @@ const UNREACHABLE_HOSTS = [
 ];
 
 /**
+ * Hosts that exist only in the documentation.
+ *
+ * RFC 2606 reserves the `example.*` family for exactly this: they
+ * are what a TEMPLATE carries and they are never a real destination.
+ * `crm.example.com` does not even resolve — the provider answers
+ * "no such host" and every delivery dies on the floor, with nothing
+ * in the app to say why.
+ *
+ * They look public (https, a real-looking name), so the plain "is it
+ * a public address" check used to accept them, and the app pushed one
+ * to the provider as the address of our webhook. Now a documentation
+ * host is not a destination.
+ */
+const RESERVED_HOSTS = new Set(['example.com', 'example.org', 'example.net']);
+
+const RESERVED_HOST_SUFFIXES = [
+  '.example',
+  '.example.com',
+  '.example.org',
+  '.example.net',
+];
+
+function isReservedHost(host: string): boolean {
+  if (RESERVED_HOSTS.has(host)) return true;
+  return RESERVED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+/**
  * Can the provider reach this webhook address?
  *
- * Two rules, both straight from the provider's documentation:
+ * Three rules, the first two straight from the provider's
+ * documentation:
  *   - the destination is HTTPS;
- *   - the host is not a loopback / development address.
+ *   - the host is not a loopback / development address;
+ *   - the host is not a documentation placeholder.
  *
  * Private LAN ranges (10.x, 172.16-31.x, 192.168.x) are NOT rejected
  * here: a self-hosted provider may well live there. The hosted one
@@ -122,6 +188,7 @@ export function isReachableWebhookUrl(url: string): boolean {
   if (host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
     return false;
   }
+  if (isReservedHost(host)) return false;
   return true;
 }
 

@@ -166,30 +166,56 @@ precisa conseguir chegar lá. A documentação é explícita: *"Destino HTTPS p�
 sem localhost e redes privadas (SSRF)"*. Um `http://localhost:3000` é recusado
 com `invalid webhook URL: host must not point to internal network`.
 
-Por isso o crmbr **não usa cegamente o endereço do request**. A regra é:
+Por isso o crmbr **não usa cegamente o endereço do request**. Três candidatos,
+nessa ordem, e **o primeiro que o provedor consegue alcançar vence**:
 
-1. **se a requisição chegou por um endereço público, ele vence** — em produção
-   esse endereço é o domínio do app, e ele está certo por construção. Um
-   `NEXT_PUBLIC_SITE_URL` velho no ambiente não consegue apontar o webhook para
-   o host errado.
-2. **caso contrário, o app usa `NEXT_PUBLIC_SITE_URL`** — é o que acontece em
-   desenvolvimento local (`localhost`) e atrás de proxy que não repassa o host
-   público.
+1. **a origem que atendeu a requisição**, quando ela já é alcançável — em
+   produção esse endereço é o domínio do app, e ele está certo por construção.
+   Um `NEXT_PUBLIC_SITE_URL` velho no ambiente não consegue apontar o webhook
+   para o host errado.
+2. **a origem que o proxy anuncia** (`x-forwarded-host` / `x-forwarded-proto`) —
+   atrás de proxy, o framework enxerga um endereço interno `http://` e o
+   provedor nunca o chamaria; os cabeçalhos do proxy nomeiam o endereço que o
+   cliente usa.
+3. **`NEXT_PUBLIC_SITE_URL`** — o resto para o desenvolvimento local
+   (`localhost`) e para um deploy cujo proxy não diz nada.
 
 ```
-${origem pública}/api/whatsmiau/webhook
+${origem alcançável}/api/whatsmiau/webhook
 ```
+
+> **Um candidato inalcançável nunca é usado, nem como último recurso.** O
+> `NEXT_PUBLIC_SITE_URL` era aceito como veio — e o valor de um template
+> (`https://crm.example.com`) passava em todas as checagens. O provedor
+> respondia `no such host` a **todas** as entregas e a caixa de entrada
+> simplesmente ficava vazia, sem nenhuma pista do motivo.
+
+Um **placeholder de documentação** (`example.com`, `example.org`, `example.net`
+e a família `*.example`) não é destino: são hosts reservados pela RFC 2606,
+não resolvem, e o provedor jamais alcança um. O app recusa um endereço desses
+antes de qualquer chamada.
 
 | Ambiente | O que fazer |
 |---|---|
 | Produção | nada — o origin da requisição já é o domínio. `NEXT_PUBLIC_SITE_URL` é opcional (e, se existir, só entra quando a requisição não vem por endereço público). |
 | Desenvolvimento local | suba um túnel público (`ngrok http 3000` ou `cloudflared tunnel --url http://localhost:3000`) e aponte `NEXT_PUBLIC_SITE_URL` para a URL do túnel. |
 
-Se nenhum dos dois for um endereço público, a criação da conexão é recusada
+Se nenhum dos três for alcançável, a criação da conexão é recusada
 **antes** de qualquer chamada ao provedor, com a mensagem *"the CRMBR API could
 not deliver events to this app: its public address is not reachable from the
 internet"*. O detalhe (o endereço usado e o que fazer) fica no log do servidor,
 não no navegador.
+
+O **reconectar** (`PUT /api/whatsmiau/instances/<nome>`) tem a mesma trava: ele
+nunca empurra um endereço inalcançável, e nunca **degrada** um endereço que o
+provedor já alcança — se a conexão já tem uma URL pública funcionando, ela é
+mantida mesmo que a requisição tenha chegado por um endereço interno. Reconectar
+não pode ser justamente a operação que quebre a entrega.
+
+> `NEXT_PUBLIC_*` é **embutido no build** (no bundle do servidor e do
+> navegador). Uma correção na variável só vale depois de **reconstruir a
+> imagem** — `docker compose --env-file .env.local up -d --build` — e recriar o
+> container. Só recarregar o container não troca o valor embutido.
 
 O mesmo endereço é devolvido por `GET /api/whatsmiau/config` (`webhook_url`),
 para que a tela mostre exatamente a string que o servidor envia ao provedor — o
@@ -197,6 +223,13 @@ para que a tela mostre exatamente a string que o servidor envia ao provedor — 
 
 > O túnel muda de URL a cada reinício. Depois de reiniciá-lo, re-salve as
 > configurações da conexão (o botão de salvar reenvia o endereço ao provedor).
+
+O botão de **salvar** é o que **empurra** as configurações ao provedor — o
+endereço, o segredo e a lista de eventos. Ele fica clicável mesmo sem
+nenhuma alteração a descartar: um botão que só funciona quando algo mudou
+não consegue reparar uma conexão cujo endereço o provedor nunca recebeu.
+(Reconectar o número, pelo outro lado, não reenvia o endereço — ele só
+pede um QR code novo.)
 
 Para inspecionar o que existe na conta do provedor (sem expor a chave):
 
@@ -1037,9 +1070,16 @@ Regras que valem para este fluxo:
 > Sem a migration `065` aplicada, o fluxo continua funcionando (a foto é
 > buscada a cada mensagem), mas sem as janelas e sem o aviso ao vivo.
 
-> Para o provedor entregar `contacts.upsert`, marque o evento na tela de
-> **API CRMBR** e salve a instância — a lista de eventos é enviada ao provedor
-> a cada salvamento. Conexões criadas depois desta versão já vêm com ele.
+> **O `contacts.upsert` não precisa ser marcado à mão.** Conexões criadas
+> depois desta versão já vêm com ele. Uma conexão **antiga** (salva antes de o
+> evento existir na grade) tem uma lista que **nunca o ofereceu** — e não pode
+> dizer "não" a um evento que não viu: no próximo salvamento ele entra
+> sozinho, sem que o cliente precise marcar nada. A lista do que foi oferecido
+> fica gravada em `instance_settings.webhook.offeredEvents`.
+>
+> Se o cliente **viu** o evento e desmarcou, a resposta dele é a resposta: o
+> app não volta a ligá-lo. A lista de eventos é enviada ao provedor a cada
+> salvamento.
 
 ### 7. Apagar mensagem para todos
 

@@ -16,6 +16,15 @@ export interface WhatsmiauWebhookConfig {
   url: string;
   headers: Record<string, string>;
   events: string[];
+  /**
+   * The events that were on the screen the last time this connection
+   * was saved.
+   *
+   * It is what tells "the customer said no to this event" apart from
+   * "this event joined the grid after the customer last saved". Only
+   * the second kind is added on its own — see `events.ts`.
+   */
+  offeredEvents?: string[];
   base64: boolean;
 }
 

@@ -46,6 +46,9 @@ function publicInstance(row: WhatsmiauConfigRow) {
       webhook: {
         ...row.instance_settings.webhook,
         headers: withoutLockedHeaders(row.instance_settings.webhook.headers),
+        // The offered list is OURS: the browser must not decide which
+        // events it is shown, or which of them it may keep.
+        offeredEvents: undefined,
       },
     },
     updated_at: row.updated_at,
