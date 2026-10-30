@@ -153,8 +153,10 @@ describe('mirrorProfilePicture', () => {
     expect(uploads[0]?.path).toBe('account-acc-1/avatars/contact-1.png');
     expect(uploads[0]?.contentType).toBe('image/png');
     expect(uploads[0]?.bytes).toBe(3);
-    expect(mirrored?.publicUrl).toContain('https://cdn.test/avatars/contact-1.jpg');
-    expect(mirrored?.path).toBe('account-acc-1/avatars/contact-1.png');
+    expect(mirrored.ok).toBe(true);
+    if (!mirrored.ok) return;
+    expect(mirrored.publicUrl).toContain('https://cdn.test/avatars/contact-1.jpg');
+    expect(mirrored.path).toBe('account-acc-1/avatars/contact-1.png');
   });
 
   it('refuses a url that is not fetchable', async () => {
@@ -169,12 +171,12 @@ describe('mirrorProfilePicture', () => {
       download,
     });
 
-    expect(mirrored).toBeNull();
+    expect(mirrored).toEqual({ ok: false, reason: 'unusable_url' });
     expect(download).not.toHaveBeenCalled();
     expect(uploads).toHaveLength(0);
   });
 
-  it('answers null when the download fails', async () => {
+  it('says the download failed', async () => {
     const { storage, uploads } = fakeStorage();
 
     const mirrored = await mirrorProfilePicture({
@@ -187,11 +189,11 @@ describe('mirrorProfilePicture', () => {
       },
     });
 
-    expect(mirrored).toBeNull();
+    expect(mirrored).toEqual({ ok: false, reason: 'download_failed' });
     expect(uploads).toHaveLength(0);
   });
 
-  it('answers null when the picture comes back empty', async () => {
+  it('says the picture came back empty', async () => {
     const { storage, uploads } = fakeStorage();
 
     const mirrored = await mirrorProfilePicture({
@@ -202,11 +204,11 @@ describe('mirrorProfilePicture', () => {
       download: async () => ({ buffer: new Uint8Array(0), contentType: 'image/png' }),
     });
 
-    expect(mirrored).toBeNull();
+    expect(mirrored).toEqual({ ok: false, reason: 'empty_picture' });
     expect(uploads).toHaveLength(0);
   });
 
-  it('answers null when the picture is over the limit', async () => {
+  it('says the picture is over the limit', async () => {
     const { storage, uploads } = fakeStorage();
 
     const mirrored = await mirrorProfilePicture({
@@ -220,11 +222,11 @@ describe('mirrorProfilePicture', () => {
       }),
     });
 
-    expect(mirrored).toBeNull();
+    expect(mirrored).toEqual({ ok: false, reason: 'picture_too_large' });
     expect(uploads).toHaveLength(0);
   });
 
-  it('answers null when the upload fails', async () => {
+  it('says the storage refused the write', async () => {
     const fake = fakeMediaStorage({ failWith: 'bucket is full' });
 
     const mirrored = await mirrorProfilePicture({
@@ -235,7 +237,29 @@ describe('mirrorProfilePicture', () => {
       download: async () => ({ buffer: new Uint8Array([1]), contentType: 'image/png' }),
     });
 
-    expect(mirrored).toBeNull();
+    expect(mirrored).toEqual({ ok: false, reason: 'storage_failed' });
+  });
+
+  it('says the storage took the object but gave no public url', async () => {
+    // The write happened, but the object is unreachable — the account
+    // would see no picture even though the bytes are there.
+    const { storage } = fakeStorage();
+    const blind = {
+      ...storage,
+      async put() {
+        return { publicUrl: '', path: 'account-acc-1/avatars/contact-1.jpg', size: 1 };
+      },
+    };
+
+    const mirrored = await mirrorProfilePicture({
+      storage: blind,
+      accountId: 'acc-1',
+      contactId: 'contact-1',
+      url: 'https://cdn.test/a.png',
+      download: async () => ({ buffer: new Uint8Array([1]), contentType: 'image/png' }),
+    });
+
+    expect(mirrored).toEqual({ ok: false, reason: 'no_public_url' });
   });
 });
 

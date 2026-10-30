@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { instanceNames, isSupportedWebhookEvent, parseWhatsmiauWebhook } from './webhook';
+import {
+  envelopeRecord,
+  instanceNames,
+  isSupportedWebhookEvent,
+  parseWhatsmiauWebhook,
+} from './webhook';
 import {
   normalizeConnectionUpdate,
+  normalizeContactUpsert,
   normalizeDeletedMessage,
   normalizeEditedMessage,
   normalizeInboundMessage,
@@ -20,7 +26,19 @@ describe('parseWhatsmiauWebhook', () => {
     });
     expect(parsed?.event).toBe('messages.upsert');
     expect(parsed?.instance).toBe('Atendimento01');
-    expect(parsed?.data.key).toEqual({ id: 'MSG_1' });
+    expect(envelopeRecord(parsed!).key).toEqual({ id: 'MSG_1' });
+  });
+
+  it('keeps an array-shaped payload as an array', () => {
+    // `contacts.upsert` delivers an ARRAY (§7.6) — its entries ARE the
+    // contacts. Folding them into an object would lose them.
+    const parsed = parseWhatsmiauWebhook({
+      event: 'contacts.upsert',
+      instance: 'Atendimento01',
+      data: [{ remoteJid: '5511999988888@s.whatsapp.net', profilePicUrl: 'https://cdn.test/a.jpg' }],
+    });
+    expect(Array.isArray(parsed?.data)).toBe(true);
+    expect(parsed?.data).toHaveLength(1);
   });
 
   it('rejects a payload with no event', () => {
@@ -33,6 +51,7 @@ describe('parseWhatsmiauWebhook', () => {
     expect(isSupportedWebhookEvent('messages.upsert')).toBe(true);
     expect(isSupportedWebhookEvent('messages.update')).toBe(true);
     expect(isSupportedWebhookEvent('connection.update')).toBe(true);
+    expect(isSupportedWebhookEvent('contacts.upsert')).toBe(true);
     expect(isSupportedWebhookEvent('group-participants.update')).toBe(false);
     expect(isSupportedWebhookEvent('call')).toBe(false);
   });
@@ -65,6 +84,14 @@ describe('instanceNames', () => {
       data: { instanceId: 'Atendimento01_4cca4ba2' },
     });
     expect(instanceNames(parsed!)).toEqual(['Atendimento01', 'Atendimento01_4cca4ba2']);
+  });
+
+  it('reads the instance an array-shaped payload names inside its entries', () => {
+    const parsed = parseWhatsmiauWebhook({
+      event: 'contacts.upsert',
+      data: [{ remoteJid: '5511999988888@s.whatsapp.net', instanceId: 'Atendimento01_4cca4ba2' }],
+    });
+    expect(instanceNames(parsed!)).toEqual(['Atendimento01_4cca4ba2']);
   });
 });
 
@@ -226,6 +253,60 @@ describe('normalizeInboundMessages', () => {
 
   it('returns null when the payload carries no message at all', () => {
     expect(normalizeInboundMessages({ instanceId: 'Atendimento01' })).toBeNull();
+  });
+});
+
+describe('normalizeContactUpsert', () => {
+  it('reads the contacts of an array-shaped delivery', () => {
+    const contacts = normalizeContactUpsert([
+      {
+        remoteJid: '5511999988888@s.whatsapp.net',
+        remoteLid: '111222333444555@s.whatsapp.net',
+        pushName: 'Cliente Exemplo',
+        profilePicUrl: 'https://cdn.test/a.jpg',
+        instanceId: 'Atendimento01',
+      },
+    ]);
+    expect(contacts).toEqual([
+      {
+        phone: '5511999988888',
+        profilePicUrl: 'https://cdn.test/a.jpg',
+        pushName: 'Cliente Exemplo',
+      },
+    ]);
+  });
+
+  it('reads a single contact delivered on its own', () => {
+    const contacts = normalizeContactUpsert({
+      remoteJid: '5511999988888@s.whatsapp.net',
+      profilePicUrl: 'https://cdn.test/a.jpg',
+    });
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]?.phone).toBe('5511999988888');
+  });
+
+  it('falls back to the lid when the jid names no phone', () => {
+    const contacts = normalizeContactUpsert([
+      { remoteJid: '', remoteLid: '5511999988888@s.whatsapp.net', profilePicUrl: 'https://cdn.test/a.jpg' },
+    ]);
+    expect(contacts[0]?.phone).toBe('5511999988888');
+  });
+
+  it('drops a group, which is not a contact of ours', () => {
+    const contacts = normalizeContactUpsert([
+      { remoteJid: '5511999988888-1234@g.us', profilePicUrl: 'https://cdn.test/g.jpg' },
+    ]);
+    expect(contacts).toHaveLength(0);
+  });
+
+  it('keeps a contact with no picture, with an empty url', () => {
+    // The provider does not promise the field on every delivery — so
+    // "no picture here" is NOT the answer "this contact has no picture".
+    const contacts = normalizeContactUpsert([
+      { remoteJid: '5511999988888@s.whatsapp.net' },
+    ]);
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]?.profilePicUrl).toBe('');
   });
 });
 

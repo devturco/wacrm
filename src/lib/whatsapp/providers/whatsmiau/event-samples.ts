@@ -68,6 +68,20 @@ export const WEBHOOK_EVENT_SAMPLES: Record<string, string> = {
     "statusReason": 200
   }
 }`,
+  'contacts.upsert': `{
+  "event": "contacts.upsert",
+  "instance": "Atendimento01",
+  "date_time": "2026-10-27T15:05:00Z",
+  "data": [
+    {
+      "remoteJid": "5511999988888@s.whatsapp.net",
+      "remoteLid": "111222333444555@s.whatsapp.net",
+      "pushName": "Cliente Exemplo",
+      "profilePicUrl": "https://cdn.whatsapp.net/profile.jpg",
+      "instanceId": "Atendimento01"
+    }
+  ]
+}`,
 };
 
 /** Every event we know how to handle, in the order we show them. */
@@ -77,4 +91,5 @@ export const WEBHOOK_EVENT_ORDER = [
   'messages.update',
   'messages.delete',
   'connection.update',
+  'contacts.upsert',
 ] as const;

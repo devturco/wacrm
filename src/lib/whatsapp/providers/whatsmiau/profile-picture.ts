@@ -198,12 +198,37 @@ export interface MirrorProfilePictureArgs {
   download?: ProfilePictureDownloader;
 }
 
-export interface MirroredProfilePicture {
-  /** The durable public URL of the stored object. */
-  publicUrl: string;
-  /** The object's path inside the bucket. */
-  path: string;
-}
+/**
+ * Why the copy did not happen.
+ *
+ * The reason travels with the result so the caller can tell a
+ * transient failure (worth retrying soon) from a final answer ("this
+ * contact has no picture") — and so the log says WHICH step broke,
+ * instead of a single "it failed".
+ */
+export type ProfilePictureFailure =
+  /** The provider handed back something that is not an http(s) url. */
+  | 'unusable_url'
+  /** The CDN download failed — the url expired, or the network did. */
+  | 'download_failed'
+  /** The download worked but the body was empty. */
+  | 'empty_picture'
+  /** The picture is bigger than the cap. */
+  | 'picture_too_large'
+  /** The storage backend refused the write. */
+  | 'storage_failed'
+  /** The storage took the object but gave back no public url. */
+  | 'no_public_url';
+
+export type MirrorProfilePictureResult =
+  | {
+      ok: true;
+      /** The durable public URL of the stored object. */
+      publicUrl: string;
+      /** The object's path inside the bucket. */
+      path: string;
+    }
+  | { ok: false; reason: ProfilePictureFailure };
 
 /**
  * Copy the picture into the account's storage.
@@ -211,12 +236,11 @@ export interface MirroredProfilePicture {
  * The path is keyed on the contact id, so a second attempt overwrites
  * the same object instead of littering the bucket.
  *
- * @returns the stored object, or `null` when the mirror was skipped
- *          or failed.
+ * @returns the stored object, or the reason it could not be stored.
  */
 export async function mirrorProfilePicture(
   args: MirrorProfilePictureArgs,
-): Promise<MirroredProfilePicture | null> {
+): Promise<MirrorProfilePictureResult> {
   const {
     storage,
     accountId,
@@ -227,7 +251,7 @@ export async function mirrorProfilePicture(
 
   if (!isFetchableImageUrl(url)) {
     console.warn('[whatsmiau-avatar] the provider returned an unusable picture url');
-    return null;
+    return { ok: false, reason: 'unusable_url' };
   }
 
   let bytes: Uint8Array;
@@ -241,18 +265,18 @@ export async function mirrorProfilePicture(
       '[whatsmiau-avatar] could not download the picture:',
       error instanceof Error ? error.message : error,
     );
-    return null;
+    return { ok: false, reason: 'download_failed' };
   }
 
   if (bytes.byteLength === 0) {
     console.warn('[whatsmiau-avatar] the picture came back empty');
-    return null;
+    return { ok: false, reason: 'empty_picture' };
   }
   if (bytes.byteLength > PROFILE_PICTURE_MAX_BYTES) {
     console.warn(
       `[whatsmiau-avatar] skipping the picture: ${bytes.byteLength} bytes exceeds the ${PROFILE_PICTURE_MAX_BYTES}-byte limit`,
     );
-    return null;
+    return { ok: false, reason: 'picture_too_large' };
   }
 
   const type = imageTypeFor(contentType);
@@ -266,13 +290,16 @@ export async function mirrorProfilePicture(
       cacheControl: '3600',
       upsert: true,
     });
-    if (!publicUrl) return null;
-    return { publicUrl, path };
+    if (!publicUrl) {
+      console.warn('[whatsmiau-avatar] the storage accepted the picture but gave back no public url');
+      return { ok: false, reason: 'no_public_url' };
+    }
+    return { ok: true, publicUrl, path };
   } catch (error) {
     console.warn(
       '[whatsmiau-avatar] could not mirror the picture:',
       error instanceof Error ? error.message : error,
     );
-    return null;
+    return { ok: false, reason: 'storage_failed' };
   }
 }

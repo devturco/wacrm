@@ -16,6 +16,16 @@
 // compared, and one match is enough.
 // ============================================================
 
+/**
+ * The payload of an event.
+ *
+ * Most events deliver a plain object; `contacts.upsert` delivers an
+ * ARRAY (§7.6). Both have to survive the parse, because the entries
+ * of that array are the contact records — folding them into an object
+ * would lose them.
+ */
+export type WhatsmiauWebhookData = Record<string, unknown> | unknown[];
+
 export interface WhatsmiauWebhookEnvelope {
   event: string;
   /** The instance name in the envelope — empty when the payload omits it. */
@@ -23,18 +33,37 @@ export interface WhatsmiauWebhookEnvelope {
   date_time?: string;
   sender?: string;
   server_url?: string;
-  data: Record<string, unknown>;
+  data: WhatsmiauWebhookData;
   progress?: number;
   isLatest?: boolean;
 }
 
-/** The events this integration acts on. */
+/** The payload as a plain object — an array-shaped event reads as empty. */
+export function envelopeRecord(envelope: WhatsmiauWebhookEnvelope): Record<string, unknown> {
+  return Array.isArray(envelope.data) ? {} : envelope.data;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * The events this integration acts on.
+ *
+ * `contacts.upsert` is here because it carries the contact's picture
+ * url — the provider hands it over for free, and waiting for a message
+ * to ask for it again is what left a brand-new account without
+ * avatars.
+ */
 export const SUPPORTED_WEBHOOK_EVENTS = [
   'messages.upsert',
   'messages.edited',
   'messages.update',
   'messages.delete',
   'connection.update',
+  'contacts.upsert',
 ] as const;
 
 export function isSupportedWebhookEvent(event: string): boolean {
@@ -53,8 +82,17 @@ export function isSupportedWebhookEvent(event: string): boolean {
 export function instanceNames(envelope: WhatsmiauWebhookEnvelope): string[] {
   const names = new Set<string>();
   if (envelope.instance) names.add(envelope.instance);
-  const fromData = envelope.data.instanceId;
-  if (typeof fromData === 'string' && fromData) names.add(fromData);
+
+  const records = [
+    envelopeRecord(envelope),
+    // An array-shaped event names the instance inside every entry.
+    ...(Array.isArray(envelope.data) ? envelope.data.map(asRecord) : []),
+  ];
+
+  for (const record of records) {
+    const fromData = record.instanceId;
+    if (typeof fromData === 'string' && fromData) names.add(fromData);
+  }
   return [...names];
 }
 
@@ -77,10 +115,15 @@ export function parseWhatsmiauWebhook(payload: unknown): WhatsmiauWebhookEnvelop
 
   const instance = typeof record.instance === 'string' ? record.instance : '';
 
-  const data =
-    record.data && typeof record.data === 'object' && !Array.isArray(record.data)
-      ? (record.data as Record<string, unknown>)
-      : {};
+  // The payload is kept as it arrived: an object for most events, an
+  // ARRAY for `contacts.upsert` — whose entries ARE the contacts.
+  const rawData = record.data;
+  const data: WhatsmiauWebhookData =
+    rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+      ? (rawData as Record<string, unknown>)
+      : Array.isArray(rawData)
+        ? (rawData as unknown[])
+        : {};
 
   return {
     event,

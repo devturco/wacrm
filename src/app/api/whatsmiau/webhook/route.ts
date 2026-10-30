@@ -57,13 +57,16 @@ import {
 } from '@/lib/whatsapp/providers/whatsmiau/inbound';
 import {
   normalizeConnectionUpdate,
+  normalizeContactUpsert,
   normalizeDeletedMessage,
   normalizeEditedMessage,
   normalizeInboundMessages,
   normalizeStatusUpdate,
 } from '@/lib/whatsapp/providers/whatsmiau/normalize';
+import { handleWhatsmiauContactUpsert } from '@/lib/whatsapp/providers/whatsmiau/contact-upsert';
 import { isSameProviderInstance } from '@/lib/whatsapp/providers/whatsmiau/naming';
 import {
+  envelopeRecord,
   instanceNames,
   isSupportedWebhookEvent,
   parseWhatsmiauWebhook,
@@ -152,7 +155,7 @@ export async function POST(request: Request) {
   }
 
   if (!isSupportedWebhookEvent(envelope.event)) {
-    // An event we do not model (`contacts.upsert`, `messages.set`, ...).
+    // An event we do not model (`messages.set`, `group-participants.update`, ...).
     // Acknowledge it: retrying would never make it supported.
     return NextResponse.json(
       { status: 'ignored', event: envelope.event },
@@ -211,8 +214,9 @@ async function processWhatsmiauEvent(
         // is not a new message — it is the new text of a message we
         // already have — so it updates the row instead of inserting a
         // second one.
-        if (envelope.data.messageType === 'editedMessage') {
-          const edit = normalizeEditedMessage(envelope.data);
+        const data = envelopeRecord(envelope);
+        if (data.messageType === 'editedMessage') {
+          const edit = normalizeEditedMessage(data);
           if (!edit) return;
           await handleWhatsmiauEditedMessage(ctx, edit);
           return;
@@ -220,13 +224,13 @@ async function processWhatsmiauEvent(
         // The documented shape is a NOTIFY batch (`data.messages`); the
         // Evolution-compatible delivery puts ONE message straight in
         // `data`. Both are read.
-        const messages = normalizeInboundMessages(envelope.data);
+        const messages = normalizeInboundMessages(data);
         if (!messages) {
           // Nothing we could read. Log the SHAPE — the KEYS only, never
           // the content — so the next delivery says what to support.
           console.warn(
             '[whatsmiau-webhook] a message arrived without a readable id; data keys:',
-            Object.keys(envelope.data).join(', '),
+            Object.keys(data).join(', '),
           );
           return;
         }
@@ -236,27 +240,37 @@ async function processWhatsmiauEvent(
         return;
       }
       case 'messages.update': {
-        const update = normalizeStatusUpdate(envelope.data);
+        const update = normalizeStatusUpdate(envelopeRecord(envelope));
         if (!update) return;
         await handleWhatsmiauStatusUpdate(ctx, update);
         return;
       }
       case 'messages.edited': {
-        const update = normalizeEditedMessage(envelope.data);
+        const update = normalizeEditedMessage(envelopeRecord(envelope));
         if (!update) return;
         await handleWhatsmiauEditedMessage(ctx, update);
         return;
       }
       case 'messages.delete': {
-        const update = normalizeDeletedMessage(envelope.data);
+        const update = normalizeDeletedMessage(envelopeRecord(envelope));
         if (!update) return;
         await handleWhatsmiauDeletedMessage(ctx, update);
         return;
       }
       case 'connection.update': {
-        const update = normalizeConnectionUpdate(envelope.data);
+        const update = normalizeConnectionUpdate(envelopeRecord(envelope));
         if (!update) return;
         await handleWhatsmiauConnectionUpdate(ctx, update);
+        return;
+      }
+      case 'contacts.upsert': {
+        // The provider pushes the contact's picture url. It is the
+        // second chance for a contact whose on-demand lookup failed —
+        // and it costs nothing: no call, no key.
+        const contacts = normalizeContactUpsert(envelope.data);
+        for (const contact of contacts) {
+          await handleWhatsmiauContactUpsert(ctx, contact);
+        }
         return;
       }
     }

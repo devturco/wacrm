@@ -66,6 +66,7 @@ export const DEFAULT_INSTANCE_SETTINGS: WhatsmiauInstanceSettings = {
       'messages.update',
       'messages.delete',
       'connection.update',
+      'contacts.upsert',
     ],
     base64: false,
   },

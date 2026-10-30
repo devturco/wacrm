@@ -225,6 +225,54 @@ export function normalizeDeletedMessage(
 }
 
 /**
+ * A contact the provider tells us about.
+ *
+ * `contacts.upsert` (§7.6) delivers an ARRAY of these. The picture
+ * url in it is the one thing we cannot get any other way when the
+ * on-demand lookup fails — the provider pushes it, unprompted.
+ */
+export interface NormalizedContactUpsert {
+  /** Digits-only phone, empty for a group or a lid-only record. */
+  phone: string;
+  /** The provider's picture url — empty when the payload carries none. */
+  profilePicUrl: string;
+  /** The display name the provider knows. */
+  pushName?: string;
+}
+
+/**
+ * The contacts of a `contacts.upsert` delivery.
+ *
+ * The documented shape is an ARRAY; a single object is accepted too,
+ * because the provider is Evolution-compatible and the two spellings
+ * have been seen in the wild.
+ *
+ * Records without a phone are dropped: a group jid and a lid-only
+ * record cannot be matched to a contact of ours, and guessing would
+ * attach a picture to the wrong person.
+ */
+export function normalizeContactUpsert(data: unknown): NormalizedContactUpsert[] {
+  const items = Array.isArray(data) ? data : [data];
+  const contacts: NormalizedContactUpsert[] = [];
+
+  for (const item of items) {
+    const record = asRecord(item);
+    const remoteJid = asString(record.remoteJid) ?? '';
+    const remoteLid = asString(record.remoteLid) ?? '';
+    const phone = phoneFromJid(remoteJid) || phoneFromJid(remoteLid);
+    if (!phone) continue;
+
+    contacts.push({
+      phone,
+      profilePicUrl: asString(record.profilePicUrl) ?? '',
+      ...(asString(record.pushName) ? { pushName: asString(record.pushName)! } : {}),
+    });
+  }
+
+  return contacts;
+}
+
+/**
  * The text of an edited message.
  *
  * The dedicated `messages.edited` event carries the new content under

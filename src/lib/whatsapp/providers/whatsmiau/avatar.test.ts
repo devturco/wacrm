@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { AVATAR_RECHECK_AFTER_MS, refreshContactAvatar } from './avatar';
+import {
+  AVATAR_RECHECK_AFTER_MS,
+  AVATAR_RETRY_AFTER_MS,
+  avatarFailedRecently,
+  refreshContactAvatar,
+} from './avatar';
 import { fakeMediaStorage } from '@/lib/media/storage/fake-storage.test-helper';
 import type { WhatsmiauConnection } from '../types';
 
@@ -16,9 +21,12 @@ const h = vi.hoisted(() => ({
     },
   ),
   mirrorProfilePicture: vi.fn(
-    async (args: unknown): Promise<{ publicUrl: string; path: string } | null> => {
+    async (args: unknown): Promise<
+      | { ok: true; publicUrl: string; path: string }
+      | { ok: false; reason: string }
+    > => {
       void args;
-      return null;
+      return { ok: false, reason: 'storage_failed' };
     },
   ),
 }));
@@ -121,8 +129,11 @@ describe('refreshContactAvatar', () => {
   it('does nothing when the contact already has a picture', async () => {
     const { db, calls } = fakeDb({});
 
-    await refresh(db, { currentAvatarUrl: 'https://cdn.test/avatars/contact-1.jpg' });
+    const outcome = await refresh(db, {
+      currentAvatarUrl: 'https://cdn.test/avatars/contact-1.jpg',
+    });
 
+    expect(outcome).toEqual({ status: 'skipped', reason: 'already_has_avatar' });
     expect(h.fetchProfilePictureUrl).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
   });
@@ -130,13 +141,18 @@ describe('refreshContactAvatar', () => {
   it('asks the provider and stores the picture on the contact', async () => {
     h.fetchProfilePictureUrl.mockResolvedValue('https://cdn.test/original.jpg');
     h.mirrorProfilePicture.mockResolvedValue({
+      ok: true,
       publicUrl: 'https://cdn.test/avatars/contact-1.jpg',
       path: 'account-acc-1/avatars/contact-1.jpg',
     });
     const { db, calls } = fakeDb({});
 
-    await refresh(db);
+    const outcome = await refresh(db);
 
+    expect(outcome).toEqual({
+      status: 'found',
+      publicUrl: 'https://cdn.test/avatars/contact-1.jpg',
+    });
     expect(h.fetchProfilePictureUrl).toHaveBeenCalledWith(
       connection,
       '5511999988888',
@@ -160,11 +176,12 @@ describe('refreshContactAvatar', () => {
 
   it('records a contact without a picture as missing', async () => {
     h.fetchProfilePictureUrl.mockResolvedValue(null);
-    h.mirrorProfilePicture.mockResolvedValue(null);
+    h.mirrorProfilePicture.mockResolvedValue({ ok: false, reason: 'storage_failed' });
     const { db, calls } = fakeDb({});
 
-    await refresh(db);
+    const outcome = await refresh(db);
 
+    expect(outcome).toEqual({ status: 'missing' });
     expect(h.mirrorProfilePicture).not.toHaveBeenCalled();
     expect(calls.some((c) => c.table === 'contacts')).toBe(false);
     const record = calls.find(
@@ -177,8 +194,9 @@ describe('refreshContactAvatar', () => {
     h.fetchProfilePictureUrl.mockRejectedValue(new Error('provider is down'));
     const { db, calls } = fakeDb({});
 
-    await refresh(db);
+    const outcome = await refresh(db);
 
+    expect(outcome).toEqual({ status: 'failed', reason: 'provider_error' });
     const record = calls.find(
       (c) => c.table === 'contact_avatars' && c.op === 'upsert',
     );
@@ -187,11 +205,12 @@ describe('refreshContactAvatar', () => {
 
   it('records a failed mirror as pending, so it is tried again', async () => {
     h.fetchProfilePictureUrl.mockResolvedValue('https://cdn.test/original.jpg');
-    h.mirrorProfilePicture.mockResolvedValue(null);
+    h.mirrorProfilePicture.mockResolvedValue({ ok: false, reason: 'download_failed' });
     const { db, calls } = fakeDb({});
 
-    await refresh(db);
+    const outcome = await refresh(db);
 
+    expect(outcome).toEqual({ status: 'failed', reason: 'download_failed' });
     expect(calls.some((c) => c.table === 'contacts')).toBe(false);
     const record = calls.find(
       (c) => c.table === 'contact_avatars' && c.op === 'upsert',
@@ -207,8 +226,9 @@ describe('refreshContactAvatar', () => {
       },
     });
 
-    await refresh(db);
+    const outcome = await refresh(db);
 
+    expect(outcome).toEqual({ status: 'skipped', reason: 'not_due' });
     expect(h.fetchProfilePictureUrl).not.toHaveBeenCalled();
   });
 
@@ -255,5 +275,100 @@ describe('refreshContactAvatar', () => {
       (c) => c.table === 'contact_avatars' && c.op === 'upsert',
     );
     expect(record?.payload).toMatchObject({ status: 'missing' });
+  });
+});
+
+describe('the window of a failed attempt', () => {
+  it('asks again after fifteen minutes, not after a day', async () => {
+    // A failure is not an answer. The first version froze it for 24 h,
+    // and a hiccup on a brand-new account cost every contact its
+    // picture for a whole day — with nothing to wake it up.
+    h.fetchProfilePictureUrl.mockResolvedValue(null);
+    const checkedAt = new Date(
+      NOW.getTime() - AVATAR_RETRY_AFTER_MS - 60_000,
+    ).toISOString();
+    const { db } = fakeDb({
+      record: { data: { status: 'pending', checked_at: checkedAt }, error: null },
+    });
+
+    await refresh(db);
+
+    expect(h.fetchProfilePictureUrl).toHaveBeenCalled();
+  });
+
+  it('waits the fifteen minutes before asking again', async () => {
+    h.fetchProfilePictureUrl.mockResolvedValue(null);
+    const checkedAt = new Date(
+      NOW.getTime() - AVATAR_RETRY_AFTER_MS + 60_000,
+    ).toISOString();
+    const { db } = fakeDb({
+      record: { data: { status: 'pending', checked_at: checkedAt }, error: null },
+    });
+
+    const outcome = await refresh(db);
+
+    expect(outcome).toEqual({ status: 'skipped', reason: 'not_due' });
+    expect(h.fetchProfilePictureUrl).not.toHaveBeenCalled();
+  });
+
+  it('keeps the day of an answer that was really an answer', async () => {
+    // `missing` is the provider saying "this contact has no picture".
+    // That one IS an answer, and it is not asked about every quarter
+    // of an hour.
+    h.fetchProfilePictureUrl.mockResolvedValue(null);
+    const checkedAt = new Date(
+      NOW.getTime() - AVATAR_RETRY_AFTER_MS - 60_000,
+    ).toISOString();
+    const { db } = fakeDb({
+      record: { data: { status: 'missing', checked_at: checkedAt }, error: null },
+    });
+
+    await refresh(db);
+
+    expect(h.fetchProfilePictureUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('avatarFailedRecently', () => {
+  it('says yes when the last attempt failed inside the window', async () => {
+    const { db } = fakeDb({
+      record: {
+        data: { status: 'pending', checked_at: new Date(NOW.getTime() - 60_000).toISOString() },
+        error: null,
+      },
+    });
+
+    await expect(avatarFailedRecently(db, 'contact-1', NOW)).resolves.toBe(true);
+  });
+
+  it('says no once the window has passed', async () => {
+    const { db } = fakeDb({
+      record: {
+        data: {
+          status: 'pending',
+          checked_at: new Date(NOW.getTime() - AVATAR_RETRY_AFTER_MS - 60_000).toISOString(),
+        },
+        error: null,
+      },
+    });
+
+    await expect(avatarFailedRecently(db, 'contact-1', NOW)).resolves.toBe(false);
+  });
+
+  it('says no when the last attempt was an answer, not a failure', async () => {
+    const { db } = fakeDb({
+      record: {
+        data: { status: 'missing', checked_at: new Date(NOW.getTime() - 60_000).toISOString() },
+        error: null,
+      },
+    });
+
+    await expect(avatarFailedRecently(db, 'contact-1', NOW)).resolves.toBe(false);
+  });
+
+  it('says no when nothing was ever checked', async () => {
+    const { db } = fakeDb({});
+
+    await expect(avatarFailedRecently(db, 'contact-1', NOW)).resolves.toBe(false);
   });
 });

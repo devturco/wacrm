@@ -31,6 +31,7 @@ const h = vi.hoisted(() => ({
   connection: [] as unknown[],
   edited: [] as unknown[],
   deleted: [] as unknown[],
+  contactUpsert: [] as unknown[],
   config: null as FakeConfig | null,
 }));
 
@@ -76,6 +77,12 @@ vi.mock('@/lib/whatsapp/providers/whatsmiau/inbound', () => ({
   }),
   handleWhatsmiauDeletedMessage: vi.fn(async (_ctx: unknown, update: unknown) => {
     h.deleted.push(update);
+  }),
+}));
+
+vi.mock('@/lib/whatsapp/providers/whatsmiau/contact-upsert', () => ({
+  handleWhatsmiauContactUpsert: vi.fn(async (_ctx: unknown, contact: unknown) => {
+    h.contactUpsert.push(contact);
   }),
 }));
 
@@ -145,6 +152,7 @@ describe('POST /api/whatsmiau/webhook', () => {
     h.connection.length = 0;
     h.edited.length = 0;
     h.deleted.length = 0;
+    h.contactUpsert.length = 0;
     h.config = config();
   });
 
@@ -335,16 +343,47 @@ describe('POST /api/whatsmiau/webhook', () => {
     expect(h.connection[0]).toMatchObject({ state: 'open' });
   });
 
+  it('routes contacts.upsert to the contact handler', async () => {
+    // The provider pushes the contact's picture url. It is the second
+    // chance for a contact whose on-demand lookup failed — and it
+    // costs nothing: no call, no key.
+    const res = await POST(
+      request(
+        {
+          event: 'contacts.upsert',
+          instance: PROVIDER_NAME,
+          data: [
+            {
+              remoteJid: '5511999988888@s.whatsapp.net',
+              pushName: 'Cliente',
+              profilePicUrl: 'https://cdn.test/original.jpg',
+              instanceId: PROVIDER_NAME,
+            },
+          ],
+        },
+        { authorization: `Bearer ${SECRET}` },
+      ),
+    );
+    expect(res.status).toBe(200);
+    await drain();
+    expect(h.contactUpsert).toHaveLength(1);
+    expect(h.contactUpsert[0]).toMatchObject({
+      phone: '5511999988888',
+      profilePicUrl: 'https://cdn.test/original.jpg',
+    });
+  });
+
   it('ignores an event we do not model', async () => {
     const res = await POST(
       request(
-        { event: 'contacts.upsert', instance: PROVIDER_NAME, data: [] },
+        { event: 'group-participants.update', instance: PROVIDER_NAME, data: {} },
         { authorization: `Bearer ${SECRET}` },
       ),
     );
     expect(res.status).toBe(200);
     await drain();
     expect(h.inbound).toHaveLength(0);
+    expect(h.contactUpsert).toHaveLength(0);
   });
 });
 

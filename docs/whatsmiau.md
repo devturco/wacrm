@@ -1008,24 +1008,38 @@ O fluxo, no servidor (`src/lib/whatsapp/providers/whatsmiau/`):
 | Consulta | `profile-picture.ts` | `POST /chat/fetchProfilePictureUrl/<instância>` com o número do contato. `profilePictureUrl: null` = o contato não tem foto (ou escondeu). |
 | Cópia | `profile-picture.ts` | A URL vive no CDN do WhatsApp e **expira** — os bytes são baixados (limite de 2 MB) e gravados no bucket público `chat-media`, em `account-<id>/avatars/<contact_id>.<ext>`. |
 | Referência | `avatar.ts` | `contacts.avatar_url` passa a apontar para o **nosso** objeto — durável, servido pelo mesmo bucket que já serve as mídias da conversa. |
-| Memória | `avatar.ts` + migration `065` | A tabela `contact_avatars` guarda o resultado (`found` / `missing` / `pending`) e a hora da última consulta. Uma janela de **24 h** impede que cada mensagem de um contato sem foto vire uma chamada ao provedor. |
+| Memória | `avatar.ts` + migration `065` | A tabela `contact_avatars` guarda o resultado (`found` / `missing` / `pending`) e a hora da última consulta. |
+| Push | `contact-upsert.ts` | O evento `contacts.upsert` (§7.6) traz a `profilePicUrl` do próprio provedor — a foto é copiada na hora, sem consultar ninguém. |
 
 Regras que valem para este fluxo:
 
 - **Falha do provedor não é "o contato não tem foto".** Um erro é gravado como
   `pending` e a consulta é refeita depois da janela; só a resposta `null` vira
   `missing`.
+- **As duas janelas são diferentes.** `pending` (uma **falha**) é consultado de
+  novo em **15 min** — uma falha não é resposta, e congelá-la por um dia
+  custava a foto de todo contato de uma conta nova. `missing` (uma **resposta**
+  do provedor) é consultado de novo em **24 h** — a foto só muda quando o
+  cliente troca, e um dia basta.
 - **Tudo é melhor-esforço.** Um erro na foto nunca derruba a mensagem: ela já
   foi gravada antes da consulta, e a foto é best-effort.
 - **A foto aparece ao vivo.** A migration `065` coloca `contacts` na publicação
   do Realtime; quando `avatar_url` é gravado, o navegador recebe o evento e a
   imagem aparece sem recarregar a página.
-- **O evento `contacts.upsert`** (§7.6) traz `profilePicUrl`, mas ele é
-  **ignorado na v1** — o webhook chega sem o contato ter conversado, e a
-  consulta por demanda cobre qualquer contato a qualquer momento.
+- **O evento `contacts.upsert` é a segunda chance.** Ele chega com a
+  `profilePicUrl` — de graça, sem chamada e sem chave. A consulta por demanda
+  é o cinto; o push é o suspensório. Um push **sem** foto não vira `missing`:
+  o provedor não promete o campo em toda entrega, e um `missing` errado
+  congelaria a foto por um dia.
+- **Um push de contato nunca cria contato.** Só uma mensagem cria. O push
+  apenas veste um contato que já é nosso.
 
 > Sem a migration `065` aplicada, o fluxo continua funcionando (a foto é
-> buscada a cada mensagem), mas sem a janela de 24 h e sem o aviso ao vivo.
+> buscada a cada mensagem), mas sem as janelas e sem o aviso ao vivo.
+
+> Para o provedor entregar `contacts.upsert`, marque o evento na tela de
+> **API CRMBR** e salve a instância — a lista de eventos é enviada ao provedor
+> a cada salvamento. Conexões criadas depois desta versão já vêm com ele.
 
 ### 7. Apagar mensagem para todos
 
@@ -1414,6 +1428,10 @@ Disparado em sincronizações e alterações de contato ou grupo: nome de exibi�
 | `pushName` | string | Nome exibido. |
 | `profilePicUrl` | string | URL da foto. |
 | `instanceId` | string | Sessão. |
+
+> O crmbr usa este evento para a **foto de perfil** (§6): a `profilePicUrl` vem
+> no push e a foto é copiada na hora, sem consultar o provedor. O evento só
+> chega se estiver na lista `webhook.events` da instância.
 
 ### 7.7 `messages.delete`
 
