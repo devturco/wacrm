@@ -350,6 +350,23 @@
       "clearAll": "Limpar tudo",
       "noConversations": "Nenhuma conversa encontrada",
       "noMessagesYet": "Nenhuma mensagem ainda",
+      "lastMessage": {
+        "text": "Mensagem de texto",
+        "image": "Imagem",
+        "video": "Vídeo",
+        "audio": "Áudio",
+        "document": "Documento",
+        "sticker": "Figurinha",
+        "location": "Localização",
+        "contacts": "Contato compartilhado",
+        "interactive": "Mensagem interativa",
+        "buttons": "Botões",
+        "button": "Botão",
+        "list": "Lista",
+        "template": "Template",
+        "reaction": "Reação",
+        "unknown": "Mensagem"
+      },
       "unknown": "Desconhecido"
     },
     "messageThread": {

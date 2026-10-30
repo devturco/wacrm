@@ -8,6 +8,7 @@ import {
   normalizeConversations,
 } from "@/lib/inbox/conversations";
 import { applyInboxFilter, type InboxFilter } from "@/lib/inbox/inbox-filters";
+import { lastMessageKind } from "@/lib/inbox/last-message";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
 import { Search, ChevronDown, X } from "lucide-react";
@@ -464,6 +465,18 @@ function ConversationItem({
     ? format.relativeTime(new Date(conversation.last_message_at), { now })
     : "";
 
+  /**
+   * The line under the name. A media message carries no text — the row
+   * holds a marker (`[image]`, `[document]`) — so the marker is
+   * translated HERE, at render time: the history stays as it is and
+   * the list reads "Imagem" in Portuguese.
+   */
+  const preview = useMemo(() => {
+    const kind = lastMessageKind(conversation.last_message_text);
+    if (kind) return t(`lastMessage.${kind}`);
+    return conversation.last_message_text || t("noMessagesYet");
+  }, [conversation.last_message_text, t]);
+
   return (
     <button
       onClick={handleClick}
@@ -494,9 +507,7 @@ function ConversationItem({
           <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo}</span>
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
-          <p className="truncate text-xs text-muted-foreground">
-            {conversation.last_message_text || t("noMessagesYet")}
-          </p>
+          <p className="truncate text-xs text-muted-foreground">{preview}</p>
           <div className="flex shrink-0 items-center gap-1.5">
             {conversation.unread_count > 0 && (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">

@@ -350,6 +350,23 @@
       "clearAll": "Clear all",
       "noConversations": "No conversations found",
       "noMessagesYet": "No messages yet",
+      "lastMessage": {
+        "text": "Text message",
+        "image": "Image",
+        "video": "Video",
+        "audio": "Audio",
+        "document": "Document",
+        "sticker": "Sticker",
+        "location": "Location",
+        "contacts": "Shared contact",
+        "interactive": "Interactive message",
+        "buttons": "Buttons",
+        "button": "Button",
+        "list": "List",
+        "template": "Template",
+        "reaction": "Reaction",
+        "unknown": "Message"
+      },
       "unknown": "Unknown"
     },
     "messageThread": {
