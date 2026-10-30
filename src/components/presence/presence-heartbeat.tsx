@@ -5,6 +5,10 @@ import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { HEARTBEAT_MS, IDLE_AFTER_MS, type StoredPresence } from "@/lib/presence";
+import {
+  PRESENCE_RETRY_MS,
+  classifyPresenceBeatFailure,
+} from "@/lib/presence-heartbeat";
 
 /**
  * PresenceHeartbeat — headless. Mount ONCE per signed-in dashboard tab
@@ -18,6 +22,13 @@ import { HEARTBEAT_MS, IDLE_AFTER_MS, type StoredPresence } from "@/lib/presence
  * It keeps heartbeating while away (so the row stays fresh, i.e. not
  * offline). When the tab closes the beats simply stop and viewers derive
  * 'offline' from staleness — no unreliable unload write needed.
+ *
+ * A beat that does not land is NOT an error: the request never reached
+ * the server (the machine lost the connection, the tab was frozen while
+ * the user was away) — so it is retried soon after and the console
+ * stays quiet. Only a server-side refusal (a missing RPC, an RLS
+ * denial) is worth an error, and it is reported once instead of every
+ * 30 seconds.
  */
 export function PresenceHeartbeat() {
   const { accountId } = useAuth();
@@ -36,6 +47,15 @@ export function PresenceHeartbeat() {
     const supabase = createClient();
     let cancelled = false;
     let lastBeatAt = 0;
+    // A beat the network swallowed is retried soon after, so presence
+    // recovers without waiting for the next full interval.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    // The last server-side failure we reported — a broken RPC must be
+    // reported ONCE, not every 30 seconds.
+    let reportedServerError: string | null = null;
+    // The same for the network: one line per outage, not one per beat.
+    let reportedNetworkFailure = false;
+
     lastActivityRef.current = Date.now();
 
     const markActive = () => {
@@ -48,7 +68,7 @@ export function PresenceHeartbeat() {
       return "online";
     };
 
-    const beat = async () => {
+    async function beat() {
       if (cancelled) return;
       // Coalesce bursts: a tab refocus fires visibilitychange AND focus
       // together, so skip a beat within 1s of the last to avoid two RPCs
@@ -56,15 +76,59 @@ export function PresenceHeartbeat() {
       const t = Date.now();
       if (t - lastBeatAt < 1_000) return;
       lastBeatAt = t;
-      const { error } = await supabase.rpc("touch_presence", {
+
+      // The browser knows there is no network: the request would fail
+      // before leaving the machine. Wait for it to come back.
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        scheduleRetry();
+        return;
+      }
+
+      const { error, status } = await supabase.rpc("touch_presence", {
         p_status: currentStatus(),
       });
-      if (error && !cancelled) {
-        // Non-fatal: presence is best-effort. Log once per failure so a
-        // misconfigured RPC is visible without spamming.
-        console.error("[PresenceHeartbeat] touch_presence failed:", error.message);
+      if (cancelled) return;
+      if (!error) {
+        reportedServerError = null;
+        reportedNetworkFailure = false;
+        return;
       }
-    };
+
+      if (classifyPresenceBeatFailure(error, status) === "network") {
+        // The request never reached the server: the machine lost the
+        // connection, or the tab was frozen while the user was away.
+        // Presence is best effort — the retry below (or the beat when
+        // the network returns) fixes it, so this is not an error.
+        if (!reportedNetworkFailure) {
+          reportedNetworkFailure = true;
+          console.debug(
+            "[PresenceHeartbeat] beat did not reach the server:",
+            error.message,
+          );
+        }
+        scheduleRetry();
+        return;
+      }
+
+      // The server answered and said no: the RPC is missing, the RLS
+      // refused it, the payload is wrong. That IS a misconfiguration —
+      // say it once, not every 30 seconds.
+      if (error.message !== reportedServerError) {
+        reportedServerError = error.message;
+        console.error(
+          "[PresenceHeartbeat] touch_presence failed:",
+          error.message,
+        );
+      }
+    }
+
+    function scheduleRetry() {
+      if (cancelled || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        void beat();
+      }, PRESENCE_RETRY_MS);
+    }
 
     // Activity listeners. `passive` so we never block scroll/input.
     const activityEvents: (keyof DocumentEventMap)[] = [
@@ -87,17 +151,26 @@ export function PresenceHeartbeat() {
     document.addEventListener("visibilitychange", onReturn);
     window.addEventListener("focus", onReturn);
 
+    // The network came back: report presence right away instead of
+    // waiting for the next beat.
+    const onOnline = () => {
+      void beat();
+    };
+    window.addEventListener("online", onOnline);
+
     void beat();
     const interval = setInterval(() => void beat(), HEARTBEAT_MS);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
+      if (retryTimer) clearTimeout(retryTimer);
       activityEvents.forEach((e) =>
         document.removeEventListener(e, markActive),
       );
       document.removeEventListener("visibilitychange", onReturn);
       window.removeEventListener("focus", onReturn);
+      window.removeEventListener("online", onOnline);
     };
   }, [accountId]);
 
