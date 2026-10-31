@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 /**
- * One-shot cron drain for the automations and flows engines.
+ * One-shot cron drain for the automations, flows and follow-up engines.
  *
- * The app itself never calls these two endpoints on a timer — a
- * scheduler has to. This script is that scheduler: it makes the two
- * HTTP calls and exits, so it can run as a Railway cron job (or from
- * any external pinger) without keeping anything open.
+ * The app itself never calls these endpoints on a timer — a scheduler
+ * has to. This script is that scheduler: it makes the HTTP calls and
+ * exits, so it can run as a Railway cron job (or from any external
+ * pinger) without keeping anything open.
  *
- * Endpoints (both GET):
+ * Endpoints (all GET):
  *   /api/automations/cron — drains due rows from
  *                            automation_pending_executions, closes out
  *                            wait_for_reply runs whose 24h window
  *                            lapsed, requeues stalled ones.
  *   /api/flows/cron      — sweeps flow runs that finished or failed
  *                            into their terminal state.
+ *   /api/followups/cron  — creates the dated follow-up reminders (the
+ *                            day-before and due-today notifications).
  *
  * They are independent on purpose: one failing must not stop the
- * other. Both authenticate with the same shared secret, sent in the
- * `x-cron-secret` header, and both fail closed — no secret, no
+ * others. All authenticate with the same shared secret, sent in the
+ * `x-cron-secret` header, and all fail closed — no secret, no
  * request; wrong secret, 401.
  *
  * Exit code is the point: Railway marks a cron run as failed on a
@@ -31,7 +33,11 @@ const base = (process.env.CRON_BASE_URL || "https://app.crmbr.com").replace(
   "",
 );
 
-const ENDPOINTS = ["/api/automations/cron", "/api/flows/cron"];
+const ENDPOINTS = [
+  "/api/automations/cron",
+  "/api/flows/cron",
+  "/api/followups/cron",
+];
 
 // The drain runs the automation engine inline, so it can take a while
 // when a backlog is waiting. Long enough for a real backlog, short

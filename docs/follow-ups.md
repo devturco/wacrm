@@ -19,12 +19,15 @@ Reminders are sent after **9:00 AM Brasília time** (so nothing buzzes at midnig
 1. **Apply the migration** `supabase/migrations/070_conversation_followups.sql` in the Supabase SQL editor
    (adds one table + one function; safe to run twice).
 2. **Redeploy** the website app.
-3. **Background reminders** (so they arrive with crmbr closed): in Coolify add an environment variable
-   `AUTOMATION_CRON_SECRET` = any long random text (skip if already set), redeploy, then open the app →
-   **Scheduled Tasks** → add:
-   - Name: `followup-reminders`
-   - Command: `wget -qO- --header="x-cron-secret: $AUTOMATION_CRON_SECRET" http://127.0.0.1:3000/api/followups/cron`
-   - Frequency: `*/15 * * * *`
+3. **Background reminders** (so they arrive with crmbr closed):
+   - **Railway (recomendado):** o serviço `cronjobs` já chama `/api/followups/cron` a cada 5 minutos
+     (ver `automations-and-cron.md`). Só é preciso garantir que `AUTOMATION_CRON_SECRET` exista
+     no serviço web **e** no `cronjobs`, com o mesmo valor.
+   - **Coolify:** adicione uma variável de ambiente `AUTOMATION_CRON_SECRET` = qualquer texto
+     aleatório longo (pule se já existir), redeploy, então abra o app → **Scheduled Tasks** → adicione:
+     - Name: `followup-reminders`
+     - Command: `wget -qO- --header="x-cron-secret: $AUTOMATION_CRON_SECRET" http://127.0.0.1:3000/api/followups/cron`
+     - Frequency: `*/15 * * * *`
    Without this, reminders are still created whenever someone opens crmbr, but not in the background.
 
 ## How it works

@@ -56,7 +56,7 @@ command que faz as duas chamadas e sai.
 
 O repositório já traz o que esse serviço precisa:
 
-- [`scripts/cron-drain.mjs`](../scripts/cron-drain.mjs) — faz as duas
+- [`scripts/cron-drain.mjs`](../scripts/cron-drain.mjs) — faz as três
   chamadas, imprime o status de cada uma e **sai com código != 0 se
   alguma falhar** (o Railway marca a execução como falha no log).
 - [`Dockerfile.cron`](../Dockerfile.cron) — imagem mínima, só o
@@ -97,6 +97,13 @@ No Railway dá para forçar uma execução pela CLI:
 railway cron list
 railway cron run
 ```
+
+### O que o cron drain atende
+
+Além das automações e dos fluxos, o mesmo script chama
+`/api/followups/cron` — é ele que cria os lembretes de follow-up com
+data enquanto o crmbr está fechado (ver `follow-ups.md`). Sem essa
+chamada, os lembretes só nascem quando alguém abre o app.
 
 ---
 
