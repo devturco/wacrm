@@ -10,7 +10,7 @@
 // say so, with a way to request a new one). Bouncing to /login with
 // no explanation was the locked-out experience issue #592 describes.
 //
-// Not gated by the middleware on purpose: the "expired" state must be
+// Not gated by the proxy on purpose: the "expired" state must be
 // reachable signed-out, and a signed-in visitor must not be redirected
 // away from the very page they need.
 // ============================================================
@@ -145,11 +145,11 @@ export default function ResetPasswordPage() {
             <Button
               className="h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => {
-                // Full-page navigation, like /login: the middleware
+                // Full-page navigation, like /login: the proxy
                 // gating /dashboard must see the session cookies on a
                 // fresh top-level request, which a soft router.push
                 // can race (issue #365).
-                // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full reload so the auth cookies reach the middleware
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full reload so the auth cookies reach the proxy
                 window.location.href = "/dashboard";
               }}
             >

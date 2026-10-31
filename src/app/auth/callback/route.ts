@@ -23,7 +23,7 @@
 //
 // The session cookies are written by `@supabase/ssr` through the
 // server client's cookie adapter, so the redirected-to page (and the
-// middleware in front of it) sees the user signed in.
+// proxy in front of it) sees the user signed in.
 //
 // `Location` is emitted as a relative path on purpose — see
 // `relativeRedirect` for the reverse-proxy reasoning.

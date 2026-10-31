@@ -61,7 +61,7 @@ function LoginPageInner() {
   // straight to /dashboard. They only end up on this screen when the
   // redirect fell back to the Site URL, and then GoTrue hands the
   // session back in the URL *fragment* (#access_token=…), which the
-  // server never sees: `/` redirects to /dashboard, the middleware
+  // server never sees: `/` redirects to /dashboard, the proxy
   // bounces that to /login, and the fragment rides along untouched.
   //
   // The fragment is the only trace left, so it is all we have to go on.
@@ -105,9 +105,9 @@ function LoginPageInner() {
 
     // Full-page navigation (not router.push) so the browser issues a
     // fresh top-level request that carries the just-written Supabase
-    // auth cookies to the middleware gating /dashboard. A soft
+    // auth cookies to the proxy gating /dashboard. A soft
     // client-side navigation can reach the protected route before the
-    // server observes the new session, so the middleware bounces it
+    // server observes the new session, so the proxy bounces it
     // back to /login — which looks like the page "just refreshing"
     // instead of signing in (issue #365). Mirrors the deliberate full
     // reload the invite-accept flow already uses in join/[token].
