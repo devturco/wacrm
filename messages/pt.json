@@ -43,7 +43,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "followups": "Acompanhamentos"
   },
   "Header": {
     "dashboard": "Painel",
@@ -60,7 +61,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "followups": "Acompanhamentos"
   },
   "ModeToggle": {
     "switchMode": "Mudar para o modo {mode}"
@@ -2329,7 +2331,8 @@
       "pushErrorToast": "Não foi possível configurar as notificações push. Tente novamente.",
       "pushSendTest": "Enviar push de teste",
       "pushTestSent": "Push de teste enviado. Ele deve aparecer neste dispositivo em alguns segundos.",
-      "pushTestNone": "Nenhum dispositivo recebeu. Desative e ative o push novamente neste dispositivo."
+      "pushTestNone": "Nenhum dispositivo recebeu. Desative e ative o push novamente neste dispositivo.",
+      "pushTestNotRegistered": "Este dispositivo não está registrado no servidor. Desative e ative o push novamente."
     },
     "apiKeys": {
       "title": "Chaves de API",
@@ -3326,5 +3329,44 @@
       "metaApiStatus": "Erro da API da Meta: {status}",
       "syncFailed": "Falha ao sincronizar os modelos"
     }
+  },
+  "Followups": {
+    "followUp": "Acompanhamento",
+    "followUpOn": "Acompanhamento em {date}",
+    "dialogTitle": "Lembrete de acompanhamento",
+    "reminderInfo": "Você receberá uma notificação no dia anterior e no próprio dia.",
+    "dateLabel": "Lembrar-me em",
+    "presetTomorrow": "Amanhã",
+    "preset3Days": "3 dias",
+    "presetWeek": "1 semana",
+    "presetMonth": "1 mês",
+    "expiryLabel": "Vencimento da apólice (opcional)",
+    "expiryHint": "As renovações abrem 45 dias antes do vencimento. Informe a data e escolheremos o lembrete para você.",
+    "useRenewal": "Criar lembrete de renovação",
+    "renewalNote": "A apólice vence em {expiry} - abre a janela de renovação",
+    "renewalSet": "Lembrete definido para {date}, quando abre a janela de renovação de 45 dias.",
+    "renewalOpenNow": "A janela de renovação de 45 dias já está aberta; o lembrete ficou para amanhã.",
+    "noteLabel": "Nota",
+    "notePlaceholder": "ex.: Ligar sobre o seguro do carro",
+    "save": "Salvar",
+    "markDone": "Marcar como feito",
+    "remove": "Remover acompanhamento",
+    "saved": "Acompanhamento salvo",
+    "done": "Acompanhamento concluído",
+    "removed": "Acompanhamento removido",
+    "saveFailed": "Não foi possível salvar o acompanhamento. Tente novamente.",
+    "pastDate": "Escolha hoje ou uma data futura.",
+    "pageTitle": "Acompanhamentos",
+    "pageDescription": "Clientes a quem você prometeu retornar. Avisamos no dia anterior e no próprio dia.",
+    "emptyTitle": "Nenhum acompanhamento ainda",
+    "emptyDesc": "Abra uma conversa e toque no botão do calendário para definir uma data.",
+    "group_overdue": "Atrasados",
+    "group_today": "Hoje",
+    "group_tomorrow": "Amanhã",
+    "group_upcoming": "Próximos",
+    "customer": "Cliente",
+    "openChat": "Abrir conversa",
+    "loadFailed": "Não foi possível carregar os acompanhamentos.",
+    "retry": "Tentar novamente"
   }
 }

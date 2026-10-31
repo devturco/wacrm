@@ -87,7 +87,12 @@ export function BrowserNotificationsCard({ className }: { className?: string }) 
       const r = await sendTestPush();
       if (!r) toast.error(t('pushErrorToast'));
       else if (!r.configured) toast.error(t('pushNotConfigured'));
-      else if (r.sent === 0) toast.error(t('pushTestNone'));
+      else if (r.sent === 0) {
+        const detail =
+          r.errors[0] ??
+          (r.subscriptions === 0 ? t('pushTestNotRegistered') : undefined);
+        toast.error(t('pushTestNone'), { description: detail, duration: 15000 });
+      }
       else toast.success(t('pushTestSent'));
     } finally {
       setPushBusy(false);

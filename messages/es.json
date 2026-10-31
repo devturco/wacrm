@@ -43,7 +43,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
-    "menuSignOut": "Cerrar sesión"
+    "menuSignOut": "Cerrar sesión",
+    "followups": "Seguimientos"
   },
   "Header": {
     "dashboard": "Panel",
@@ -60,7 +61,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
-    "menuSignOut": "Cerrar sesión"
+    "menuSignOut": "Cerrar sesión",
+    "followups": "Seguimientos"
   },
   "ModeToggle": {
     "switchMode": "Cambiar al modo {mode}"
@@ -2329,7 +2331,8 @@
       "pushErrorToast": "No se pudieron configurar las notificaciones push. Inténtalo de nuevo.",
       "pushSendTest": "Enviar push de prueba",
       "pushTestSent": "Push de prueba enviado. Debería aparecer en este dispositivo en unos segundos.",
-      "pushTestNone": "Ningún dispositivo lo recibió. Desactiva y vuelve a activar el push en este dispositivo."
+      "pushTestNone": "Ningún dispositivo lo recibió. Desactiva y vuelve a activar el push en este dispositivo.",
+      "pushTestNotRegistered": "Este dispositivo no está registrado en el servidor. Desactiva y activa el push de nuevo."
     },
     "apiKeys": {
       "title": "Claves de API",
@@ -3326,5 +3329,44 @@
       "metaApiStatus": "Error de la API de Meta: {status}",
       "syncFailed": "Error al sincronizar las plantillas"
     }
+  },
+  "Followups": {
+    "followUp": "Seguimiento",
+    "followUpOn": "Seguimiento el {date}",
+    "dialogTitle": "Recordatorio de seguimiento",
+    "reminderInfo": "Recibirás una notificación el día anterior y el mismo día.",
+    "dateLabel": "Recuérdame el",
+    "presetTomorrow": "Mañana",
+    "preset3Days": "3 días",
+    "presetWeek": "1 semana",
+    "presetMonth": "1 mes",
+    "expiryLabel": "Vencimiento de la póliza (opcional)",
+    "expiryHint": "Las renovaciones abren 45 días antes del vencimiento. Indica la fecha y elegiremos el recordatorio por ti.",
+    "useRenewal": "Crear recordatorio de renovación",
+    "renewalNote": "La póliza vence el {expiry} - se abre la ventana de renovación",
+    "renewalSet": "Recordatorio fijado para el {date}, cuando se abre la ventana de renovación de 45 días.",
+    "renewalOpenNow": "La ventana de renovación de 45 días ya está abierta; el recordatorio queda para mañana.",
+    "noteLabel": "Nota",
+    "notePlaceholder": "p. ej. Llamar por el seguro del coche",
+    "save": "Guardar",
+    "markDone": "Marcar como hecho",
+    "remove": "Eliminar seguimiento",
+    "saved": "Seguimiento guardado",
+    "done": "Seguimiento completado",
+    "removed": "Seguimiento eliminado",
+    "saveFailed": "No se pudo guardar el seguimiento. Inténtalo de nuevo.",
+    "pastDate": "Elige hoy o una fecha futura.",
+    "pageTitle": "Seguimientos",
+    "pageDescription": "Clientes a los que prometiste responder. Te avisamos el día anterior y el mismo día.",
+    "emptyTitle": "Aún no hay seguimientos",
+    "emptyDesc": "Abre un chat y toca el botón del calendario para fijar una fecha.",
+    "group_overdue": "Vencidos",
+    "group_today": "Hoy",
+    "group_tomorrow": "Mañana",
+    "group_upcoming": "Próximos",
+    "customer": "Cliente",
+    "openChat": "Abrir chat",
+    "loadFailed": "No se pudieron cargar los seguimientos.",
+    "retry": "Reintentar"
   }
 }

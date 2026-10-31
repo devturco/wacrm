@@ -43,7 +43,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "followups": "Follow-ups"
   },
   "Header": {
     "dashboard": "Dashboard",
@@ -60,7 +61,8 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "followups": "Follow-ups"
   },
   "ModeToggle": {
     "switchMode": "Switch to {mode} mode"
@@ -2329,7 +2331,8 @@
       "pushErrorToast": "Could not set up push notifications. Please try again.",
       "pushSendTest": "Send test push",
       "pushTestSent": "Test push sent. It should appear on this device in a few seconds.",
-      "pushTestNone": "No device received it. Turn push off and on again on this device."
+      "pushTestNone": "No device received it. Turn push off and on again on this device.",
+      "pushTestNotRegistered": "This device is not registered on the server. Turn push off and on again."
     },
     "apiKeys": {
       "title": "API keys",
@@ -3326,5 +3329,44 @@
       "metaApiStatus": "Meta API error: {status}",
       "syncFailed": "Failed to sync templates"
     }
+  },
+  "Followups": {
+    "followUp": "Follow-up",
+    "followUpOn": "Follow-up on {date}",
+    "dialogTitle": "Follow-up reminder",
+    "reminderInfo": "You'll get a notification the day before and on the day.",
+    "dateLabel": "Remind me on",
+    "presetTomorrow": "Tomorrow",
+    "preset3Days": "3 days",
+    "presetWeek": "1 week",
+    "presetMonth": "1 month",
+    "expiryLabel": "Policy expiry date (optional)",
+    "expiryHint": "Renewals open 45 days before expiry. Enter the expiry date and we will pick the reminder date for you.",
+    "useRenewal": "Set renewal reminder",
+    "renewalNote": "Policy expires {expiry} - renewal window opens",
+    "renewalSet": "Reminder set for {date}, when the 45-day renewal window opens.",
+    "renewalOpenNow": "The 45-day renewal window is already open, so the reminder is set for tomorrow.",
+    "noteLabel": "Note",
+    "notePlaceholder": "e.g. Call back about car insurance",
+    "save": "Save",
+    "markDone": "Mark done",
+    "remove": "Remove follow-up",
+    "saved": "Follow-up saved",
+    "done": "Follow-up marked done",
+    "removed": "Follow-up removed",
+    "saveFailed": "Could not save the follow-up. Please try again.",
+    "pastDate": "Choose today or a future date.",
+    "pageTitle": "Follow-ups",
+    "pageDescription": "Customers you promised to get back to. You are reminded the day before and on the day.",
+    "emptyTitle": "No follow-ups yet",
+    "emptyDesc": "Open a chat and tap the calendar button to set a follow-up date.",
+    "group_overdue": "Overdue",
+    "group_today": "Today",
+    "group_tomorrow": "Tomorrow",
+    "group_upcoming": "Upcoming",
+    "customer": "Customer",
+    "openChat": "Open chat",
+    "loadFailed": "Couldn't load follow-ups.",
+    "retry": "Try again"
   }
 }
