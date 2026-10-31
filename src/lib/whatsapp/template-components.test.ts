@@ -47,6 +47,52 @@ describe('buildMetaTemplatePayload', () => {
     });
   });
 
+  it('uses body_text_named_params for a NAMED body variable', () => {
+    const payload = buildMetaTemplatePayload({
+      ...base,
+      body_text: 'Hi {{customer_name}}, order {{order_id}}.',
+      sample_values: { body: ['John', 'ORD-42'] },
+    });
+    const body = payload.components.find((c) => c.type === 'BODY');
+    expect(body?.example?.body_text_named_params).toEqual([
+      { param_name: 'customer_name', example: 'John' },
+      { param_name: 'order_id', example: 'ORD-42' },
+    ]);
+    // The positional field is a different shape — sending it for a
+    // named template would leave Meta without the examples.
+    expect(body?.example?.body_text).toBeUndefined();
+  });
+
+  it('uses header_text_named_params for a NAMED header variable', () => {
+    const payload = buildMetaTemplatePayload({
+      ...base,
+      header_type: 'text',
+      header_content: 'Hello {{first_name}}',
+      sample_values: { header: ['Sara'] },
+    });
+    expect(payload.components[0]).toEqual({
+      type: 'HEADER',
+      format: 'TEXT',
+      text: 'Hello {{first_name}}',
+      example: {
+        header_text_named_params: [
+          { param_name: 'first_name', example: 'Sara' },
+        ],
+      },
+    });
+  });
+
+  it('keeps body_text positional for a positional template', () => {
+    const payload = buildMetaTemplatePayload({
+      ...base,
+      body_text: 'Hi {{1}}, order {{2}}.',
+      sample_values: { body: ['John', 'ORD-42'] },
+    });
+    const body = payload.components.find((c) => c.type === 'BODY');
+    expect(body?.example?.body_text_named_params).toBeUndefined();
+    expect(body?.example?.body_text).toEqual([['John', 'ORD-42']]);
+  });
+
   it('uses header_url for media headers when no handle is set', () => {
     const payload = buildMetaTemplatePayload({
       ...base,

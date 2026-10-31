@@ -58,6 +58,11 @@ import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { useTranslations } from 'next-intl';
 import { formatDate } from '@/lib/i18n/format';
+import {
+  contactSearchFilter,
+  contactSearchPattern,
+} from '@/lib/contacts/search-filter';
+import { pageAfterRangeError, pageAfterShrink } from '@/lib/contacts/page-bounds';
 
 const PAGE_SIZE = 25;
 
@@ -134,6 +139,7 @@ export default function ContactsPage() {
 
     let contactRows: Contact[];
     let count: number;
+    let countIsExact = true;
 
     if (selectedTagIds.length > 0) {
       // Tag filter active — resolve it server-side (join + distinct +
@@ -142,7 +148,7 @@ export default function ContactsPage() {
       // clause. See migration 025_filter_contacts_by_tags.
       const { data, error } = await supabase.rpc('filter_contacts_by_tags', {
         p_tag_ids: selectedTagIds,
-        p_search: term || null,
+        p_search: contactSearchPattern(term),
         p_limit: PAGE_SIZE,
         p_offset: from,
       });
@@ -155,6 +161,7 @@ export default function ContactsPage() {
       const rows = (data ?? []) as { contact: Contact; total_count: number }[];
       contactRows = rows.map((r) => r.contact);
       count = rows.length > 0 ? Number(rows[0].total_count) : 0;
+      countIsExact = rows.length > 0;
     } else {
       let query = supabase
         .from('contacts')
@@ -162,13 +169,18 @@ export default function ContactsPage() {
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      if (term) {
-        const like = `%${term}%`;
-        query = query.or(`name.ilike.${like},phone.ilike.${like},email.ilike.${like}`);
-      }
+      const searchFilter = contactSearchFilter(term, { includeEmail: true });
+      if (searchFilter) query = query.or(searchFilter);
 
       const { data, count: exactCount, error } = await query;
       if (seq !== fetchSeq.current) return; // superseded by a newer fetch
+      const pageInRange = error
+        ? pageAfterRangeError(page, PAGE_SIZE, error)
+        : null;
+      if (pageInRange !== null && pageInRange !== page) {
+        setPage(pageInRange);
+        return;
+      }
       if (error) {
         toast.error(t('toastFailedLoad'));
         setLoading(false);
@@ -179,6 +191,12 @@ export default function ContactsPage() {
     }
 
     setTotalCount(count);
+
+    const boundedPage = pageAfterShrink(page, count, PAGE_SIZE, countIsExact);
+    if (contactRows.length === 0 && boundedPage !== page) {
+      setPage(boundedPage);
+      return;
+    }
 
     if (contactRows.length === 0) {
       setContacts([]);
@@ -229,7 +247,7 @@ export default function ContactsPage() {
       for (;;) {
         const { data, error } = await supabase.rpc('filter_contacts_by_tags', {
           p_tag_ids: selectedTagIds,
-          p_search: term || null,
+          p_search: contactSearchPattern(term),
           p_limit: WINDOW,
           p_offset: offset,
         });
@@ -254,10 +272,12 @@ export default function ContactsPage() {
         .order('id', { ascending: true })
         .range(from, from + WINDOW - 1);
 
-      if (term) {
-        const like = `%${term}%`;
-        query = query.or(`name.ilike.${like},phone.ilike.${like},email.ilike.${like}`);
-      }
+      // The same sanitised filter the visible list uses — otherwise
+      // "select every match" would work on a different set than the
+      // one on screen (a raw term turns % into a wildcard and a comma
+      // breaks the .or() grammar).
+      const searchFilter = contactSearchFilter(term, { includeEmail: true });
+      if (searchFilter) query = query.or(searchFilter);
 
       const { data, error } = await query;
       if (error) throw error;

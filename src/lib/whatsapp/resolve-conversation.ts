@@ -32,6 +32,7 @@ export interface ResolvedConversation {
   contactId: string;
   /** True if this call created the contact (vs matched an existing one). */
   contactCreated: boolean;
+  conversationCreated: boolean;
 }
 
 /**
@@ -93,12 +94,6 @@ export async function resolveConversationByPhone(
   const existing = await findExistingContact(db, accountId, sanitized);
   if (existing) {
     contactId = existing.id;
-    if (name && name !== existing.name) {
-      await db
-        .from('contacts')
-        .update({ name, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-    }
   } else {
     const { data: created, error: createErr } = await db
       .from('contacts')
@@ -144,14 +139,19 @@ export async function resolveConversationByPhone(
   // `.maybeSingle()`, which errors on ≥2 rows: if duplicates predate the
   // unique index (migration 036), we resolve to the canonical survivor
   // instead of falling through and creating yet another (issue #363).
-  const conversationId = await findOrCreateConversationRow(
+  const conversation = await findOrCreateConversationRow(
     db,
     accountId,
     contactId,
     ownerUserId
   );
 
-  return { conversationId, contactId, contactCreated };
+  return {
+    conversationId: conversation.id,
+    contactId,
+    contactCreated,
+    conversationCreated: conversation.created,
+  };
 }
 
 /**
@@ -165,7 +165,7 @@ async function findOrCreateConversationRow(
   accountId: string,
   contactId: string,
   ownerUserId: string
-): Promise<string> {
+): Promise<{ id: string; created: boolean }> {
   const { data: existing, error: findErr } = await db
     .from('conversations')
     .select('id')
@@ -180,7 +180,7 @@ async function findOrCreateConversationRow(
   }
 
   if (existing && existing.length > 0) {
-    return existing[0].id;
+    return { id: existing[0].id, created: false };
   }
 
   const { data: newConv, error: convErr } = await db
@@ -203,12 +203,12 @@ async function findOrCreateConversationRow(
         .order('created_at', { ascending: true })
         .limit(1);
       if (raced && raced.length > 0) {
-        return raced[0].id;
+        return { id: raced[0].id, created: false };
       }
     }
     console.error('[resolve-conversation] conversation create error:', convErr);
     throw new SendMessageError('db_error', 'Failed to create conversation', 500);
   }
 
-  return newConv.id;
+  return { id: newConv.id, created: true };
 }

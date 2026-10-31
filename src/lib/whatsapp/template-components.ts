@@ -11,7 +11,19 @@
  */
 
 import type { TemplatePayload } from './template-validators';
+import { extractTemplateVariables, variableFormat } from './template-validators';
 import type { TemplateButton } from '@/types';
+
+/**
+ * A named-parameter example. Meta pairs these by `param_name`, not by
+ * position — that's why a NAMED template needs its own field
+ * (`body_text_named_params` / `header_text_named_params`) instead of
+ * the positional `body_text` / `header_text` arrays.
+ */
+export interface MetaNamedParam {
+  param_name: string;
+  example: string;
+}
 
 export interface MetaComponent {
   type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
@@ -20,10 +32,29 @@ export interface MetaComponent {
   buttons?: MetaButtonPayload[];
   example?: {
     header_text?: string[];
+    header_text_named_params?: MetaNamedParam[];
     header_url?: string[];
     header_handle?: string[];
     body_text?: string[][];
+    body_text_named_params?: MetaNamedParam[];
   };
+}
+
+/**
+ * Zip a template's variable keys with the sample values the user typed,
+ * as Meta's named-parameter array. The samples are stored in
+ * `extractTemplateVariables` order (positional by number, named
+ * alphabetically), which is the same order the UI collects them in.
+ */
+function namedParams(
+  text: string,
+  samples: string[] | undefined,
+): MetaNamedParam[] {
+  const keys = extractTemplateVariables(text);
+  return keys.map((key, i) => ({
+    param_name: key,
+    example: samples?.[i] ?? '',
+  }));
 }
 
 interface MetaButtonPayload {
@@ -46,7 +77,12 @@ function buildHeaderComponent(payload: TemplatePayload): MetaComponent | null {
       text: header_content,
     };
     if (headerSample && headerSample.length > 0) {
-      component.example = { header_text: headerSample };
+      // A named header variable needs Meta's named-params array; the
+      // positional `header_text` is a different (and wrong) shape.
+      component.example =
+        variableFormat(header_content ?? '') === 'named'
+          ? { header_text_named_params: namedParams(header_content ?? '', headerSample) }
+          : { header_text: headerSample };
     }
     return component;
   }
@@ -73,10 +109,19 @@ function buildBodyComponent(payload: TemplatePayload): MetaComponent {
   };
   const bodySample = payload.sample_values?.body;
   if (bodySample && bodySample.length > 0) {
-    // Meta expects body_text as a 2D array — outer is "examples",
-    // inner is the values for each variable. We submit a single
-    // example row.
-    component.example = { body_text: [bodySample] };
+    if (variableFormat(payload.body_text) === 'named') {
+      // Named parameters: Meta pairs each example with its
+      // `param_name`, so the values travel as objects — the positional
+      // `body_text` array would leave the examples unattributed.
+      component.example = {
+        body_text_named_params: namedParams(payload.body_text, bodySample),
+      };
+    } else {
+      // Meta expects body_text as a 2D array — outer is "examples",
+      // inner is the values for each variable. We submit a single
+      // example row.
+      component.example = { body_text: [bodySample] };
+    }
   }
   return component;
 }

@@ -73,6 +73,106 @@ export function extractVariableIndices(text: string): number[] {
 }
 
 /**
+ * The variable format a text uses. Meta supports two, and a template
+ * uses one or the other — never both:
+ *
+ *   - `positional` — `{{1}}`, `{{2}}` (values matched by position)
+ *   - `named`      — `{{customer_name}}` (values matched by key)
+ *   - `mixed`      — both in the same text (Meta rejects it)
+ */
+export type VariableFormat = 'positional' | 'named' | 'mixed';
+
+/**
+ * Classify the variable format of a text. Returns `null` when the text
+ * has no variables at all.
+ */
+export function variableFormat(text: string): VariableFormat | null {
+  const keys = new Set<string>();
+  for (const m of text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) keys.add(m[1]);
+  if (keys.size === 0) return null;
+  const hasNumeric = [...keys].some((k) => /^\d+$/.test(k));
+  const hasNamed = [...keys].some((k) => !/^\d+$/.test(k));
+  if (hasNumeric && hasNamed) return 'mixed';
+  return hasNumeric ? 'positional' : 'named';
+}
+
+/** True when a text mixes positional (`{{1}}`) and named variables. */
+export function hasMixedVariableFormats(text: string): boolean {
+  return variableFormat(text) === 'mixed';
+}
+
+/**
+ * Variable keys a template text needs values for, in the order send-time
+ * values are matched to them. Handles both of Meta's parameter formats:
+ *
+ *   - POSITIONAL `{{1}}`, `{{2}}` → `["1", "2"]` (numeric order)
+ *   - NAMED `{{customer_name}}` → `["customer_name"]`. Meta's template
+ *     editor creates these by default now. Sorted by name, matching how
+ *     broadcasts and automations order their per-key values; Meta pairs
+ *     named values by `parameter_name`, not position.
+ *
+ * A template uses one format or the other, never both — but if a text
+ * DOES mix them (a template that reached us from outside), every key is
+ * still returned: dropping the positional ones would leave `{{1}}`
+ * unfilled in the rendered body. Positional keys come first (numeric
+ * order), then named ones (alphabetical).
+ */
+export function extractTemplateVariables(text: string): string[] {
+  const keys = new Set<string>();
+  for (const m of text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) keys.add(m[1]);
+  const all = [...keys];
+  if (all.length === 0) return [];
+  const named = all
+    .filter((k) => isNamedVariable(k))
+    .sort((a, b) => a.localeCompare(b));
+  const positional = all.filter((k) => !isNamedVariable(k));
+  if (positional.length === 0) return named;
+  return [...extractVariableIndices(text).map(String), ...named];
+}
+
+/** True for a NAMED template variable key (`customer_name`, not `1`). */
+export function isNamedVariable(key: string): boolean {
+  return !/^\d+$/.test(key);
+}
+
+/** Reject a text that mixes the two variable formats. */
+function assertSingleFormat(text: string): void {
+  if (hasMixedVariableFormats(text)) {
+    throw mixedFormatError();
+  }
+}
+
+/**
+ * The message for a mixed-format template. The literal `{{1}}` /
+ * `{{name}}` are passed as VALUES — a catalogue message is ICU, and a
+ * bare brace would be parsed as a placeholder.
+ */
+function mixedFormatError(): Error {
+  return new Error(
+    t('mixedVariableFormats', { positional: '{{1}}', named: '{{name}}' }),
+  );
+}
+
+/**
+ * Reject a template whose components disagree on the variable format.
+ * Meta pairs a template's values by format across the WHOLE template —
+ * a body with `{{1}}` next to a header with `{{name}}` is rejected.
+ */
+function assertSingleFormatAcrossTemplate(payload: TemplatePayload): void {
+  const texts = [
+    payload.body_text,
+    payload.header_type === 'text' ? payload.header_content : undefined,
+  ].filter((x): x is string => typeof x === 'string' && x.length > 0);
+
+  const formats = new Set(
+    texts.map(variableFormat).filter((f): f is VariableFormat => f !== null),
+  );
+  if (formats.size > 1) {
+    throw mixedFormatError();
+  }
+}
+
+/**
  * Meta requires contiguous, 1-indexed variables. `{{1}} {{3}}` is
  * invalid — it must be `{{1}} {{2}}`.
  */
@@ -89,16 +189,26 @@ function assertBodyContiguous(indices: number[]): void {
   }
 }
 
-export function validateBody(bodyText: string): number[] {
+/**
+ * Validate the body and return the variable keys it needs values for
+ * (positional `"1"` or named `"customer_name"`).
+ */
+export function validateBody(bodyText: string): string[] {
   if (!bodyText.trim()) throw new Error(t('bodyRequired'));
   if (bodyText.length > TEMPLATE_LIMITS.bodyMaxLength) {
     throw new Error(
       t('bodyTooLong', { max: TEMPLATE_LIMITS.bodyMaxLength, got: bodyText.length }),
     );
   }
-  const indices = extractVariableIndices(bodyText);
-  assertBodyContiguous(indices);
-  return indices;
+  assertSingleFormat(bodyText);
+  const keys = extractTemplateVariables(bodyText);
+  // Contiguity is a POSITIONAL-format rule: Meta numbers {{1}}, {{2}}…
+  // A named variable carries its own key, so `{{zeta}} {{alpha}}` is
+  // perfectly fine — there's no position to keep contiguous.
+  if (keys.length > 0 && !isNamedVariable(keys[0])) {
+    assertBodyContiguous(extractVariableIndices(bodyText));
+  }
+  return keys;
 }
 
 export function validateFooter(footerText: string | undefined): void {
@@ -108,13 +218,14 @@ export function validateFooter(footerText: string | undefined): void {
       t('footerTooLong', { max: TEMPLATE_LIMITS.footerMaxLength, got: footerText.length }),
     );
   }
-  if (extractVariableIndices(footerText).length > 0) {
+  // A footer carries no variables at all — in EITHER format.
+  if (extractTemplateVariables(footerText).length > 0) {
     throw new Error(t('footerNoVariables', { placeholder: '{{N}}' }));
   }
 }
 
 export interface HeaderValidationResult {
-  /** number of {{N}} placeholders in a TEXT header — 0 or 1. */
+  /** number of variable placeholders in a TEXT header — 0 or 1. */
   variableCount: number;
 }
 
@@ -139,16 +250,19 @@ export function validateHeader(
         }),
       );
     }
-    const indices = extractVariableIndices(header_content);
-    if (indices.length > 1) {
+    assertSingleFormat(header_content);
+    const keys = extractTemplateVariables(header_content);
+    if (keys.length > 1) {
       throw new Error(
-        t('headerTooManyVariables', { count: indices.length }),
+        t('headerTooManyVariables', { count: keys.length }),
       );
     }
-    if (indices.length === 1 && indices[0] !== 1) {
+    // "Must be {{1}}" only applies to the POSITIONAL format — a named
+    // variable stands on its own.
+    if (keys.length === 1 && !isNamedVariable(keys[0]) && keys[0] !== '1') {
       throw new Error(t('headerVariableMustBeFirst', { var: '{{1}}' }));
     }
-    return { variableCount: indices.length };
+    return { variableCount: keys.length };
   }
 
   // image / video / document need either a public URL or a Resumable
@@ -251,14 +365,16 @@ export function validateButtons(buttons: TemplateButton[] | undefined): void {
         } catch {
           throw new Error(t('urlButtonInvalidUrl', { n: i + 1 }));
         }
-        const urlVars = extractVariableIndices(b.url);
+        const urlVars = extractTemplateVariables(b.url);
         if (urlVars.length > 1) {
           throw new Error(
             t('urlButtonTooManyVariables', { n: i + 1 }),
           );
         }
         if (urlVars.length === 1) {
-          if (urlVars[0] !== 1) {
+          // Meta's dynamic-URL suffix is positional-only: the value is
+          // appended by position, never by `parameter_name`.
+          if (urlVars[0] !== '1') {
             throw new Error(
               t('urlButtonVariableMustBeFirst', { n: i + 1, var: '{{1}}' }),
             );
@@ -337,6 +453,7 @@ export function validateTemplatePayload(payload: TemplatePayload): {
   if (!payload.language?.trim()) {
     throw new Error(t('languageRequired'));
   }
+  assertSingleFormatAcrossTemplate(payload);
   const bodyVars = validateBody(payload.body_text);
   validateFooter(payload.footer_text);
   const headerResult = validateHeader(payload);

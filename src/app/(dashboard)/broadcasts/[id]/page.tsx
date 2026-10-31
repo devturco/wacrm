@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { fetchAllPages } from '@/lib/supabase/paged-query';
 import { Broadcast, BroadcastRecipient, RecipientStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,6 +42,7 @@ import {
   getRecipientStatus,
 } from '@/lib/broadcast-status';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/i18n/format';
+import { isBroadcastDeliveryInFlight } from '@/lib/whatsapp/broadcast-delivery-lease';
 import { useTranslations } from 'next-intl';
 
 interface StatCardProps {
@@ -162,6 +164,7 @@ export default function BroadcastDetailPage() {
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deliveryInFlight, setDeliveryInFlight] = useState(false);
   const [resumingScope, setResumingScope] = useState<
     'pending' | 'failed' | null
   >(null);
@@ -178,15 +181,18 @@ export default function BroadcastDetailPage() {
 
       if (bcError) throw bcError;
       setBroadcast(bc);
+      setDeliveryInFlight(await isBroadcastDeliveryInFlight(supabase, broadcastId));
 
-      const { data: recs, error: recsError } = await supabase
-        .from('broadcast_recipients')
-        .select('*, contact:contacts(*)')
-        .eq('broadcast_id', broadcastId)
-        .order('created_at', { ascending: false });
-
-      if (recsError) throw recsError;
-      setRecipients(recs ?? []);
+      const recs = await fetchAllPages<BroadcastRecipient>((from, to) =>
+        supabase
+          .from('broadcast_recipients')
+          .select('*, contact:contacts(*)')
+          .eq('broadcast_id', broadcastId)
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      );
+      setRecipients(recs);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('notFound'));
     } finally {
@@ -413,7 +419,7 @@ export default function BroadcastDetailPage() {
 
       {/* Resume / retry (issue #472). Only rendered when there is
           actually something outstanding. */}
-      {(pendingCount > 0 || retryableCount > 0) && (
+      {!deliveryInFlight && (pendingCount > 0 || retryableCount > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">

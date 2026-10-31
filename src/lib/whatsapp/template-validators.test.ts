@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractTemplateVariables,
   extractVariableIndices,
+  isNamedVariable,
   TEMPLATE_LIMITS,
   validateBody,
   validateButtons,
@@ -57,7 +59,19 @@ describe('validateBody', () => {
     expect(() => validateBody('Hi {{1}} {{3}}')).toThrow(/contiguous/);
   });
   it('accepts contiguous variables', () => {
-    expect(validateBody('Hi {{1}} {{2}}')).toEqual([1, 2]);
+    expect(validateBody('Hi {{1}} {{2}}')).toEqual(['1', '2']);
+  });
+  it('returns named variables sorted by name', () => {
+    expect(validateBody('Hi {{customer_name}}, order {{order_id}}')).toEqual([
+      'customer_name',
+      'order_id',
+    ]);
+  });
+  it('does not demand contiguency for named variables', () => {
+    expect(() => validateBody('Hi {{zeta}} {{alpha}}')).not.toThrow();
+  });
+  it('rejects a body that mixes positional and named variables', () => {
+    expect(() => validateBody('Hi {{1}} {{name}}')).toThrow(/cannot mix/);
   });
 });
 
@@ -70,6 +84,9 @@ describe('validateFooter', () => {
   });
   it('rejects variables in footer', () => {
     expect(() => validateFooter('Powered by {{1}}')).toThrow(/cannot contain/);
+  });
+  it('rejects named variables in footer', () => {
+    expect(() => validateFooter('Powered by {{brand}}')).toThrow(/cannot contain/);
   });
 });
 
@@ -93,6 +110,11 @@ describe('validateHeader', () => {
     expect(() =>
       validateHeader({ header_type: 'text', header_content: 'Hello {{2}}' }),
     ).toThrow(/must be \{\{1\}\}/);
+  });
+  it('text header accepts a named variable', () => {
+    expect(
+      validateHeader({ header_type: 'text', header_content: 'Order {{order_id}}' }),
+    ).toEqual({ variableCount: 1 });
   });
   it('image header requires a URL or handle', () => {
     expect(() => validateHeader({ header_type: 'image' })).toThrow(
@@ -273,5 +295,71 @@ describe('validateTemplatePayload — integration', () => {
         body_text: 'Hi {{1}}',
       }),
     ).toThrow(/exactly 1 sample/);
+  });
+  it('requires one sample per NAMED body variable', () => {
+    expect(() =>
+      validateTemplatePayload({
+        ...baseValid,
+        body_text: 'Hi {{customer_name}}, order {{order_id}} confirmed.',
+      }),
+    ).toThrow(/exactly 2 sample/);
+  });
+  it('accepts a named template with matching samples', () => {
+    expect(
+      validateTemplatePayload({
+        ...baseValid,
+        body_text: 'Hi {{customer_name}}, order {{order_id}} confirmed.',
+        sample_values: { body: ['John', 'ORD-42'] },
+      }),
+    ).toEqual({ bodyVarCount: 2, headerVarCount: 0 });
+  });
+  it('requires a sample for a named header variable', () => {
+    expect(() =>
+      validateTemplatePayload({
+        ...baseValid,
+        body_text: 'Hi {{customer_name}}',
+        header_type: 'text',
+        header_content: 'Order {{order_id}}',
+        sample_values: { body: ['John'] },
+      }),
+    ).toThrow(/Header has 1 variable/);
+  });
+  it('rejects a template that mixes formats across components', () => {
+    expect(() =>
+      validateTemplatePayload({
+        ...baseValid,
+        body_text: 'Hi {{1}}',
+        header_type: 'text',
+        header_content: 'Order {{order_id}}',
+        sample_values: { body: ['John'], header: ['ORD-42'] },
+      }),
+    ).toThrow(/cannot mix/);
+  });
+});
+
+describe('extractTemplateVariables', () => {
+  it('returns positional keys in numeric order', () => {
+    expect(extractTemplateVariables('{{2}} then {{10}} then {{1}}')).toEqual([
+      '1',
+      '2',
+      '10',
+    ]);
+  });
+
+  it('returns named keys sorted by name, deduplicated', () => {
+    expect(
+      extractTemplateVariables(
+        'Hi {{customer_name}}, order {{order_id}} for {{customer_name}}',
+      ),
+    ).toEqual(['customer_name', 'order_id']);
+  });
+
+  it('returns [] when there are no variables', () => {
+    expect(extractTemplateVariables('No variables here')).toEqual([]);
+  });
+
+  it('tells named keys from positional ones', () => {
+    expect(isNamedVariable('service_details')).toBe(true);
+    expect(isNamedVariable('1')).toBe(false);
   });
 });

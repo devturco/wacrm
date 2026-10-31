@@ -54,26 +54,24 @@ import {
 } from '@/components/ui/dialog';
 import { createClient } from '@/lib/supabase/client';
 import { formatDate } from '@/lib/i18n/format';
-
-interface PeekOk {
-  ok: true;
-  account_name: string;
-  role: 'admin' | 'agent' | 'viewer';
-  expires_at: string;
-}
-interface PeekFail {
-  ok: false;
-  reason: 'not_found' | 'used' | 'expired' | 'server_error';
-}
-type PeekResult = PeekOk | PeekFail;
+import {
+  RETRYABLE_PEEK_FAIL_REASONS,
+  toPeekResult,
+  type PeekFailReason,
+  type PeekResult,
+} from '@/lib/auth/peek-result';
 
 // Message keys per peek failure reason — resolved through `t` inside
 // the component (hooks can't run at module level). Snake_case reasons
 // come from the API; the catalogue uses camelCase leaves.
-const FAIL_KEY: Record<PeekFail['reason'], 'notFound' | 'used' | 'expired' | 'serverError'> = {
+const FAIL_KEY: Record<
+  PeekFailReason,
+  'notFound' | 'used' | 'expired' | 'rateLimited' | 'serverError'
+> = {
   not_found: 'notFound',
   used: 'used',
   expired: 'expired',
+  rate_limited: 'rateLimited',
   server_error: 'serverError',
 };
 
@@ -113,7 +111,10 @@ export default function JoinPage() {
         }),
         createClient().auth.getUser(),
       ]);
-      const peekBody = (await peekRes.json()) as PeekResult;
+      const peekBody = toPeekResult(
+        peekRes.status,
+        await peekRes.json().catch(() => null),
+      );
       setPeek(peekBody);
       setAuthedUserId(authRes.data.user?.id ?? null);
     } catch (err) {
@@ -138,7 +139,10 @@ export default function JoinPage() {
           }),
           createClient().auth.getUser(),
         ]);
-        const peekBody = (await peekRes.json()) as PeekResult;
+        const peekBody = toPeekResult(
+          peekRes.status,
+          await peekRes.json().catch(() => null),
+        );
         if (cancelled) return;
         setPeek(peekBody);
         setAuthedUserId(authRes.data.user?.id ?? null);
@@ -241,7 +245,7 @@ export default function JoinPage() {
               failure reasons (not_found / used / expired) are
               terminal for this token, so no retry — just the
               signup/sign-in escape hatches. */}
-          {peek.reason === 'server_error' ? (
+          {RETRYABLE_PEEK_FAIL_REASONS.has(peek.reason) ? (
             <>
               <Button
                 onClick={loadPeekAndAuth}
