@@ -34,6 +34,16 @@ stored names carry the old brand.
   are cleared the first time each setting is changed, so no device
   loses its theme or gets its notifications switched back off.
 
+### Added
+
+- **Push notifications for phones and closed browsers.** Web Push (service worker + VAPID) alerts for new
+  customer messages, an installable web app manifest, and a **Reply** / **Open chat** action on the
+  notification (inline reply where the browser supports it). Off by default.
+
+> **Migration required:** apply `supabase/migrations/069_push_subscriptions.sql` (adds one table, nothing
+> existing is changed) and set `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`.
+> See `docs/push-notifications.md`.
+
 ## [0.8.1] — 2026-07-10
 
 Fixes inbound chats fragmenting into multiple threads for the same
