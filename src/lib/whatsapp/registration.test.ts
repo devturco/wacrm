@@ -67,6 +67,27 @@ describe('registerPhoneNumber', () => {
     expect(result).toEqual({ success: true, alreadyRegistered: true });
   });
 
+  it('treats SMB numbers as already registered (endpoint not available)', async () => {
+    // Numbers created through the WhatsApp Business app belong to SMB
+    // accounts, where Meta does not expose /register: the onboarding
+    // already registered the number.
+    fetchMock.mockResolvedValueOnce(
+      errorResponse(400, {
+        error: {
+          message:
+            'Register endpoint is not available for SMB businesses. Check that the Phone Number ID is copied exactly (digits only, no spaces).',
+          code: 100,
+        },
+      }),
+    );
+    const result = await registerPhoneNumber({
+      phoneNumberId: 'PNID_123',
+      accessToken: 'tok',
+      pin: '123456',
+    });
+    expect(result).toEqual({ success: true, alreadyRegistered: true });
+  });
+
   it("surfaces Meta's PIN-required error verbatim so the UI can show it", async () => {
     fetchMock.mockResolvedValueOnce(
       errorResponse(400, {
