@@ -252,6 +252,12 @@ export async function registerPhoneNumber(
   if (/already.*registered/i.test(error.message)) {
     return { success: true, alreadyRegistered: true }
   }
+  // SMB accounts (numbers coming from the WhatsApp Business app) do not
+  // expose /register: the onboarding already registered the number. Treat
+  // the response as success instead of leaving the account disconnected.
+  if (/register endpoint is not available for smb/i.test(error.message)) {
+    return { success: true, alreadyRegistered: true }
+  }
   throw error
 }
 
