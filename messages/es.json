@@ -419,6 +419,8 @@
     "composer": {
       "draftHint": "Toca ✨ para redactar una respuesta con IA; puedes editarla antes de enviarla",
       "sessionExpiredHint": "La sesión de 24 horas expiró. Usa una plantilla para retomar el contacto.",
+      "noCustomerMessageHint": "El cliente aún no respondió. Envía una plantilla para iniciar la conversación.",
+      "noCustomerMessagePlaceholder": "Sin respuesta del cliente: usa una plantilla",
       "templates": "Plantillas",
       "readOnlyPlaceholder": "Solo lectura: los observadores pueden navegar, pero no responder",
       "sessionExpiredPlaceholder": "Sesión expirada - usa una plantilla",

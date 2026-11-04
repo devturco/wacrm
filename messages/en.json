@@ -419,6 +419,8 @@
     "composer": {
       "draftHint": "Tap the ✨ to draft a reply with AI — you can edit it before sending",
       "sessionExpiredHint": "24-hour session expired. Use a template to re-engage.",
+      "noCustomerMessageHint": "The customer hasn't replied yet. Send a template to start the conversation.",
+      "noCustomerMessagePlaceholder": "No customer reply yet — use a template",
       "templates": "Templates",
       "readOnlyPlaceholder": "Read-only — viewers can browse but not reply",
       "sessionExpiredPlaceholder": "Session expired - use a template",

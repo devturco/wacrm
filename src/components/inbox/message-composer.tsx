@@ -112,6 +112,11 @@ interface MediaDraft {
 interface MessageComposerProps {
   conversationId: string;
   sessionExpired: boolean;
+  /**
+   * Por que o compositor está travado. `noCustomerMessages` é quem nunca
+   * respondeu (não houve sessão para expirar) e pede outro texto.
+   */
+  sessionExpiredReason?: "open" | "empty" | "noCustomerMessages" | "expired";
   onSend: (text: string, replyToId?: string) => void;
   onSendMedia: (payload: SendMediaPayload) => void;
   onSendInteractive: (payload: InteractiveMessagePayload, replyToId?: string) => void;
@@ -140,6 +145,7 @@ const OPUS_ENCODER_PATH = "/opus/encoderWorker.min.js";
 export function MessageComposer({
   conversationId,
   sessionExpired,
+  sessionExpiredReason = "expired",
   onSend,
   onSendMedia,
   onSendInteractive,
@@ -578,7 +584,11 @@ export function MessageComposer({
       {sessionExpired && (
         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-500/10 px-3 py-2">
           <p className="text-xs text-amber-400">
-            {t("sessionExpiredHint")}
+            {t(
+              sessionExpiredReason === "noCustomerMessages"
+                ? "noCustomerMessageHint"
+                : "sessionExpiredHint"
+            )}
           </p>
           {canUseTemplates ? (
             <Button
@@ -773,7 +783,11 @@ export function MessageComposer({
               readOnly
                 ? t("readOnlyPlaceholder")
                 : sessionExpired
-                  ? t("sessionExpiredPlaceholder")
+                  ? t(
+                      sessionExpiredReason === "noCustomerMessages"
+                        ? "noCustomerMessagePlaceholder"
+                        : "sessionExpiredPlaceholder"
+                    )
                   : t("typeMessagePlaceholder")
             }
             disabled={sessionExpired || readOnly}

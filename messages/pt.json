@@ -419,6 +419,8 @@
     "composer": {
       "draftHint": "Toque em ✨ para redigir uma resposta com IA — você pode editá-la antes de enviar",
       "sessionExpiredHint": "A sessão de 24 horas expirou. Use um modelo para retomar o contato.",
+      "noCustomerMessageHint": "O cliente ainda não respondeu. Envie um modelo para iniciar a conversa.",
+      "noCustomerMessagePlaceholder": "Sem resposta do cliente — use um modelo",
       "templates": "Modelos",
       "readOnlyPlaceholder": "Somente leitura — visualizadores podem navegar, mas não responder",
       "sessionExpiredPlaceholder": "Sessão expirada - use um modelo",

@@ -312,20 +312,32 @@ export function MessageThread({
 
   // 24-hour session timer
   const sessionInfo = useMemo(() => {
-    if (!messages.length) return { expired: false, remaining: "" };
+    if (!messages.length) {
+      return { expired: false, remaining: "", reason: "empty" as const };
+    }
 
     // Find last customer message
     const lastCustomerMsg = [...messages]
       .reverse()
       .find((m) => m.sender_type === "customer");
 
-    if (!lastCustomerMsg) return { expired: true, remaining: tTimer("noCustomerMessages") };
+    if (!lastCustomerMsg) {
+      return {
+        expired: true,
+        remaining: tTimer("noCustomerMessages"),
+        reason: "noCustomerMessages" as const,
+      };
+    }
 
     const hoursSince = differenceInHours(new Date(), new Date(lastCustomerMsg.created_at));
     const expired = hoursSince >= 24;
 
     if (expired) {
-      return { expired: true, remaining: tTimer("expired") };
+      return {
+        expired: true,
+        remaining: tTimer("expired"),
+        reason: "expired" as const,
+      };
     }
 
     const hoursLeft = 24 - hoursSince;
@@ -334,7 +346,7 @@ export function MessageThread({
         ? tTimer("xhRemaining", { hours: Math.floor(hoursLeft) })
         : tTimer("xmRemaining", { minutes: Math.floor(hoursLeft * 60) });
 
-    return { expired, remaining };
+    return { expired, remaining, reason: "open" as const };
   }, [messages, tTimer]);
 
   // Store latest callback in a ref so fetchMessages doesn't need to
@@ -1326,6 +1338,7 @@ export function MessageThread({
       <MessageComposer
         conversationId={conversation.id}
         sessionExpired={sessionInfo.expired}
+        sessionExpiredReason={sessionInfo.reason}
         onSend={handleSend}
         onSendMedia={handleSendMedia}
         onSendInteractive={handleSendInteractive}
