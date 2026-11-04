@@ -520,6 +520,11 @@ function ConversationItem({
     return conversation.last_message_text || t("noMessagesYet");
   }, [conversation.last_message_text, t]);
 
+  // Tags next to the assignee. Three fit on one line; the rest fold into
+  // a "+N" chip so a heavily tagged contact doesn't stretch the row.
+  const contactTags = contact?.tags ?? [];
+  const visibleTags = contactTags.slice(0, 3);
+
   return (
     <button
       onClick={handleClick}
@@ -566,13 +571,39 @@ function ConversationItem({
             />
           </div>
         </div>
-        {assigneeName ? (
-          <span
-            title={t("assignedTo", { name: assigneeName })}
-            className="mt-1 inline-flex max-w-full items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
-          >
-            <span className="truncate">{assigneeName}</span>
-          </span>
+        {assigneeName || contactTags.length > 0 ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {assigneeName ? (
+              <span
+                title={t("assignedTo", { name: assigneeName })}
+                className="inline-flex max-w-full items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+              >
+                <span className="truncate">{assigneeName}</span>
+              </span>
+            ) : null}
+            {visibleTags.map((tag) => (
+              <span
+                key={tag.id}
+                title={tag.name}
+                style={{
+                  backgroundColor: `${tag.color}22`,
+                  borderColor: `${tag.color}55`,
+                  color: tag.color,
+                }}
+                className="inline-flex max-w-[7rem] items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium"
+              >
+                <span className="truncate">{tag.name}</span>
+              </span>
+            ))}
+            {contactTags.length > visibleTags.length ? (
+              <span
+                title={contactTags.map((tag) => tag.name).join(", ")}
+                className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              >
+                +{contactTags.length - visibleTags.length}
+              </span>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </button>
