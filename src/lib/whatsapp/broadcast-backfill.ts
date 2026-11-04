@@ -111,17 +111,20 @@ export async function backfillBroadcastMessage(
     ? row.template_params.filter((v): v is string => typeof v === 'string')
     : [];
 
+  const contentText = templateContentText(template, params, null);
+  const createdAt = row.sent_at ?? new Date().toISOString();
+
   const { error: insertError } = await db.from('messages').upsert(
     {
       conversation_id: conversationId,
       sender_type: 'agent',
       content_type: 'template',
-      content_text: templateContentText(template, params, null),
+      content_text: contentText,
       media_url: templateHeaderMediaUrl(template, null),
       template_name: row.broadcasts.template_name,
       message_id: row.whatsapp_message_id,
       status: messageStatusFromRecipient(row.status),
-      created_at: row.sent_at ?? new Date().toISOString(),
+      created_at: createdAt,
     },
     { onConflict: 'conversation_id,message_id', ignoreDuplicates: true }
   );
@@ -129,6 +132,33 @@ export async function backfillBroadcastMessage(
   if (insertError) {
     console.error('[broadcast-backfill] message insert failed:', insertError);
     return 'error';
+  }
+
+  // A lista da inbox lê o preview da conversa, não a tabela messages —
+  // sem isso a thread mostra o disparo e o item continua "Nenhuma
+  // mensagem ainda". Só sobrescreve preview mais antigo.
+  const { data: convRow } = await db
+    .from('conversations')
+    .select('last_message_at')
+    .eq('id', conversationId)
+    .maybeSingle();
+  const lastAt = (convRow as { last_message_at: string | null } | null)
+    ?.last_message_at;
+  if (!lastAt || new Date(lastAt).getTime() < new Date(createdAt).getTime()) {
+    const { error: previewError } = await db
+      .from('conversations')
+      .update({
+        last_message_text: contentText ?? row.broadcasts.template_name,
+        last_message_at: createdAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId);
+    if (previewError) {
+      console.error(
+        '[broadcast-backfill] conversation preview update failed:',
+        previewError
+      );
+    }
   }
 
   return 'inserted';

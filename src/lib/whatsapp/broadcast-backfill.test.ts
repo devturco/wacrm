@@ -8,11 +8,13 @@ interface FakeOptions {
   recipientError?: { message: string } | null;
   templates?: Record<string, unknown>[];
   insertError?: { message: string } | null;
+  conversation?: { last_message_at: string | null } | null;
 }
 
 function makeDb(options: FakeOptions = {}) {
   const upserts: { row: Record<string, unknown>; options: unknown }[] = [];
   const filters: [string, unknown][] = [];
+  const updates: Record<string, unknown>[] = [];
 
   const db = {
     from(table: string) {
@@ -53,11 +55,30 @@ function makeDb(options: FakeOptions = {}) {
         };
       }
 
+      if (table === 'conversations') {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({
+              data: options.conversation ?? null,
+              error: null,
+            }),
+          update: (row: Record<string, unknown>) => {
+            updates.push(row);
+            return chain;
+          },
+          then: (resolve: (value: { error: null }) => void) =>
+            resolve({ error: null }),
+        };
+        return chain;
+      }
+
       throw new Error(`unexpected table ${table}`);
     },
   } as unknown as SupabaseClient;
 
-  return { db, upserts, filters };
+  return { db, upserts, filters, updates };
 }
 
 const RECIPIENT = {
@@ -90,6 +111,32 @@ const INPUT = {
 };
 
 describe('backfillBroadcastMessage', () => {
+  it('updates the conversation preview with the broadcast text', async () => {
+    const { db, updates } = makeDb({
+      recipient: RECIPIENT,
+      templates: [TEMPLATE],
+    });
+
+    await backfillBroadcastMessage(db, INPUT);
+
+    expect(updates[0]).toMatchObject({
+      last_message_text: 'Olá, Thiago! Tudo bem?',
+      last_message_at: '2026-11-01T10:00:00.000Z',
+    });
+  });
+
+  it('keeps a newer conversation preview untouched', async () => {
+    const { db, updates } = makeDb({
+      recipient: RECIPIENT,
+      templates: [TEMPLATE],
+      conversation: { last_message_at: '2026-11-02T00:00:00.000Z' },
+    });
+
+    await backfillBroadcastMessage(db, INPUT);
+
+    expect(updates).toHaveLength(0);
+  });
+
   it('filters by the exact message when the target is a reaction', async () => {
     const { db, upserts, filters } = makeDb({
       recipient: RECIPIENT,
