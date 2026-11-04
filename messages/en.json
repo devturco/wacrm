@@ -993,6 +993,11 @@
           "meaning": "The business category or the recipient's country isn't allowed for WhatsApp messages.",
           "action": "Check Meta's country restrictions before resending."
         },
+        "blockedByExperiment": {
+          "title": "Recipient in a Meta experiment",
+          "meaning": "The recipient's number is part of a Meta experiment, so the message was blocked.",
+          "action": "Delivery isn't possible while the experiment lasts. Don't resend to this contact; try later or use another channel."
+        },
         "payment": {
           "title": "Account payment problem",
           "meaning": "Meta couldn't charge the WhatsApp Business account (payment method, credit line, or pending approval).",

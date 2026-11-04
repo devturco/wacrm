@@ -993,6 +993,11 @@
           "meaning": "회사 카테고리 또는 수신자 국가가 WhatsApp 메시지 발송이 허용되지 않습니다.",
           "action": "다시 보내기 전에 Meta 정책의 국가별 제한을 확인하세요."
         },
+        "blockedByExperiment": {
+          "title": "Meta 실험 참여 수신자",
+          "meaning": "수신자 번호가 Meta 실험에 포함되어 있어 메시지가 차단되었습니다.",
+          "action": "실험이 진행되는 동안에는 전달할 수 없습니다. 이 연락처로 다시 보내지 말고 나중에 다시 시도하거나 다른 채널을 사용하세요."
+        },
         "payment": {
           "title": "계정 결제 문제",
           "meaning": "Meta가 WhatsApp Business 계정 요금을 청구하지 못했습니다(결제 수단, 신용 한도 또는 승인 대기).",

@@ -53,6 +53,9 @@ describe('explainSendError', () => {
     expect(explainSendError('[130497] Country restriction')?.kind).toBe(
       'countryRestricted',
     )
+    expect(explainSendError('[130472] Blocked by experiment')?.kind).toBe(
+      'blockedByExperiment',
+    )
     expect(explainSendError('[131048] Sending restrictions')?.kind).toBe(
       'sendingRestricted',
     )

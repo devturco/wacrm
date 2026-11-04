@@ -20,6 +20,7 @@ export type SendErrorKind =
   | 'recipientBlocked'
   | 'optedOut'
   | 'countryRestricted'
+  | 'blockedByExperiment'
   | 'payment'
   | 'permission'
   | 'registration'
@@ -57,6 +58,7 @@ const CODE_KIND: Record<number, SendErrorKind> = {
   // Conta e politica
   368: 'accountRestricted',
   130403: 'recipientBlocked',
+  130472: 'blockedByExperiment',
   130497: 'countryRestricted',
   131031: 'accountRestricted',
   131042: 'payment',
