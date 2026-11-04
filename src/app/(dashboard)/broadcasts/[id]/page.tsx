@@ -99,18 +99,20 @@ function FunnelChart({ steps }: { steps: FunnelStep[] }) {
               <span className="w-20 shrink-0 text-xs text-muted-foreground">
                 {step.label}
               </span>
-              <div className="relative h-7 flex-1 rounded-full bg-muted">
+              <div className="h-7 flex-1 rounded-full bg-muted">
                 <div
                   className={`h-7 rounded-full ${step.color} transition-[width] duration-500`}
                   style={{ width: `${pctOfMax}%` }}
                 />
-                <span className="absolute inset-0 flex items-center px-3 text-xs font-medium text-foreground">
-                  {formatNumber(step.value)}
-                  <span className="ml-2 text-muted-foreground/80">
-                    ({pctOfSent}%)
-                  </span>
-                </span>
               </div>
+              {/* Fora da barra: o texto contrasta com o fundo do card
+                  em qualquer um dos temas, sem depender da cor do passo. */}
+              <span className="w-24 shrink-0 text-right text-xs font-medium tabular-nums text-foreground">
+                {formatNumber(step.value)}
+                <span className="ml-1 font-normal text-muted-foreground">
+                  ({pctOfSent}%)
+                </span>
+              </span>
             </div>
           );
         })}
