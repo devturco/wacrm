@@ -973,6 +973,41 @@
           "meaning": "Meta가 사용자 경험 보호를 위해 이 마케팅 메시지를 전달하지 않기로 했습니다.",
           "action": "보통 일시적입니다. 같은 연락처에 연속으로 다시 보내지 말고 반응하는 연락처를 우선하세요."
         },
+        "sendingRestricted": {
+          "title": "Meta가 발송을 제한함",
+          "meaning": "Meta가 이전 차단, 신고 또는 템플릿 카테고리 위반으로 이 계정의 발송을 제한했습니다.",
+          "action": "Meta Business Manager에서 계정 품질과 템플릿 카테고리를 확인하세요. 검토 후 제한이 해제됩니다."
+        },
+        "recipientBlocked": {
+          "title": "연락처가 회사를 차단함",
+          "meaning": "수신자가 WhatsApp에서 회사 번호를 차단했습니다.",
+          "action": "다시 보내지 마세요. 연락처가 차단을 해제해야 메시지가 전달됩니다."
+        },
+        "optedOut": {
+          "title": "연락처가 수신 거부함",
+          "meaning": "연락처가 이 회사의 마케팅 메시지 수신을 거부했습니다.",
+          "action": "선택을 존중하고 다시 보내지 마세요. 다음 발송에서 제외 목록으로 사용하세요."
+        },
+        "countryRestricted": {
+          "title": "이 국가로 발송이 차단됨",
+          "meaning": "회사 카테고리 또는 수신자 국가가 WhatsApp 메시지 발송이 허용되지 않습니다.",
+          "action": "다시 보내기 전에 Meta 정책의 국가별 제한을 확인하세요."
+        },
+        "payment": {
+          "title": "계정 결제 문제",
+          "meaning": "Meta가 WhatsApp Business 계정 요금을 청구하지 못했습니다(결제 수단, 신용 한도 또는 승인 대기).",
+          "action": "Meta Business Manager에서 결제 수단과 계정 상태를 확인하세요."
+        },
+        "permission": {
+          "title": "API 권한 부족",
+          "meaning": "토큰에 메시지 발송 권한이 없거나 제거되었습니다.",
+          "action": "설정 → WhatsApp에서 whatsapp_business_messaging 및 whatsapp_business_management 권한이 있는 새 토큰을 생성하세요."
+        },
+        "registration": {
+          "title": "번호 등록 필요",
+          "meaning": "발신 번호가 등록·인증되지 않았거나 일시적으로 등록이 차단되었습니다.",
+          "action": "설정 → WhatsApp에서 번호 등록/인증을 완료하고 다시 시도하세요."
+        },
         "rateLimited": {
           "title": "발송 한도 초과",
           "meaning": "Meta가 이 계정의 메시지 전송 속도를 일시적으로 제한했습니다.",

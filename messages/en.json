@@ -973,6 +973,41 @@
           "meaning": "Meta chose not to deliver this marketing message to protect the user experience.",
           "action": "This is usually temporary. Avoid resending to the same contact in a row and prioritize contacts who engage."
         },
+        "sendingRestricted": {
+          "title": "Sending restricted by Meta",
+          "meaning": "Meta restricted this account's sending due to prior blocks, reports, or template category violations.",
+          "action": "Review account quality and template categories in Meta Business Manager; the restriction lifts after review."
+        },
+        "recipientBlocked": {
+          "title": "Contact blocked the business",
+          "meaning": "The recipient blocked the business number on WhatsApp.",
+          "action": "Don't resend: the message is only delivered if the contact unblocks the business."
+        },
+        "optedOut": {
+          "title": "Contact opted out",
+          "meaning": "The contact asked not to receive marketing messages from this business.",
+          "action": "Respect the preference and don't resend. Use it as an exclusion list in future broadcasts."
+        },
+        "countryRestricted": {
+          "title": "Sending blocked for this country",
+          "meaning": "The business category or the recipient's country isn't allowed for WhatsApp messages.",
+          "action": "Check Meta's country restrictions before resending."
+        },
+        "payment": {
+          "title": "Account payment problem",
+          "meaning": "Meta couldn't charge the WhatsApp Business account (payment method, credit line, or pending approval).",
+          "action": "Review the payment method and account status in Meta Business Manager."
+        },
+        "permission": {
+          "title": "Insufficient API permission",
+          "meaning": "The token doesn't have permission to send messages or was removed.",
+          "action": "Generate a new token with whatsapp_business_messaging and whatsapp_business_management in Settings → WhatsApp."
+        },
+        "registration": {
+          "title": "Number needs registration",
+          "meaning": "The sending number isn't registered, verified, or is temporarily blocked for registration.",
+          "action": "Finish registering/verifying the number in Settings → WhatsApp and try again."
+        },
         "rateLimited": {
           "title": "Sending limit reached",
           "meaning": "Meta temporarily limited this account's message rate.",

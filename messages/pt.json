@@ -973,6 +973,41 @@
           "meaning": "A Meta optou por não entregar esta mensagem de marketing para preservar a experiência do usuário.",
           "action": "Costuma ser temporário. Evite reenviar em sequência para o mesmo contato e priorize quem interage."
         },
+        "sendingRestricted": {
+          "title": "Envios restritos pela Meta",
+          "meaning": "A Meta restringiu os envios desta conta por bloqueios anteriores, denúncias ou violações de categoria de modelo.",
+          "action": "Revise a qualidade da conta e as categorias dos modelos no Meta Business Manager; a restrição sai após a análise."
+        },
+        "recipientBlocked": {
+          "title": "Contato bloqueou a empresa",
+          "meaning": "O destinatário bloqueou o número da empresa no WhatsApp.",
+          "action": "Não reenvie: a mensagem só será entregue se o contato desbloquear a empresa."
+        },
+        "optedOut": {
+          "title": "Contato optou por não receber",
+          "meaning": "O contato pediu para não receber mensagens de marketing desta empresa.",
+          "action": "Respeite a preferência e não reenvie. Use essa lista como exclusão nos próximos disparos."
+        },
+        "countryRestricted": {
+          "title": "Envio bloqueado para este país",
+          "meaning": "A categoria da empresa ou o país do destinatário não é permitido para mensagens do WhatsApp.",
+          "action": "Confira as restrições por país nas políticas da Meta antes de reenviar."
+        },
+        "payment": {
+          "title": "Problema no pagamento da conta",
+          "meaning": "A Meta não conseguiu cobrar a conta do WhatsApp Business (método de pagamento, limite de crédito ou aprovação pendente).",
+          "action": "Revise o método de pagamento e o status da conta no Meta Business Manager."
+        },
+        "permission": {
+          "title": "Permissão da API insuficiente",
+          "meaning": "O token usado não tem permissão para enviar mensagens ou foi removido.",
+          "action": "Gere um novo token com as permissões whatsapp_business_messaging e whatsapp_business_management em Configurações → WhatsApp."
+        },
+        "registration": {
+          "title": "Número precisa de registro",
+          "meaning": "O número de envio não está registrado, verificado ou está temporariamente bloqueado para registro.",
+          "action": "Conclua o registro/verificação do número em Configurações → WhatsApp e tente novamente."
+        },
         "rateLimited": {
           "title": "Limite de envio atingido",
           "meaning": "A Meta limitou temporariamente a taxa de mensagens desta conta.",
