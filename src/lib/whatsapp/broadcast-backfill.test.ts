@@ -12,13 +12,17 @@ interface FakeOptions {
 
 function makeDb(options: FakeOptions = {}) {
   const upserts: { row: Record<string, unknown>; options: unknown }[] = [];
+  const filters: [string, unknown][] = [];
 
   const db = {
     from(table: string) {
       if (table === 'broadcast_recipients') {
         const chain = {
           select: () => chain,
-          eq: () => chain,
+          eq: (column: string, value: unknown) => {
+            filters.push([column, value]);
+            return chain;
+          },
           not: () => chain,
           order: () => chain,
           limit: () => chain,
@@ -53,7 +57,7 @@ function makeDb(options: FakeOptions = {}) {
     },
   } as unknown as SupabaseClient;
 
-  return { db, upserts };
+  return { db, upserts, filters };
 }
 
 const RECIPIENT = {
@@ -86,6 +90,21 @@ const INPUT = {
 };
 
 describe('backfillBroadcastMessage', () => {
+  it('filters by the exact message when the target is a reaction', async () => {
+    const { db, upserts, filters } = makeDb({
+      recipient: RECIPIENT,
+      templates: [TEMPLATE],
+    });
+
+    await backfillBroadcastMessage(db, {
+      ...INPUT,
+      whatsappMessageId: 'wamid.abc',
+    });
+
+    expect(filters).toContainEqual(['whatsapp_message_id', 'wamid.abc']);
+    expect(upserts[0].row.message_id).toBe('wamid.abc');
+  });
+
   it('inserts the broadcast template at the original send time', async () => {
     const { db, upserts } = makeDb({
       recipient: RECIPIENT,

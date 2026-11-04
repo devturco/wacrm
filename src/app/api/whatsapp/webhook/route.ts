@@ -558,6 +558,51 @@ async function lookupInternalIdByMetaId(
 }
 
 /**
+ * Se a mensagem alvo da reacao existe nesta conta. Disparos nao gravam
+ * em `messages`, entao uma reacao a um disparo falha aqui e nao abre
+ * conversa nenhuma.
+ */
+async function reactionParentExists(
+  accountId: string,
+  metaMessageId: string | undefined
+): Promise<boolean> {
+  if (!metaMessageId) return false
+  const { data, error } = await supabaseAdmin()
+    .from('messages')
+    .select('id, conversations!inner(account_id)')
+    .eq('message_id', metaMessageId)
+    .eq('conversations.account_id', accountId)
+    .limit(1)
+  if (error) {
+    console.error('[webhook] reaction parent lookup failed:', error.message)
+    return false
+  }
+  return (data?.length ?? 0) > 0
+}
+
+/** Se a mensagem reagida e um disparo desta conta. */
+async function isBroadcastReactionTarget(
+  accountId: string,
+  metaMessageId: string | undefined
+): Promise<boolean> {
+  if (!metaMessageId) return false
+  const { data, error } = await supabaseAdmin()
+    .from('broadcast_recipients')
+    .select('id, broadcasts!inner(account_id)')
+    .eq('whatsapp_message_id', metaMessageId)
+    .eq('broadcasts.account_id', accountId)
+    .limit(1)
+  if (error) {
+    console.error(
+      '[webhook] broadcast reaction target lookup failed:',
+      error.message
+    )
+    return false
+  }
+  return (data?.length ?? 0) > 0
+}
+
+/**
  * Persist an inbound reaction. WhatsApp reactions are not new messages —
  * they're per-(target, actor) state. We upsert / delete on
  * `message_reactions`, never write a row into `messages`.
@@ -646,6 +691,28 @@ async function processMessage(
     return
   }
 
+  // Reacao cujo alvo nao esta em `messages`: se for um disparo, abrimos
+  // a conversa e reconstruimos a mensagem enviada (igual ao backfill da
+  // resposta); se nao for, nao criamos thread vazia.
+  const reactionTargetId = message.reaction?.message_id
+  let backfillReactionTarget = false
+  if (
+    message.type === 'reaction' &&
+    !(await reactionParentExists(accountId, reactionTargetId))
+  ) {
+    backfillReactionTarget = await isBroadcastReactionTarget(
+      accountId,
+      reactionTargetId
+    )
+    if (!backfillReactionTarget) {
+      console.warn(
+        '[webhook] reaction target not stored; skipping before creating contact/conversation:',
+        reactionTargetId
+      )
+      return
+    }
+  }
+
   // Find or create contact
   const contactOutcome = await findOrCreateContact(
     accountId,
@@ -679,6 +746,16 @@ async function processMessage(
   // into `messages`, never bump unread_count, never update last_message_text.
   // Done before parseMessageContent so the media-URL fetch is skipped.
   if (message.type === 'reaction') {
+    // Reacao a um disparo: grava o template que foi enviado para a
+    // conversa abrir com contexto em vez de "Nenhuma mensagem ainda".
+    if (backfillReactionTarget && reactionTargetId) {
+      await backfillBroadcastMessage(supabaseAdmin(), {
+        accountId,
+        contactId: contactRecord.id,
+        conversationId: conversation.id,
+        whatsappMessageId: reactionTargetId,
+      })
+    }
     await handleReaction(message, conversation.id, contactRecord.id)
     return
   }

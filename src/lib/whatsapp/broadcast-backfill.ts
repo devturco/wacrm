@@ -52,6 +52,11 @@ export interface BackfillInput {
   accountId: string;
   contactId: string;
   conversationId: string;
+  /**
+   * Alvo exato — usado quando o cliente *reage* a um disparo e sabemos
+   * qual mensagem foi reagida. Sem ele, vale o disparo mais recente.
+   */
+  whatsappMessageId?: string;
 }
 
 /**
@@ -62,21 +67,27 @@ export async function backfillBroadcastMessage(
   db: SupabaseClient,
   input: BackfillInput
 ): Promise<BackfillResult> {
-  const { accountId, contactId, conversationId } = input;
+  const { accountId, contactId, conversationId, whatsappMessageId } = input;
   if (!accountId || !contactId || !conversationId) return 'skipped';
 
-  // Latest broadcast actually delivered to this contact.
-  const { data, error } = await db
+  // Latest broadcast actually delivered to this contact — or the exact
+  // message the customer reacted to.
+  let query = db
     .from('broadcast_recipients')
     .select(
       'id, status, whatsapp_message_id, sent_at, template_params, broadcasts!inner(account_id, template_name, template_language)'
     )
     .eq('contact_id', contactId)
-    .eq('broadcasts.account_id', accountId)
-    .not('whatsapp_message_id', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq('broadcasts.account_id', accountId);
+
+  query = whatsappMessageId
+    ? query.eq('whatsapp_message_id', whatsappMessageId)
+    : query
+        .not('whatsapp_message_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     console.error('[broadcast-backfill] recipient lookup failed:', error);
