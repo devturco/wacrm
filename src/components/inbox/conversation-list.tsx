@@ -44,6 +44,16 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
   closed: "bg-muted-foreground",
 };
 
+/**
+ * First word of the member's name. The assignee badge under the preview
+ * stays one short word — "Isabella Pángonis" would push the timestamp and
+ * unread pill out of the row.
+ */
+function firstName(fullName: string | null | undefined): string {
+  const trimmed = (fullName ?? "").trim();
+  return trimmed ? trimmed.split(/\s+/)[0] : "";
+}
+
 
 export function ConversationList({
   activeConversationId,
@@ -76,6 +86,31 @@ export function ConversationList({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>(initialFilter);
   const [now, setNow] = useState(() => Date.now());
+  // user_id → first name, for the assignee badge on each row. One fetch
+  // per list mount; names don't change often enough to justify realtime.
+  const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>(
+    {},
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("user_id, full_name")
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        const names: Record<string, string> = {};
+        for (const row of data as { user_id: string; full_name: string | null }[]) {
+          const first = firstName(row.full_name);
+          if (first) names[row.user_id] = first;
+        }
+        setAssigneeNames(names);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -426,6 +461,11 @@ export function ConversationList({
                 t={t}
                 format={format}
                 now={now}
+                assigneeName={
+                  conv.assigned_agent_id
+                    ? assigneeNames[conv.assigned_agent_id]
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -443,6 +483,8 @@ interface ConversationItemProps {
   format: ReturnType<typeof useFormatter>;
   /** The clock the list ticks on — one value for every row. */
   now: number;
+  /** First name of the assigned member; undefined when unassigned. */
+  assigneeName?: string;
 }
 
 function ConversationItem({
@@ -452,6 +494,7 @@ function ConversationItem({
   t,
   format,
   now,
+  assigneeName,
 }: ConversationItemProps) {
   const contact = conversation.contact;
   const displayName = contact?.name || contact?.phone || t("unknown");
@@ -523,6 +566,14 @@ function ConversationItem({
             />
           </div>
         </div>
+        {assigneeName ? (
+          <span
+            title={t("assignedTo", { name: assigneeName })}
+            className="mt-1 inline-flex max-w-full items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+          >
+            <span className="truncate">{assigneeName}</span>
+          </span>
+        ) : null}
       </div>
     </button>
   );

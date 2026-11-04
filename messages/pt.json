@@ -369,7 +369,8 @@
         "reaction": "Reação",
         "unknown": "Mensagem"
       },
-      "unknown": "Desconhecido"
+      "unknown": "Desconhecido",
+      "assignedTo": "Atribuída a {name}"
     },
     "messageThread": {
       "backToConversations": "Voltar às conversas",

@@ -369,7 +369,8 @@
         "reaction": "반응",
         "unknown": "메시지"
       },
-      "unknown": "알 수 없음"
+      "unknown": "알 수 없음",
+      "assignedTo": "{name} 담당"
     },
     "messageThread": {
       "backToConversations": "대화 목록으로 돌아가기",
