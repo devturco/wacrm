@@ -43,6 +43,7 @@ import {
 } from '@/lib/broadcast-status';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/i18n/format';
 import { isBroadcastDeliveryInFlight } from '@/lib/whatsapp/broadcast-delivery-lease';
+import { RecipientError } from '@/components/broadcasts/recipient-error';
 import { useTranslations } from 'next-intl';
 
 interface StatCardProps {
@@ -632,8 +633,8 @@ export default function BroadcastDetailPage() {
                           ? formatDateTime(recipient.read_at)
                           : '-'}
                       </TableCell>
-                      <TableCell className="max-w-xs truncate text-xs text-red-400">
-                        {recipient.error_message ?? '-'}
+                      <TableCell className="max-w-xs text-xs text-red-400">
+                        <RecipientError raw={recipient.error_message} />
                       </TableCell>
                     </TableRow>
                   );

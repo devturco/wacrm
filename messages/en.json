@@ -942,6 +942,84 @@
     }
   },
   "Broadcasts": {
+    "errors": {
+      "viewDetails": "View details",
+      "metaCode": "Meta code: {code}",
+      "originalMessage": "Original message",
+      "whatToDo": "What to do",
+      "kinds": {
+        "undeliverable": {
+          "title": "Number without WhatsApp",
+          "meaning": "Meta couldn't deliver the message. The number may not have WhatsApp, may be offline, or may have blocked the business.",
+          "action": "Check the contact's number and send a manual message before including it in another broadcast."
+        },
+        "notAllowedList": {
+          "title": "Number not on the test list",
+          "meaning": "The sending number is in Meta's test mode and can only reach authorized numbers.",
+          "action": "Add the recipient to the test-number list in Meta's dashboard or use a production number."
+        },
+        "accountRestricted": {
+          "title": "Account restricted by Meta",
+          "meaning": "Meta restricted or blocked this WhatsApp Business account; nothing is delivered while that lasts.",
+          "action": "Open Meta Business Manager → Account quality to see the reason and appeal."
+        },
+        "reengagement": {
+          "title": "Outside the 24-hour window",
+          "meaning": "The contact hasn't talked to the business in over 24 hours and the message isn't an approved template.",
+          "action": "Send an approved template to reopen the conversation."
+        },
+        "ecosystemDecline": {
+          "title": "Meta declined delivery",
+          "meaning": "Meta chose not to deliver this marketing message to protect the user experience.",
+          "action": "This is usually temporary. Avoid resending to the same contact in a row and prioritize contacts who engage."
+        },
+        "rateLimited": {
+          "title": "Sending limit reached",
+          "meaning": "Meta temporarily limited this account's message rate.",
+          "action": "Wait a few minutes and resume sending; the report lets you resend only the failures."
+        },
+        "templateNotFound": {
+          "title": "Template unavailable",
+          "meaning": "The template used in this broadcast no longer exists or its language doesn't match the approved one.",
+          "action": "Check the template and language on the templates screen and create a new broadcast."
+        },
+        "templatePaused": {
+          "title": "Template paused or disabled",
+          "meaning": "Meta paused or disabled this template for quality or reports.",
+          "action": "Check the template status in Meta and wait for review or create another template."
+        },
+        "templateParams": {
+          "title": "Invalid template parameters",
+          "meaning": "The number or format of the variables doesn't match what the template expects.",
+          "action": "Review the variable mapping in the broadcast and resend."
+        },
+        "media": {
+          "title": "Media not accepted",
+          "meaning": "Meta couldn't process or accept the header file (type, format, or size).",
+          "action": "Replace the file with a supported format (JPG/PNG image, MP4 video, PDF) and resend."
+        },
+        "token": {
+          "title": "Invalid access token",
+          "meaning": "The API token expired or was revoked.",
+          "action": "Generate a new token in Settings → WhatsApp and save it."
+        },
+        "invalidParameter": {
+          "title": "Invalid message data",
+          "meaning": "Meta rejected a send parameter (number, template, or media).",
+          "action": "Check the recipient and template data and try again."
+        },
+        "temporary": {
+          "title": "Temporary Meta error",
+          "meaning": "Meta returned a transient failure.",
+          "action": "Try resending in a few minutes."
+        },
+        "unknown": {
+          "title": "Send failed",
+          "meaning": "Meta returned an error that isn't in our catalog yet.",
+          "action": "Use \"Resend failed messages\". If it persists, send the code above to support."
+        }
+      }
+    },
     "page": {
       "title": "Broadcasts",
       "subtitle": "Send bulk messages to your contacts using approved templates.",

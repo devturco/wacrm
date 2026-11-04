@@ -942,6 +942,84 @@
     }
   },
   "Broadcasts": {
+    "errors": {
+      "viewDetails": "자세히 보기",
+      "metaCode": "Meta 코드: {code}",
+      "originalMessage": "원본 메시지",
+      "whatToDo": "해결 방법",
+      "kinds": {
+        "undeliverable": {
+          "title": "WhatsApp이 없는 번호",
+          "meaning": "Meta가 메시지를 전달하지 못했습니다. 번호에 WhatsApp 계정이 없거나, 신호가 없거나, 회사를 차단했을 수 있습니다.",
+          "action": "연락처 번호를 확인하고 다른 발송에 포함하기 전에 직접 메시지를 보내 테스트하세요."
+        },
+        "notAllowedList": {
+          "title": "테스트 목록에 없는 번호",
+          "meaning": "발신 번호가 Meta 테스트 모드에 있어 허용된 번호로만 보낼 수 있습니다.",
+          "action": "Meta 대시보드에서 수신자를 테스트 번호 목록에 추가하거나 운영 번호를 사용하세요."
+        },
+        "accountRestricted": {
+          "title": "Meta가 계정을 제한함",
+          "meaning": "Meta가 이 WhatsApp Business 계정을 제한하거나 차단하여 그동안 발송이 전달되지 않습니다.",
+          "action": "Meta Business Manager → 계정 품질에서 사유를 확인하고 이의를 제기하세요."
+        },
+        "reengagement": {
+          "title": "24시간 창을 벗어남",
+          "meaning": "연락처가 24시간 넘게 회사와 대화하지 않았고 이 메시지는 승인된 템플릿이 아닙니다.",
+          "action": "승인된 템플릿을 보내 대화를 다시 여세요."
+        },
+        "ecosystemDecline": {
+          "title": "Meta가 전달을 거부함",
+          "meaning": "Meta가 사용자 경험 보호를 위해 이 마케팅 메시지를 전달하지 않기로 했습니다.",
+          "action": "보통 일시적입니다. 같은 연락처에 연속으로 다시 보내지 말고 반응하는 연락처를 우선하세요."
+        },
+        "rateLimited": {
+          "title": "발송 한도 초과",
+          "meaning": "Meta가 이 계정의 메시지 전송 속도를 일시적으로 제한했습니다.",
+          "action": "몇 분 기다린 후 발송을 재개하세요. 보고서에서 실패한 대상만 다시 보낼 수 있습니다."
+        },
+        "templateNotFound": {
+          "title": "템플릿을 사용할 수 없음",
+          "meaning": "발송에 사용한 템플릿이 더 이상 없거나 언어가 승인된 것과 다릅니다.",
+          "action": "템플릿 화면에서 템플릿과 언어를 확인하고 새 발송을 만드세요."
+        },
+        "templatePaused": {
+          "title": "템플릿 일시 중지 또는 비활성화됨",
+          "meaning": "Meta가 품질 또는 신고로 인해 이 템플릿을 일시 중지하거나 비활성화했습니다.",
+          "action": "Meta에서 템플릿 상태를 확인하고 검토를 기다리거나 다른 템플릿을 만드세요."
+        },
+        "templateParams": {
+          "title": "템플릿 매개변수가 잘못됨",
+          "meaning": "보낸 변수의 수나 형식이 템플릿이 기대하는 것과 다릅니다.",
+          "action": "발송의 변수 매핑을 수정하고 다시 보내세요."
+        },
+        "media": {
+          "title": "미디어가 거부됨",
+          "meaning": "Meta가 헤더 파일(유형, 형식 또는 크기)을 처리하거나 수락하지 못했습니다.",
+          "action": "지원되는 형식(JPG/PNG 이미지, MP4 동영상, PDF)으로 교체하고 다시 보내세요."
+        },
+        "token": {
+          "title": "액세스 토큰이 유효하지 않음",
+          "meaning": "API 토큰이 만료되었거나 취소되었습니다.",
+          "action": "설정 → WhatsApp에서 새 토큰을 생성하고 저장하세요."
+        },
+        "invalidParameter": {
+          "title": "메시지 데이터가 잘못됨",
+          "meaning": "Meta가 발송 매개변수(번호, 템플릿 또는 미디어)를 거부했습니다.",
+          "action": "수신자와 템플릿 데이터를 확인하고 다시 시도하세요."
+        },
+        "temporary": {
+          "title": "Meta의 일시적 오류",
+          "meaning": "Meta가 일시적인 오류를 반환했습니다.",
+          "action": "몇 분 후 다시 보내세요."
+        },
+        "unknown": {
+          "title": "발송 실패",
+          "meaning": "Meta가 아직 카탈로그에 없는 오류를 반환했습니다.",
+          "action": "\"실패한 메시지 다시 보내기\"를 사용하세요. 계속되면 위 코드를 지원팀에 보내세요."
+        }
+      }
+    },
     "page": {
       "title": "브로드캐스트",
       "subtitle": "승인된 템플릿을 사용해 연락처에 대량 메시지를 보내세요.",

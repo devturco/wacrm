@@ -942,6 +942,84 @@
     }
   },
   "Broadcasts": {
+    "errors": {
+      "viewDetails": "Ver detalhes",
+      "metaCode": "Código Meta: {code}",
+      "originalMessage": "Mensagem original",
+      "whatToDo": "O que fazer",
+      "kinds": {
+        "undeliverable": {
+          "title": "Número sem WhatsApp",
+          "meaning": "A Meta não conseguiu entregar a mensagem. O número pode não ter WhatsApp, estar sem sinal ou ter bloqueado a empresa.",
+          "action": "Confira o número do contato e envie uma mensagem manual antes de incluí-lo em outro disparo."
+        },
+        "notAllowedList": {
+          "title": "Número fora da lista de teste",
+          "meaning": "O número de origem está no modo de teste da Meta e só pode enviar para números autorizados.",
+          "action": "Adicione o destinatário à lista de números de teste no painel da Meta ou use um número de produção."
+        },
+        "accountRestricted": {
+          "title": "Conta restrita pela Meta",
+          "meaning": "A Meta restringiu ou bloqueou esta conta do WhatsApp Business; nenhum envio é entregue enquanto isso durar.",
+          "action": "Abra Meta Business Manager → Qualidade da conta para ver o motivo e recorrer."
+        },
+        "reengagement": {
+          "title": "Fora da janela de 24 horas",
+          "meaning": "O contato não fala com a empresa há mais de 24 horas e a mensagem não é um modelo aprovado.",
+          "action": "Envie um modelo aprovado (template) para reabrir a conversa."
+        },
+        "ecosystemDecline": {
+          "title": "Entrega recusada pela Meta",
+          "meaning": "A Meta optou por não entregar esta mensagem de marketing para preservar a experiência do usuário.",
+          "action": "Costuma ser temporário. Evite reenviar em sequência para o mesmo contato e priorize quem interage."
+        },
+        "rateLimited": {
+          "title": "Limite de envio atingido",
+          "meaning": "A Meta limitou temporariamente a taxa de mensagens desta conta.",
+          "action": "Aguarde alguns minutos e retome o envio; o relatório permite reenviar apenas as falhas."
+        },
+        "templateNotFound": {
+          "title": "Modelo indisponível",
+          "meaning": "O modelo usado no disparo não existe mais ou o idioma não corresponde ao aprovado.",
+          "action": "Confira o modelo e o idioma na tela de modelos e crie um novo disparo."
+        },
+        "templatePaused": {
+          "title": "Modelo pausado ou desativado",
+          "meaning": "A Meta pausou ou desativou este modelo por qualidade ou denúncias.",
+          "action": "Veja o status do modelo na Meta e aguarde a revisão ou crie outro modelo."
+        },
+        "templateParams": {
+          "title": "Parâmetros do modelo inválidos",
+          "meaning": "A quantidade ou o formato das variáveis enviadas não bate com o que o modelo espera.",
+          "action": "Revise o mapeamento das variáveis no disparo e reenvie."
+        },
+        "media": {
+          "title": "Mídia não aceita",
+          "meaning": "A Meta não conseguiu processar ou aceitar o arquivo de cabeçalho (tipo, formato ou tamanho).",
+          "action": "Troque o arquivo por um formato suportado (imagem JPG/PNG, vídeo MP4, PDF) e reenvie."
+        },
+        "token": {
+          "title": "Token de acesso inválido",
+          "meaning": "O token da API expirou ou foi revogado.",
+          "action": "Gere um novo token em Configurações → WhatsApp e salve."
+        },
+        "invalidParameter": {
+          "title": "Dados da mensagem inválidos",
+          "meaning": "A Meta recusou um parâmetro do envio (número, modelo ou mídia).",
+          "action": "Confira os dados do destinatário e do modelo e tente novamente."
+        },
+        "temporary": {
+          "title": "Erro temporário da Meta",
+          "meaning": "A Meta retornou uma falha passageira.",
+          "action": "Tente reenviar em alguns minutos."
+        },
+        "unknown": {
+          "title": "Falha no envio",
+          "meaning": "A Meta retornou um erro que ainda não está no nosso catálogo.",
+          "action": "Use \"Reenviar mensagens com falha\". Se persistir, envie o código acima ao suporte."
+        }
+      }
+    },
     "page": {
       "title": "Disparos",
       "subtitle": "Envie mensagens em massa para seus contatos usando modelos aprovados.",
