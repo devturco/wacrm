@@ -13,6 +13,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { useActiveProvider } from "@/hooks/use-active-provider";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { parseInboxFilter } from "@/lib/inbox/inbox-filters";
+import { shouldResyncOnVisible } from "@/lib/inbox/resync";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { toast } from "sonner";
@@ -431,14 +432,21 @@ function InboxPageInner() {
   }, [isConnected]);
 
   /**
-   * Refetch when the tab regains focus. Background tabs may have their
-   * WS throttled by the browser even without a full disconnect, so a
-   * visibilitychange → visible is a reliable signal that we may have
-   * missed events. Cheap to fire; the children dedupe on their own.
+   * Refetch when the tab comes back after a long absence. Background
+   * tabs may have their WS throttled even without a full disconnect,
+   * but an alt-tab of seconds doesn't justify reloading the whole list
+   * and thread — hence the threshold.
    */
   useEffect(() => {
+    let hiddenAt = 0;
     const onVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const hiddenFor = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (shouldResyncOnVisible(hiddenFor)) {
         setResyncToken((n) => n + 1);
       }
     };
