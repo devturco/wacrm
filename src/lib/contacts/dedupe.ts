@@ -3,7 +3,7 @@ import {
   normalizePhone,
   parseInternationalPhone,
   phonesMatch,
-  phoneVariants,
+  phoneMatchVariants,
 } from "@/lib/whatsapp/phone-utils";
 
 /**
@@ -46,7 +46,7 @@ export async function findExistingContact(
     .from("contacts")
     .select("*")
     .eq("account_id", accountId)
-    .in("phone_normalized", phoneVariants(normalized));
+    .in("phone_normalized", phoneMatchVariants(normalized));
 
   if (error || !data) return null;
 

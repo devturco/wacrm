@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  brazilianNinthDigitVariant,
   isRecipientNotAllowedError,
   isValidE164,
   normalizePhone,
   parseInternationalPhone,
+  phoneMatchVariants,
   phoneVariants,
   phonesMatch,
   sanitizePhoneForMeta,
@@ -98,6 +100,46 @@ describe("phonesMatch", () => {
 
   it("does not treat a national-format number as the international one", () => {
     expect(phonesMatch("(415) 555-1212", "+1 415-555-1212")).toBe(false);
+  });
+
+  it("matches a Brazilian mobile with and without the 9th digit", () => {
+    expect(phonesMatch("+5565998067735", "556598067735")).toBe(true);
+    expect(phonesMatch("556598067735", "+5565998067735")).toBe(true);
+  });
+
+  it("rejects a Brazilian mobile against a different number", () => {
+    expect(phonesMatch("+5565998067735", "556598067736")).toBe(false);
+  });
+});
+
+describe("brazilianNinthDigitVariant", () => {
+  it("strips the 9th digit from a mobile", () => {
+    expect(brazilianNinthDigitVariant("5565998067735")).toBe("556598067735");
+  });
+
+  it("adds the 9th digit to a legacy mobile", () => {
+    expect(brazilianNinthDigitVariant("556598067735")).toBe("5565998067735");
+  });
+
+  it("returns null for non-Brazilian and landline numbers", () => {
+    expect(brazilianNinthDigitVariant("14155551212")).toBeNull();
+    expect(brazilianNinthDigitVariant("556533334444")).toBeNull();
+  });
+});
+
+describe("phoneMatchVariants", () => {
+  it("covers both Brazilian mobile shapes", () => {
+    const variants = phoneMatchVariants("+5565998067735");
+    expect(variants).toContain("5565998067735");
+    expect(variants).toContain("556598067735");
+  });
+
+  it("still covers trunk-zero variants", () => {
+    expect(phoneMatchVariants("37063949836")).toContain("370063949836");
+  });
+
+  it("returns nothing for an empty phone", () => {
+    expect(phoneMatchVariants("")).toEqual([]);
   });
 });
 

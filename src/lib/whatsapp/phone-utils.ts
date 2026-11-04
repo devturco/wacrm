@@ -25,7 +25,52 @@ export function phonesMatch(phone1: string, phone2: string): boolean {
   const n1 = normalizePhone(phone1)
   const n2 = normalizePhone(phone2)
   if (n1 === n2) return true
-  return isTrunkZeroVariant(n1, n2)
+  if (isTrunkZeroVariant(n1, n2)) return true
+  // Brazilian mobiles reach us in both shapes (with and without the
+  // 9th digit), so the two forms are the same subscriber.
+  return (
+    brazilianNinthDigitVariant(n1) === n2 ||
+    brazilianNinthDigitVariant(n2) === n1
+  )
+}
+
+/**
+ * Brazilian mobile numbers exist in two shapes: `55 DD 9XXXXXXXX`
+ * (current) and `55 DD XXXXXXXX` (legacy, without the 9th digit).
+ * WhatsApp can deliver either for the same subscriber, so contact
+ * matching must treat them as one.
+ *
+ * Only mobil-format numbers qualify: the 8-digit form must start with
+ * 6–9, which is what distinguishes a mobile from a landline.
+ */
+export function brazilianNinthDigitVariant(phone: string): string | null {
+  const digits = normalizePhone(phone)
+  if (!digits.startsWith('55') || digits.length < 12) return null
+  const rest = digits.slice(4)
+  if (rest.length === 9 && rest.startsWith('9')) {
+    return digits.slice(0, 4) + rest.slice(1)
+  }
+  if (rest.length === 8 && /^[6-9]/.test(rest)) {
+    return digits.slice(0, 4) + '9' + rest
+  }
+  return null
+}
+
+/**
+ * Every normalized form that may represent the same subscriber, for
+ * `phone_normalized IN (...)` lookups. Includes the trunk-zero and
+ * Brazilian 9th-digit variants.
+ */
+export function phoneMatchVariants(phone: string): string[] {
+  const digits = normalizePhone(phone)
+  if (!digits) return []
+  const all = new Set<string>()
+  for (const base of phoneVariants(digits)) {
+    all.add(base)
+    const br = brazilianNinthDigitVariant(base)
+    if (br) all.add(br)
+  }
+  return [...all]
 }
 
 const MIN_TRUNK_MATCH_DIGITS = 8
