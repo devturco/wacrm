@@ -31,6 +31,7 @@ import {
   applyBroadcastRecipientStatus,
   flagBroadcastReply,
 } from '@/lib/whatsapp/broadcast-recipient-webhook'
+import { backfillBroadcastMessage } from '@/lib/whatsapp/broadcast-backfill'
 import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
@@ -840,6 +841,20 @@ async function processMessage(
   // update above so the write can be gated on the row's CURRENT status in
   // SQL — see the helper for why that matters.
   await reopenClosedConversation(supabaseAdmin(), conversation)
+
+  // A reply to a broadcast used to open an empty thread: the campaign
+  // was never written to `messages`. Rebuild it now, timestamped at the
+  // original send, so the agent sees what the customer is answering.
+  // Best-effort — history must never break inbound processing.
+  try {
+    await backfillBroadcastMessage(supabaseAdmin(), {
+      accountId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+    })
+  } catch (err) {
+    console.error('[webhook] broadcast backfill failed:', err)
+  }
 
   // If this contact was a recent broadcast recipient, flag the reply
   // so the broadcast's `replied_count` advances (via the aggregate
