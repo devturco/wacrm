@@ -142,19 +142,30 @@ function StatusIcon({
   /** Tooltip for the failed state — Meta's reason, when we have one. */
   title?: string | null;
 }) {
+  // Só aparece nas bolhas do agente, cujo fundo é `bg-primary`. Por isso
+  // as cores saem de `primary-foreground` (contraste garantido nos quatro
+  // temas) em vez de muted/blue, que sumiam no azul.
   switch (status) {
     case "sending":
-      return <Clock className="h-3 w-3 text-muted-foreground" />;
+      return (
+        <Clock className="h-3 w-3 stroke-[2.5] text-primary-foreground/50" />
+      );
     case "sent":
-      return <Check className="h-3 w-3 text-muted-foreground" />;
+      return (
+        <Check className="h-3 w-3 stroke-[2.5] text-primary-foreground/75" />
+      );
     case "delivered":
-      return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
+      return (
+        <CheckCheck className="h-3 w-3 stroke-[2.5] text-primary-foreground/75" />
+      );
     case "read":
-      return <CheckCheck className="h-3 w-3 text-blue-400" />;
+      return (
+        <CheckCheck className="h-3 w-3 stroke-[2.5] text-primary-foreground" />
+      );
     case "failed":
       return (
         <span className="inline-flex" title={title ?? undefined}>
-          <XCircle className="h-3 w-3 text-red-400" />
+          <XCircle className="h-3 w-3 stroke-[2.5] text-red-200" />
         </span>
       );
     default:
