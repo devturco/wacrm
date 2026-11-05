@@ -333,6 +333,12 @@
     }
   },
   "Inbox": {
+    "systemMessages": {
+      "unsupported": "WhatsApp에서 표시하지 않은 메시지입니다(일회성 보기 메시지일 수 있음).",
+      "revoked": "고객이 삭제한 메시지입니다.",
+      "contactCard": "연락처 카드: {value}",
+      "contactCardEmpty": "정보 없음"
+    },
     "page": {
       "whatsappNotConnected": "WhatsApp®이 연결되어 있지 않습니다. 설정으로 이동해 계정을 연결하세요."
     },

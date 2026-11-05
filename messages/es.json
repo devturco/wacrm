@@ -333,6 +333,12 @@
     }
   },
   "Inbox": {
+    "systemMessages": {
+      "unsupported": "Mensaje no mostrado por WhatsApp (puede ser un mensaje de visualización única).",
+      "revoked": "Mensaje eliminado por el cliente.",
+      "contactCard": "Tarjeta de contacto: {value}",
+      "contactCardEmpty": "sin datos"
+    },
     "page": {
       "whatsappNotConnected": "WhatsApp® no está conectado. Ve a Configuración para conectar tu cuenta."
     },

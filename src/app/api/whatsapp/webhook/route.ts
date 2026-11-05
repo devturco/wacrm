@@ -40,6 +40,10 @@ import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
 import { referralFromMetaMessage, stripLeadCode } from '@/lib/leads/inbound'
 import { resolveOrigin } from '@/lib/leads/origin'
 import { createLeadOriginStore } from '@/lib/leads/store'
+import { getT } from '@/lib/i18n/translate'
+
+// Textos gravados nas mensagens de sistema; o idioma vem do build.
+const tSys = getT('Inbox.systemMessages')
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -83,6 +87,11 @@ interface WhatsAppMessage {
   audio?: { id: string; mime_type: string }
   sticker?: { id: string; mime_type: string }
   location?: { latitude: number; longitude: number; name?: string; address?: string }
+  /** Cartão de contato compartilhado pelo cliente. */
+  contacts?: Array<{
+    name?: { formatted_name?: string; first_name?: string; last_name?: string }
+    phones?: Array<{ phone?: string; wa_id?: string; type?: string }>
+  }>
   reaction?: { message_id: string; emoji: string }
   /**
    * Set when the customer taps a button or list row on an interactive
@@ -1316,11 +1325,34 @@ async function parseMessageContent(
       }
     }
 
-    default:
+    case 'unsupported':
+      // A Meta avisa que nao conseguiu expor o conteudo. O caso mais
+      // comum e visualizacao unica; nao ha o que recuperar.
+      return { ...empty, contentText: tSys('unsupported') }
+
+    case 'revoke':
+      return { ...empty, contentText: tSys('revoked') }
+
+    case 'contacts': {
+      const cards = (message.contacts ?? [])
+        .map((c) => {
+          const name =
+            c.name?.formatted_name ||
+            [c.name?.first_name, c.name?.last_name].filter(Boolean).join(' ')
+          const phone = c.phones?.[0]?.phone || c.phones?.[0]?.wa_id || ''
+          return [name, phone].filter(Boolean).join(' — ')
+        })
+        .filter(Boolean)
       return {
         ...empty,
-        contentText: `[Unsupported message type: ${message.type}]`,
+        contentText: tSys('contactCard', {
+          value: cards.length > 0 ? cards.join('; ') : tSys('contactCardEmpty'),
+        }),
       }
+    }
+
+    default:
+      return { ...empty, contentText: tSys('unsupported') }
   }
 }
 
