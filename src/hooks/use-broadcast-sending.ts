@@ -45,6 +45,12 @@ interface BroadcastPayload {
   audience: AudienceConfig;
   variables: Record<string, VariableMapping>;
   /**
+   * Header type chosen in the wizard. Overrides the template row's
+   * `header_type` — needed when the local row predates header-type
+   * tracking (or was synced without it). Omitted for no header.
+   */
+  headerType?: 'image' | 'video' | 'document';
+  /**
    * Media URL for an IMAGE/VIDEO/DOCUMENT header. Required at send
    * time for media-header templates — Meta rejects the send without
    * it. Passed through as `messageParams.headerMediaUrl`; the builder
@@ -445,15 +451,18 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       // Media-header templates (image/video/document) require a media
       // URL on every send. Collected in the personalize step and applied
       // to all recipients; falls back to the template's stored URL on the
-      // server when omitted.
-      const headerType = payload.template.header_type;
+      // server when omitted. The wizard's chosen type wins so a template
+      // row missing `header_type` can still send media.
+      const headerType = payload.headerType ?? payload.template.header_type;
       const isMediaHeader =
         headerType === 'image' ||
         headerType === 'video' ||
         headerType === 'document';
       const headerMediaUrl = payload.headerMediaUrl?.trim();
       const messageParams =
-        isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
+        isMediaHeader && headerMediaUrl
+          ? { headerMediaUrl, headerType }
+          : undefined;
 
       let heldLease: string | null = null;
       const keepDeliveryLease = async () => {

@@ -8,7 +8,10 @@ import { toast } from 'sonner';
 import { MessageTemplate } from '@/types';
 import { Step1ChooseTemplate } from '@/components/broadcasts/step1-choose-template';
 import { Step2SelectAudience } from '@/components/broadcasts/step2-select-audience';
-import { Step3Personalize } from '@/components/broadcasts/step3-personalize';
+import {
+  Step3Personalize,
+  type BroadcastHeaderType,
+} from '@/components/broadcasts/step3-personalize';
 import { Step4ScheduleSend } from '@/components/broadcasts/step4-schedule-send';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
 import { Check } from 'lucide-react';
@@ -20,6 +23,15 @@ const steps = [
   { label: 'personalize', key: 'personalize' },
   { label: 'send', key: 'send' },
 ] as const;
+
+/** Seed the wizard's header type from the template row, if it has one. */
+function headerTypeFor(template: MessageTemplate): BroadcastHeaderType {
+  return template.header_type === 'image' ||
+    template.header_type === 'video' ||
+    template.header_type === 'document'
+    ? template.header_type
+    : 'none';
+}
 
 export default function NewBroadcastPage() {
   const router = useRouter();
@@ -43,8 +55,17 @@ export default function NewBroadcastPage() {
   const [variables, setVariables] = useState<
     Record<string, { type: 'static' | 'field' | 'custom_field'; value: string }>
   >({});
+  const [headerType, setHeaderType] = useState<BroadcastHeaderType>('none');
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
+
+  function handleSelectTemplate(next: MessageTemplate) {
+    // A different template may expect different media — drop the URL
+    // from the previous one instead of silently reusing it.
+    if (next.id !== template?.id) setHeaderMediaUrl('');
+    setTemplate(next);
+    setHeaderType(headerTypeFor(next));
+  }
 
   async function handleSend() {
     if (!template) return;
@@ -61,6 +82,7 @@ export default function NewBroadcastPage() {
           excludeTagIds: audience.excludeTagIds,
         },
         variables,
+        headerType: headerType === 'none' ? undefined : headerType,
         headerMediaUrl,
       });
       if (interruption === 'lease_lost') toast.warning(t('toastSendTakenOver'));
@@ -193,7 +215,7 @@ export default function NewBroadcastPage() {
           {currentStep === 0 && (
             <Step1ChooseTemplate
               selectedTemplate={template}
-              onSelect={setTemplate}
+              onSelect={handleSelectTemplate}
               onNext={() => setCurrentStep(1)}
               onBack={() => router.push('/broadcasts')}
             />
@@ -211,6 +233,8 @@ export default function NewBroadcastPage() {
               template={template}
               variables={variables}
               onUpdate={setVariables}
+              headerType={headerType}
+              onHeaderTypeChange={setHeaderType}
               headerMediaUrl={headerMediaUrl}
               onHeaderMediaUrlChange={setHeaderMediaUrl}
               onNext={() => setCurrentStep(3)}

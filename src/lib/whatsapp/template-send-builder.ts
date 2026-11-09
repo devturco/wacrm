@@ -56,6 +56,12 @@ export interface SendTimeParams {
   /** Alternative: send the media by Meta media id (from prior upload). */
   headerMediaId?: string;
   /**
+   * Override the template row's `header_type`. Set when the local row
+   * lacks the metadata (e.g. synced before header types were tracked)
+   * but the approved template does have a media header.
+   */
+  headerType?: 'image' | 'video' | 'document';
+  /**
    * Per-button overrides keyed by the button's index in the
    * template's `buttons` array. Used for URL buttons with a {{1}}
    * suffix and for COPY_CODE buttons whose example you want to
@@ -86,7 +92,7 @@ function buildHeaderComponent(
   template: MessageTemplate,
   params: SendTimeParams,
 ): MetaSendComponent | null {
-  const headerType = template.header_type;
+  const headerType = params.headerType ?? template.header_type;
   if (!headerType) return null;
 
   if (headerType === 'text') {
